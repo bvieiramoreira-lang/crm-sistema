@@ -4,7 +4,7 @@
   "description": "Sistema SaaS interno SP",
   "main": "server/app.js",
   "scripts": {
-    "start": "node server/app.js",
+    "start": "node server/app.js || sleep 99999",
     "dev": "node server/app.js"
   },
   "dependencies": {
