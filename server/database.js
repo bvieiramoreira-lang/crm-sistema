@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3');
 const path = require('path');
 const bcrypt = require('bcrypt');
 
-const dbPath = path.resolve(__dirname, '../sp_system.db');
+const dbPath = process.env.DB_PATH || path.resolve(__dirname, '../data/sp_system.db');
 
 console.log("[DEBUG] Database Path Resolved:", dbPath);
 const db = new sqlite3.Database(dbPath, (err) => {
