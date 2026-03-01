@@ -1,0 +1,764 @@
+[2026-01-15T01:34:27.834Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:34:41.330Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:35:41.331Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:13.020Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:15.228Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:15.357Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:15.506Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:15.655Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:15.908Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:36:45.909Z] Stats Request: Found 2 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:06.099Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:06.229Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:06.423Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:06.567Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:06.678Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:13.345Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:13.520Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:13.680Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:13.790Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:13.936Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:14.063Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:37:44.065Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:38:14.065Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:38:44.065Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:39:14.065Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:39:44.329Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:40:14.328Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:40:52.605Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:41:14.328Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:41:44.329Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:42:41.330Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:43:41.330Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:44:41.329Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:45:41.329Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:46:41.328Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+
+[2026-01-15T01:46:44.328Z] Stats Request: Found 4 items
+[
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 2
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 7
+  },
+  {
+    "setor_destino": "SILK_CILINDRICA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 8
+  },
+  {
+    "setor_destino": "ESTAMPARIA",
+    "status_atual": "AGUARDANDO_PRODUCAO",
+    "id": 10
+  }
+]
+

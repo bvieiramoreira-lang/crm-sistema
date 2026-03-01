@@ -1,0 +1,142 @@
+[
+  {
+    "id": 1,
+    "nome": "Administrador",
+    "username": "ADMIN",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "admin",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 2,
+    "nome": "Financeiro User",
+    "username": "FINANCEIRO",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "financeiro",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 3,
+    "nome": "Arte User",
+    "username": "ARTE",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "arte",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 4,
+    "nome": "Separador User",
+    "username": "SEPARACAO",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "separacao",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 5,
+    "nome": "Desembale User",
+    "username": "DESEMBALE",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "desembale",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 8,
+    "nome": "Embalador User",
+    "username": "EMBALE",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "embale",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 9,
+    "nome": "Logistica User",
+    "username": "LOGISTICA",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "logistica",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 10,
+    "nome": "LUCAS TEST",
+    "username": "LUCASTEST",
+    "senha": "$2b$10$tA6XBnABM3qaYiNYCOnQzOqEPX1LSoBK3HCfIegVru/cbUfYUvuHK",
+    "perfil": "ARTE",
+    "setor_impressao": null,
+    "ativo": 1,
+    "setores_secundarios": ""
+  },
+  {
+    "id": 58,
+    "nome": "SILK CILINDRICA",
+    "username": "SILK_CILINDRICA",
+    "senha": "$2b$10$RcDhebqBxi.VmzHJlw2FauNQWwIbhwGOmHjp.bTdNjEJ4nDlh6p22",
+    "perfil": "impressao",
+    "setor_impressao": "SILK_CILINDRICA",
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 59,
+    "nome": "SILK PLANO",
+    "username": "SILK_PLANO",
+    "senha": "$2b$10$RcDhebqBxi.VmzHJlw2FauNQWwIbhwGOmHjp.bTdNjEJ4nDlh6p22",
+    "perfil": "impressao",
+    "setor_impressao": "SILK_PLANO",
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 60,
+    "nome": "TAMPOGRAFIA",
+    "username": "TAMPOGRAFIA",
+    "senha": "$2b$10$RcDhebqBxi.VmzHJlw2FauNQWwIbhwGOmHjp.bTdNjEJ4nDlh6p22",
+    "perfil": "impressao",
+    "setor_impressao": "TAMPOGRAFIA",
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 61,
+    "nome": "IMPRESSAO LASER",
+    "username": "IMPRESSAO_LASER",
+    "senha": "$2b$10$RcDhebqBxi.VmzHJlw2FauNQWwIbhwGOmHjp.bTdNjEJ4nDlh6p22",
+    "perfil": "impressao",
+    "setor_impressao": "IMPRESSAO_LASER",
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 62,
+    "nome": "IMPRESSAO DIGITAL",
+    "username": "IMPRESSAO_DIGITAL",
+    "senha": "$2b$10$RcDhebqBxi.VmzHJlw2FauNQWwIbhwGOmHjp.bTdNjEJ4nDlh6p22",
+    "perfil": "impressao",
+    "setor_impressao": "IMPRESSAO_DIGITAL",
+    "ativo": 1,
+    "setores_secundarios": null
+  },
+  {
+    "id": 63,
+    "nome": "ESTAMPARIA",
+    "username": "ESTAMPARIA",
+    "senha": "$2b$10$RcDhebqBxi.VmzHJlw2FauNQWwIbhwGOmHjp.bTdNjEJ4nDlh6p22",
+    "perfil": "impressao",
+    "setor_impressao": "ESTAMPARIA",
+    "ativo": 1,
+    "setores_secundarios": null
+  }
+]

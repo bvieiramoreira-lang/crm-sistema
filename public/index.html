@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persys - Login</title>
+    <link rel="icon" type="image/png" href="images/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="auth-container">
+        <div class="login-card">
+            <div class="login-header">
+                <!-- LOGO -->
+                <img src="images/logo.png" alt="Persys"
+                    style="max-height: 80px; max-width: 100%; object-fit: contain; margin-bottom: 1rem; display: block; margin-left: auto; margin-right: auto;"
+                    onerror="this.style.display='none'; document.getElementById('fallbackLoginTitle').style.display='block';">
+
+                <!-- VERSION TEXT -->
+                <div style="text-align: center; margin-bottom: 1rem;">
+                    <p style="margin: 0; font-size: 0.9rem; font-weight: bold; color: #1e293b;">Personaliza Brindes</p>
+                    <p style="margin: 0; font-size: 0.8rem; color: #64748b;">Versão TESTE 1.0</p>
+                </div>
+
+                <h1 id="fallbackLoginTitle" style="display:none;">Persys</h1>
+                <p>Faça login para continuar</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Usuário</label>
+                    <input type="text" id="username" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" class="form-control" required>
+                </div>
+                <button type="submit" class="btn">Entrar</button>
+            </form>
+            <p id="errorMsg" style="color: var(--danger); margin-top: 1rem; text-align: center; display: none;"></p>
+        </div>
+    </div>
+    <script src="js/auth.js"></script>
+</body>
+
+</html>

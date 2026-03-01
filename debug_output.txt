@@ -1,0 +1,19 @@
+
+    Assign Result: {"message":"Responsável atribuído com sucesso"}
+    Update Result: {"message":"Arte atualizada","changes":1}
+    Report Data: [
+  {
+    "name": "LUCAS TEST",
+    "itemsAssigned": 1,
+    "itemsCompletedStage": 1,
+    "details": [
+      {
+        "pedido": "LOG-FIX-1768171267569",
+        "item": "Item Test",
+        "setor": "arte",
+        "status": "AGUARDANDO_SEPARACAO"
+      }
+    ]
+  }
+]
+    

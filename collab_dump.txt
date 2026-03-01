@@ -1,0 +1,56 @@
+[
+  {
+    "id": 1,
+    "nome": "LUCAS",
+    "setor": "ARTE FINAL",
+    "ativo": 1
+  },
+  {
+    "id": 2,
+    "nome": "CRIS",
+    "setor": "SEPARAÇÃO",
+    "ativo": 1
+  },
+  {
+    "id": 3,
+    "nome": "TESTE",
+    "setor": "DESEMBALE",
+    "ativo": 1
+  },
+  {
+    "id": 4,
+    "nome": "FELIPE",
+    "setor": "ARTE FINAL",
+    "ativo": 1
+  },
+  {
+    "id": 5,
+    "nome": "CRISTIANE",
+    "setor": "SEPARAÇÃO",
+    "ativo": 1
+  },
+  {
+    "id": 6,
+    "nome": "SANDRA",
+    "setor": "EMBALE",
+    "ativo": 1
+  },
+  {
+    "id": 7,
+    "nome": "EDUARDA",
+    "setor": "LOGÍSTICA",
+    "ativo": 1
+  },
+  {
+    "id": 8,
+    "nome": "ALISSON",
+    "setor": "SILK CILÍNDRICA",
+    "ativo": 1
+  },
+  {
+    "id": 9,
+    "nome": "MANO",
+    "setor": "SILK PLANO",
+    "ativo": 1
+  }
+]
