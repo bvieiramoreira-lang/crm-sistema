@@ -1156,9 +1156,9 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                 if (item.status_atual === 'EM_PRODUCAO') {
                     // TIMER BLOCK
                     let timerHtml = '';
-                    if (item.inicio_producao_timestamp) {
+                    if (item.inicio_producao_timestamp && item.decorrido_segundos !== null) {
                         timerHtml = `
-                            <div class="production-timer" data-start="${item.inicio_producao_timestamp}" 
+                            <div class="production-timer" data-elapsed-initial="${item.decorrido_segundos}" data-client-start="${Date.now()}"
                                  style="font-family: monospace; font-size: 1.1rem; font-weight: bold; color: #1e293b; 
                                         background: #e2e8f0; padding: 0.25rem 0.5rem; border-radius: 4px; 
                                         margin-bottom: 0.5rem; display: inline-block; border: 1px solid #cbd5e1;">
@@ -3377,34 +3377,47 @@ function updateLiveTimers() {
     const now = new Date();
 
     timers.forEach(timer => {
-        const startStr = timer.getAttribute('data-start');
-        if (!startStr) return;
+        const elapsedInitial = timer.getAttribute('data-elapsed-initial');
+        const clientStart = timer.getAttribute('data-client-start');
 
-        // Backend sends UTC (e.g., 2026-01-30T01:23:45.000Z) or Local ISO. 
-        // We need to parse correctly.
-        let startTime;
-        if (startStr.indexOf('Z') === -1) {
-            // Treat "YYYY-MM-DD HH:MM:SS" as UTC by replacing space with T and adding Z
-            startTime = new Date(startStr.replace(' ', 'T') + 'Z');
-        } else {
-            startTime = new Date(startStr);
+        // Se ainda renderizado no sistema antigo, cai no fallback ou ignora
+        if (!elapsedInitial || !clientStart) {
+            const startStr = timer.getAttribute('data-start');
+            if (!startStr) return; // ignora se não tiver nenhum dos dois dados
+
+            // Lógica antiga mantida caso haja telas em cache no computador do usuário
+            let startTime = startStr.indexOf('Z') === -1 ? new Date(startStr.replace(' ', 'T') + 'Z') : new Date(startStr);
+            let diff = now - startTime;
+            if (diff < 0) diff = 0;
+            renderTime(diff, timer);
+            return;
         }
 
-        // Difference in ms
-        let diff = now - startTime;
-        if (diff < 0) diff = 0;
+        // Nova Lógica Imune a Fuso Horário
+        const initialSeconds = parseInt(elapsedInitial, 10) || 0;
+        const startMillis = parseInt(clientStart, 10);
 
-        // Convert to HH:MM:SS
-        const hours = Math.floor(diff / 3600000);
-        const minutes = Math.floor((diff % 3600000) / 60000);
-        const seconds = Math.floor((diff % 60000) / 1000);
+        // Quantos ms se passaram desde que essa linha foi desenhada no HTML?
+        const currentElapsedMs = now.getTime() - startMillis;
 
-        const pad = (n) => n.toString().padStart(2, '0');
-        const timeString = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        // Diferença total = tempo que já tinha rodado no banco + tempo que passou na tela
+        const diff = (initialSeconds * 1000) + currentElapsedMs;
 
-        const display = timer.querySelector('.timer-display');
-        if (display) display.textContent = timeString;
+        renderTime(diff, timer);
     });
+}
+
+function renderTime(diff, timer) {
+    if (diff < 0) diff = 0;
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    const pad = (n) => n.toString().padStart(2, '0');
+    const timeString = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+    const display = timer.querySelector('.timer-display');
+    if (display) display.textContent = timeString;
 }
 
 // FIX: Add renderLayoutIndicator to helper functions

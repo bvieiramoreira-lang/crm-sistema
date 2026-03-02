@@ -40,6 +40,7 @@ router.get('/itens/:contexto', (req, res) => {
     // SELECT BASE (Com joins comuns)
     const baseSelect = `
         SELECT i.*, 
+        CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'INICIO' ORDER BY id DESC LIMIT 1)) AS INTEGER) as decorrido_segundos,
         (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'INICIO' ORDER BY id DESC LIMIT 1) as inicio_producao_timestamp,
         (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1) as fim_producao_timestamp,
         p.numero_pedido, p.cliente, p.prazo_entrega, p.tipo_envio, p.transportadora, p.observacao 
