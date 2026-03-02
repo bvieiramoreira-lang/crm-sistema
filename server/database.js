@@ -129,17 +129,31 @@ db.serialize(() => {
     // Add operador_nome to eventos_producao
     addColumn('eventos_producao', 'operador_nome', 'TEXT');
 
-    // Criar usuário Admin padrão se não existir
-    db.get("SELECT * FROM usuarios WHERE username = 'admin'", [], (err, row) => {
-        if (!row) {
-            const hash = bcrypt.hashSync('admin123', 10);
-            db.run("INSERT OR IGNORE INTO usuarios (nome, username, senha, perfil) VALUES (?, ?, ?, ?)",
-                ['Administrador', 'ADMIN', hash, 'admin'], (err) => {
-                    if (err) console.error("Erro ao criar admin:", err.message);
-                });
-            console.log("Usuário admin criado: admin / admin123");
-        }
-    });
+    // Criar usuários padrão
+    const criarUsuarioSeNaoExistir = (nome, username, password, perfil, setor_impressao = null) => {
+        db.get("SELECT * FROM usuarios WHERE username = ?", [username.toUpperCase()], (err, row) => {
+            if (!row) {
+                const hash = bcrypt.hashSync(password, 10);
+                db.run("INSERT OR IGNORE INTO usuarios (nome, username, senha, perfil, setor_impressao) VALUES (?, ?, ?, ?, ?)",
+                    [nome, username.toUpperCase(), hash, perfil, setor_impressao], (err) => {
+                        if (err) console.error(`Erro ao criar ${username}:`, err.message);
+                        else console.log(`Usuário criado: ${username} / ${password} (${perfil})`);
+                    });
+            }
+        });
+    };
+
+    criarUsuarioSeNaoExistir('Administrador', 'admin', 'admin123', 'admin');
+    criarUsuarioSeNaoExistir('Arte Final', 'arte', 'arte123', 'arte');
+    criarUsuarioSeNaoExistir('Separação', 'separacao', 'separacao123', 'separacao');
+    criarUsuarioSeNaoExistir('Silk Cilíndrica', 'silkcilindrica', 'silkcilindrica123', 'impressao', 'SILK_CILINDRICA');
+    criarUsuarioSeNaoExistir('Silk Plano', 'silkplano', 'silkplano123', 'impressao', 'SILK_PLANO');
+    criarUsuarioSeNaoExistir('Tampografia', 'tampografia', 'tampografia123', 'impressao', 'TAMPOGRAFIA');
+    criarUsuarioSeNaoExistir('Impressão Laser', 'laser', 'laser123', 'impressao', 'LASER');
+    criarUsuarioSeNaoExistir('Impressão Digital', 'digital', 'digital123', 'impressao', 'DIGITAL');
+    criarUsuarioSeNaoExistir('Estamparia', 'estamparia', 'estamparia123', 'impressao', 'ESTAMPARIA');
+    criarUsuarioSeNaoExistir('Embale', 'embale', 'embale123', 'embale');
+    criarUsuarioSeNaoExistir('Logística', 'logistica', 'logistica123', 'logistica');
 
     // Tabela SIMPLES de Colaboradores (MVP)
     db.run(`CREATE TABLE IF NOT EXISTS colaboradores (
