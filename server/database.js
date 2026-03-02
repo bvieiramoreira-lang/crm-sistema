@@ -128,6 +128,27 @@ db.serialize(() => {
     addColumn('itens_pedido', 'arquivo_impressao_laser_enviado_em', 'DATETIME');
     addColumn('itens_pedido', 'arquivo_impressao_laser_enviado_por', 'TEXT');
 
+    // Colunas de Tracking de Produção (Responsáveis e Datas)
+    addColumn('itens_pedido', 'observacao_arte', 'TEXT');
+    addColumn('itens_pedido', 'responsavel_arte', 'TEXT');
+    addColumn('itens_pedido', 'data_arte_aprovacao', 'DATETIME');
+
+    addColumn('itens_pedido', 'responsavel_separacao', 'TEXT');
+    addColumn('itens_pedido', 'data_separacao', 'DATETIME');
+
+    addColumn('itens_pedido', 'responsavel_desembale', 'TEXT');
+    addColumn('itens_pedido', 'data_desembale', 'DATETIME');
+
+    addColumn('itens_pedido', 'responsavel_impressao', 'TEXT');
+    // data_impressao já pode ser calculada ou não, mas para garantir:
+    addColumn('itens_pedido', 'data_impressao', 'DATETIME');
+
+    addColumn('itens_pedido', 'responsavel_embale', 'TEXT');
+    addColumn('itens_pedido', 'data_embale', 'DATETIME');
+
+    addColumn('itens_pedido', 'responsavel_logistica', 'TEXT');
+    addColumn('itens_pedido', 'data_envio', 'DATETIME');
+
     // Add operador_nome to eventos_producao
     addColumn('eventos_producao', 'operador_nome', 'TEXT');
 
