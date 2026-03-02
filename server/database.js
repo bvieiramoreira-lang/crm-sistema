@@ -34,7 +34,9 @@ db.serialize(() => {
         tipo_envio TEXT,
         transportadora TEXT,
         status_geral TEXT DEFAULT 'NOVO', -- NOVO, EM_PRODUCAO, CONCLUIDO
-        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
+        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+        finalizado_em DATETIME,
+        finalizado_por TEXT
     )`);
 
     // Tabela de Itens do Pedido
@@ -109,6 +111,9 @@ db.serialize(() => {
     addColumn('pedidos', 'altura', 'REAL');
     addColumn('pedidos', 'largura', 'REAL');
     addColumn('pedidos', 'comprimento', 'REAL');
+    addColumn('pedidos', 'finalizado_em', 'DATETIME');
+    addColumn('pedidos', 'finalizado_por', 'TEXT');
+
     addColumn('itens_pedido', 'layout_path', 'TEXT');
     addColumn('itens_pedido', 'layout_type', 'TEXT');
     addColumn('itens_pedido', 'layout_uploaded_by', 'TEXT');
