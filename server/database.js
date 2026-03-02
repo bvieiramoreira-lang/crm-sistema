@@ -52,6 +52,7 @@ db.serialize(() => {
         
         -- Detalhes Produção
         cor_impressao TEXT,
+        referencia TEXT,
         
         -- Logística
         quantidade_volumes INTEGER DEFAULT 0,
@@ -111,6 +112,7 @@ db.serialize(() => {
     addColumn('itens_pedido', 'layout_type', 'TEXT');
     addColumn('itens_pedido', 'cor_impressao', 'TEXT');
     addColumn('itens_pedido', 'dados_volumes', 'TEXT');
+    addColumn('itens_pedido', 'referencia', 'TEXT');
 
     // New Columns for Digital Print File
     addColumn('itens_pedido', 'arquivo_impressao_digital_url', 'TEXT');
