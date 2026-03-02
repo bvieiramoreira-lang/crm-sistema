@@ -49,6 +49,8 @@ db.serialize(() => {
         -- Layout
         layout_path TEXT,
         layout_type TEXT, -- image, pdf
+        layout_uploaded_by TEXT,
+        layout_uploaded_at DATETIME,
         
         -- Detalhes Produção
         cor_impressao TEXT,
@@ -108,6 +110,8 @@ db.serialize(() => {
     addColumn('pedidos', 'comprimento', 'REAL');
     addColumn('itens_pedido', 'layout_path', 'TEXT');
     addColumn('itens_pedido', 'layout_type', 'TEXT');
+    addColumn('itens_pedido', 'layout_uploaded_by', 'TEXT');
+    addColumn('itens_pedido', 'layout_uploaded_at', 'DATETIME');
     addColumn('itens_pedido', 'cor_impressao', 'TEXT');
     addColumn('itens_pedido', 'layout_type', 'TEXT');
     addColumn('itens_pedido', 'cor_impressao', 'TEXT');
