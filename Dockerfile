@@ -7,6 +7,7 @@ RUN apk add --no-cache python3 make g++ sqlite
 
 COPY package*.json ./
 RUN npm install
+RUN npm rebuild bcrypt sqlite3 --build-from-source
 
 COPY . .
 
