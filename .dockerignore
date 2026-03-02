@@ -1,0 +1,5 @@
+node_modules
+data
+sp_system.db
+npm-debug.log
+.env
