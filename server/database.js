@@ -63,6 +63,7 @@ db.serialize(() => {
         largura REAL DEFAULT 0,
         comprimento REAL DEFAULT 0,
         dados_volumes TEXT, -- JSON Array com detalhes de cada volume
+        flag_embale_sem_volumes INTEGER DEFAULT 0,
         
         FOREIGN KEY(pedido_id) REFERENCES pedidos(id)
     )`);
@@ -113,9 +114,8 @@ db.serialize(() => {
     addColumn('itens_pedido', 'layout_uploaded_by', 'TEXT');
     addColumn('itens_pedido', 'layout_uploaded_at', 'DATETIME');
     addColumn('itens_pedido', 'cor_impressao', 'TEXT');
-    addColumn('itens_pedido', 'layout_type', 'TEXT');
-    addColumn('itens_pedido', 'cor_impressao', 'TEXT');
     addColumn('itens_pedido', 'dados_volumes', 'TEXT');
+    addColumn('itens_pedido', 'flag_embale_sem_volumes', 'INTEGER');
     addColumn('itens_pedido', 'referencia', 'TEXT');
 
     // New Columns for Digital Print File
