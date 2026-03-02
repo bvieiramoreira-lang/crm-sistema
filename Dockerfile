@@ -1,13 +1,11 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
-# Instalar dependências de build se necessário
-RUN apk add --no-cache python3 make g++ sqlite
+RUN apt-get update && apt-get install -y sqlite3
 
 COPY package*.json ./
 RUN npm install
-RUN npm rebuild bcrypt sqlite3 --build-from-source
 
 COPY . .
 
