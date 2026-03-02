@@ -1170,8 +1170,11 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                 } else {
 
                     // Logic Simplified: Start is always allowed now (File is optional)
-                    // Old Rule: const isDigital = setor === 'IMPRESSAO_DIGITAL'; const hasFile = !!item.arquivo_impressao_digital_url;
-                    actionBtn = `<button class="btn" style="background: var(--success)" onclick="openPrintingConfirmation(${item.id}, '${setor}')">Iniciar</button>`;
+                    actionBtn = `<button class="btn" style="background: var(--success); margin-bottom: 0.25rem;" onclick="openPrintingConfirmation(${item.id}, '${setor}')">Iniciar</button>`;
+
+                    if (setor === 'ESTAMPARIA') {
+                        actionBtn += `<br><button class="btn" style="background: #eab308; color: #713f12; padding: 0.25rem 0.5rem;" onclick="skipProduction(${item.id}, '${setor}')" title="Enviar para o próximo setor sem registrar tempo de produção">Pular Produção (Direto Embalagem)</button>`;
+                    }
                 }
 
                 // Rollback
@@ -3436,4 +3439,36 @@ function renderLayoutIndicator(path, type) {
             <div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.6); color:white; font-size:0.6rem; text-align:center; padding:1px 0;">Ver</div>
         </a>
     `;
+}
+
+// FIX: Pular Produção Estamparia (Digital já impressa)
+async function skipProduction(itemId, setor) {
+    if (!confirm('Tem certeza que deseja PULAR a produção na Estamparia e enviar este item direto para a fila de Embale? (Nenhum tempo será registrado)')) return;
+
+    try {
+        const payload = {
+            item_id: itemId,
+            operador_id: currentUser.id,
+            operador_nome: currentUser.nome,
+            setor: setor,
+            acao: 'PULAR',
+            quantidade_produzida: 0
+        };
+
+        const res = await fetch('/api/production/evento', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            loadProductionQueue(setor); // Atualiza a tela local imediatamente
+        } else {
+            const errData = await res.json();
+            alert('Erro ao pular: ' + (errData.error || 'Erro desconhecido.'));
+        }
+    } catch (err) {
+        console.error('Erro no skipProduction:', err);
+        alert('Erro de conexão ao tentar despachar o pedido.');
+    }
 }

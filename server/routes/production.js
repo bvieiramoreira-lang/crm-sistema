@@ -301,6 +301,9 @@ router.post('/evento', (req, res) => {
                     } else {
                         newStatus = 'AGUARDANDO_EMBALE';
                     }
+                } else if (acao === 'PULAR') {
+                    // Pular Produção (Direto para o Embale)
+                    newStatus = 'AGUARDANDO_EMBALE';
                 }
 
                 // Construct Dynamic Update Query
