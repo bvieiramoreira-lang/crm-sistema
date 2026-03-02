@@ -200,8 +200,7 @@ router.put('/item/:id/status', (req, res) => {
     if (novo_status_item === 'AGUARDANDO_DESEMBALE') timestampCol = 'data_separacao';
     else if (novo_status_item === 'AGUARDANDO_PRODUCAO') timestampCol = 'data_desembale';
     else if (novo_status_item === 'CONCLUIDO') {
-        timestampCol = 'finalizado_em';
-        extraCols = ", data_envio = DATETIME('now', 'localtime')";
+        timestampCol = 'data_envio';
     }
 
     // Logic for generic moves
