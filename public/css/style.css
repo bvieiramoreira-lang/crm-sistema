@@ -171,6 +171,7 @@ h6 {
 
 .nav-link {
     display: flex;
+    flex-direction: row;
     align-items: center;
     padding: 0.65rem 0.75rem;
     color: var(--text-secondary);
@@ -183,17 +184,18 @@ h6 {
 }
 
 .nav-link i {
-    font-size: 1.25rem; /* Ícones Phosphor ligeiramente maiores e alinhados */
+    font-size: 1.25rem;
+    /* Ícones Phosphor ligeiramente maiores e alinhados */
     margin-right: 0.85rem;
     color: var(--text-secondary);
     transition: color 0.2s;
-    display: flex; /* Garante que o ícone fique centralizado horizontal/vertical no box dele */
-    align-items: center;
-    justify-content: center;
+    display: inline-block;
+    /* Alinha perfeitamente com o texto ao redor no box flex-row */
 }
 
 .nav-link:hover {
-    background: #f8fafc; /* Levíssimo fundo para hover num menu branco */
+    background: #f8fafc;
+    /* Levíssimo fundo para hover num menu branco */
     color: var(--text-primary);
 }
 
@@ -202,13 +204,16 @@ h6 {
 }
 
 .nav-link.active {
-    background: #fffbeb; /* Fundo hiper suave amarelado */
-    color: #d97706; /* Âmbar/Laranja parecido com referência Projetcts */
+    background: #fffbeb;
+    /* Fundo hiper suave amarelado */
+    color: #d97706;
+    /* Âmbar/Laranja parecido com referência Projetcts */
     font-weight: 600;
 }
 
 .nav-link.active i {
-    color: #f59e0b; /* Âmbar vibrante no ícone, igual referência */
+    color: #f59e0b;
+    /* Âmbar vibrante no ícone, igual referência */
 }
 
 /* Submenus */
@@ -219,18 +224,21 @@ h6 {
 }
 
 .nav-sub-item:hover {
-    color: #d97706; /* Âmbar no hover */
+    color: #d97706;
+    /* Âmbar no hover */
 }
 
 .nav-sub-item.active {
     background: transparent;
-    color: #d97706; /* Âmbar */
+    color: #d97706;
+    /* Âmbar */
     font-weight: 600;
 }
 
 .nav-sub-item.active::before {
     content: '•';
-    color: #f59e0b; /* Bullet âmbar */
+    color: #f59e0b;
+    /* Bullet âmbar */
     position: absolute;
     left: 1.5rem;
     font-weight: bold;

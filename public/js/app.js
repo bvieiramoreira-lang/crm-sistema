@@ -250,7 +250,7 @@ function setupNavigation() {
                     const a = document.createElement('a');
                     a.href = '#';
                     a.className = 'nav-link';
-                    a.innerHTML = `<i class="${item.icon}"></i> ${item.label}`;
+                    a.innerHTML = `<div style="display:flex; align-items:center; flex:1;"><i class="${item.icon}"></i> <span>${item.label}</span></div>`;
 
                     // Badges logic (simplified)
                     // ... (can add badge span here if needed, keeping simple for now as requested "manter contadores")
