@@ -112,13 +112,13 @@ function setupNavigation() {
             {
                 id: 'dashboard',
                 label: 'Dashboard',
-                icon: 'ph-monitor-play',
+                icon: 'ph-house',
                 profiles: ['admin', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica'],
                 action: openDashboard
             },
-            { id: 'orders', label: 'Todos os Pedidos', icon: 'ph-clipboard-text', profiles: ['financeiro', 'admin'], action: loadOrders },
+            { id: 'orders', label: 'Todos os Pedidos', icon: 'ph-stack', profiles: ['financeiro', 'admin'], action: loadOrders },
             { id: 'new_order', label: 'Novo Pedido', icon: 'ph-plus-circle', profiles: ['financeiro', 'admin'], action: openNewOrderModal },
-            { id: 'arte', label: 'Arte Final', icon: 'ph-palette', profiles: ['arte', 'admin'], action: loadArteQueue },
+            { id: 'arte', label: 'Arte Final', icon: 'ph-paint-brush', profiles: ['arte', 'admin'], action: loadArteQueue },
             { id: 'separacao', label: 'Separação', icon: 'ph-basket', profiles: ['separacao', 'admin'], action: () => loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação') },
             { id: 'desembale', label: 'Desembale', icon: 'ph-package', profiles: ['desembale', 'admin'], action: () => loadGenericQueue('AGUARDANDO_DESEMBALE', 'Desembale') },
 
@@ -130,13 +130,13 @@ function setupNavigation() {
                     { label: 'Silk Plano', icon: 'ph-square', action: () => loadProductionQueue('SILK_PLANO') },
                     { label: 'Tampografia', icon: 'ph-pen-nib', action: () => loadProductionQueue('TAMPOGRAFIA') },
                     { label: 'Impressão Laser', icon: 'ph-lightning', action: () => loadProductionQueue('IMPRESSAO_LASER') },
-                    { label: 'Impressão Digital', icon: 'ph-printer-wifi', action: () => loadProductionQueue('IMPRESSAO_DIGITAL') },
+                    { label: 'Impressão Digital', icon: 'ph-printer', action: () => loadProductionQueue('IMPRESSAO_DIGITAL') },
                     { label: 'Estamparia', icon: 'ph-t-shirt', action: () => loadProductionQueue('ESTAMPARIA') }
                 ],
                 // For 'impressao' profile (non-admin), logic handles single item below
             },
 
-            { id: 'embale', label: 'Embale', icon: 'ph-check-square', profiles: ['embale', 'admin'], action: () => loadGenericQueue('AGUARDANDO_EMBALE', 'Embale') },
+            { id: 'embale', label: 'Embale', icon: 'ph-check-square-offset', profiles: ['embale', 'admin'], action: () => loadGenericQueue('AGUARDANDO_EMBALE', 'Embale') },
             { id: 'logistica', label: 'Logística', icon: 'ph-truck', profiles: ['logistica', 'admin'], action: () => loadGenericQueue('AGUARDANDO_ENVIO', 'Logística') },
             { id: 'finalizados', label: 'Finalizados', icon: 'ph-check-circle', profiles: ['admin', 'financeiro'], action: loadFinishedOrders },
             { id: 'manual', label: 'Manual do Sistema', icon: 'ph-book-open', profiles: ['admin', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica'], action: loadManuals },
