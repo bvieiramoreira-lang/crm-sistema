@@ -193,9 +193,9 @@ function setupNavigation() {
                     toggle.style.cursor = 'pointer';
                     toggle.innerHTML = `
                         <div style="display:flex; align-items:center; flex:1;">
-                            <i class="${item.icon}"></i> ${item.label}
+                            <i class="ph ${item.icon}"></i> <span>${item.label}</span>
                         </div> 
-                        <i class="ph-caret-down" style="transition: transform 0.2s;"></i>
+                        <i class="ph ph-caret-down" style="transition: transform 0.2s;"></i>
                     `;
 
                     const subNav = document.createElement('div');
@@ -214,7 +214,7 @@ function setupNavigation() {
                         subLink.className = 'nav-link nav-sub-item'; // Use new class
                         // Icon optional for subitems, user asked for submenus but listed icons. Let's add small ones or none?
                         // User suggestion: "Impressão Digital: 🖨️". Okay let's add icon if exists.
-                        const iconHtml = child.icon ? `<i class="${child.icon}" style="font-size:1rem; margin-right:0.5rem;"></i>` : '';
+                        const iconHtml = child.icon ? `<i class="ph ${child.icon}" style="font-size:1rem; margin-right:0.5rem;"></i>` : '';
 
                         subLink.innerHTML = `${child.label}`;
                         // Actually styles say "indent taking icon into account". 
@@ -222,7 +222,7 @@ function setupNavigation() {
                         // Let's stick to text for submenus based on CSS ".nav-sub-item" padding? 
                         // Wait, user listed icons for submenus. Let's try to include them.
                         if (child.icon) {
-                            subLink.innerHTML = `<i class="${child.icon}" style="font-size:1rem; margin-right:0.5rem; width:1.2rem; text-align:center;"></i> ${child.label}`;
+                            subLink.innerHTML = `<i class="ph ${child.icon}" style="font-size:1rem; margin-right:0.5rem; width:1.2rem; text-align:center;"></i> ${child.label}`;
                             subLink.style.paddingLeft = '1rem'; // Override strict padding if adding icons inside
                         }
 
@@ -250,7 +250,7 @@ function setupNavigation() {
                     const a = document.createElement('a');
                     a.href = '#';
                     a.className = 'nav-link';
-                    a.innerHTML = `<div style="display:flex; align-items:center; flex:1;"><i class="${item.icon}"></i> <span>${item.label}</span></div>`;
+                    a.innerHTML = `<div style="display:flex; align-items:center; flex:1;"><i class="ph ${item.icon}"></i> <span>${item.label}</span></div>`;
 
                     // Badges logic (simplified)
                     // ... (can add badge span here if needed, keeping simple for now as requested "manter contadores")
