@@ -204,16 +204,16 @@ h6 {
 }
 
 .nav-link.active {
-    background: #fffbeb;
-    /* Fundo hiper suave amarelado */
-    color: #d97706;
-    /* Âmbar/Laranja parecido com referência Projetcts */
+    background: #4A3366;
+    /* Fundo roxo escuro acinzentado */
+    color: #a78bfa;
+    /* Violeta claro vibrante no texto */
     font-weight: 600;
 }
 
 .nav-link.active i {
-    color: #f59e0b;
-    /* Âmbar vibrante no ícone, igual referência */
+    color: #a78bfa;
+    /* Violeta claro vibrante no ícone */
 }
 
 /* Submenus */
@@ -224,21 +224,21 @@ h6 {
 }
 
 .nav-sub-item:hover {
-    color: #d97706;
-    /* Âmbar no hover */
+    color: #a78bfa;
+    /* Violeta claro no hover */
 }
 
 .nav-sub-item.active {
     background: transparent;
-    color: #d97706;
-    /* Âmbar */
+    color: #a78bfa;
+    /* Violeta claro */
     font-weight: 600;
 }
 
 .nav-sub-item.active::before {
     content: '•';
-    color: #f59e0b;
-    /* Bullet âmbar */
+    color: #a78bfa;
+    /* Bullet violeta claro */
     position: absolute;
     left: 1.5rem;
     font-weight: bold;
