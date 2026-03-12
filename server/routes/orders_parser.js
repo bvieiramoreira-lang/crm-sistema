@@ -38,94 +38,135 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
 
         const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
 
+        let inItemsTable = false;
+
         // Parse basic fields
         for (let i = 0; i < lines.length; i++) {
+            // Cliente
             if (lines[i] === 'Cliente' && lines[i + 1]) {
                 extractedData.cliente = lines[i + 1];
             }
-            if ((lines[i] === 'Número do pedido' || lines[i] === 'Pedido de Venda Nº') && lines[i + 1]) {
-                // Try to grab the number from the same line or next line
-                const inlineMatch = lines[i].match(/Pedido de Venda Nº\s+(\d+)/i);
-                if (inlineMatch) {
-                    extractedData.numero_pedido = inlineMatch[1];
-                } else {
-                    extractedData.numero_pedido = lines[i + 1].replace(/[^\d]/g, ''); // just numbers
-                }
-            }
-            if (lines[i] === 'Data prevista' && lines[i + 1]) {
-                const dateParts = lines[i + 1].split('/');
-                if (dateParts.length === 3) {
-                    // Convert dd/mm/yyyy to yyyy-mm-dd
-                    extractedData.prazo_entrega = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-                } else {
-                    extractedData.prazo_entrega = lines[i + 1];
-                }
-            }
-            if (lines[i] === 'Observações' && lines[i + 1]) {
-                extractedData.observacao = lines[i + 1];
-            }
-            if (lines[i] === 'Transportadora' && lines[i + 1]) {
-                const transText = lines[i + 1];
-                const transLower = transText.toLowerCase();
-                if (transLower.includes('retirada')) {
-                    extractedData.tipo_envio = 'RETIRADA';
-                    extractedData.transportadora = transText; // e.g Retirada em Loja
-                } else if (transLower.includes('correio')) {
-                    extractedData.tipo_envio = 'CORREIOS';
-                    extractedData.transportadora = transText;
-                } else {
-                    extractedData.tipo_envio = 'TRANSPORTADORA';
-                    extractedData.transportadora = transText;
-                }
-            }
-        }
 
-        // Parse Items
-        // The table layout flattens to lines. Typically headers are: 
-        // Item, SKU | GTIN, Qtd, Un, Preço un, Total
-        // Followed by values in some order, often: Produto, SKU, Quantidade, Unidade, Preco, Total
-        // Because PDF parsing order can vary, let's use a heuristic: Products are usually long strings.
-        let inItemsTable = false;
-        let currentItem = {};
+            // Número do pedido (Bling format "Pedido de Venda Nº 724")
+            if (lines[i].startsWith('Pedido de Venda Nº')) {
+                const num = lines[i].replace(/[^\d]/g, '');
+                if (num) extractedData.numero_pedido = num;
+            }
+            // Fallback for "Número do pedido724" (no space)
+            if (lines[i].startsWith('Número do pedido')) {
+                const num = lines[i].replace('Número do pedido', '').trim();
+                if (num && !extractedData.numero_pedido) extractedData.numero_pedido = num;
+            }
 
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('SKU | GTIN')) {
+            // Data prevista (Bling format "Data prevista27/03/2026 ")
+            if (lines[i].startsWith('Data prevista')) {
+                let val = lines[i].replace('Data prevista', '').trim();
+                if (val) {
+                    const dateParts = val.split('/');
+                    if (dateParts.length === 3) {
+                        extractedData.prazo_entrega = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+                    } else {
+                        extractedData.prazo_entrega = val;
+                    }
+                }
+            }
+
+            // Transportadora (Bling format "TransportadoraMelhor Envio ( jadlog )")
+            if (lines[i].startsWith('Transportadora')) {
+                let val = lines[i].replace('Transportadora', '').trim();
+                // Sometimes it's exactly "Transportadora" and the value is on the next line
+                if (!val && lines[i + 1]) {
+                    val = lines[i + 1];
+                }
+
+                if (val) {
+                    const transLower = val.toLowerCase();
+                    if (transLower.includes('retirada')) {
+                        extractedData.tipo_envio = 'RETIRADA';
+                        extractedData.transportadora = val;
+                    } else if (transLower.includes('correio')) {
+                        extractedData.tipo_envio = 'CORREIOS';
+                        extractedData.transportadora = val;
+                    } else {
+                        extractedData.tipo_envio = 'TRANSPORTADORA';
+                        extractedData.transportadora = val;
+                    }
+                }
+            }
+
+            // Observações (Bling format "Observações" then content on next lines)
+            if (lines[i] === 'Observações' || lines[i] === 'Observação') {
+                // Read lines until a known end marker or next section
+                let obsText = [];
+                let j = i + 1;
+                while (j < lines.length) {
+                    if (lines[j].includes('Data de Recebimento') || lines[j].includes('Assinatura') || lines[j].match(/^\/\s*\//)) {
+                        break;
+                    }
+                    obsText.push(lines[j]);
+                    j++;
+                }
+                extractedData.observacao = obsText.join('\n').trim();
+            }
+
+            // --- ITENS ---
+            // Bling table header:
+            // "Item"
+            // "Código (SKU) /"
+            // "GTIN"
+            // "QtdUnPreço unTotal"
+            // Followed by actual item data like:
+            // "Toalha de Banho, Praia Personalizada 210gPP27520,0050,021.000,40"
+            // Or "Produto X" \n "SKU" \n "10,00"... etc.
+
+            if (lines[i].includes('QtdUnPreço unTotal') || lines[i].includes('QtdUnPreço')) {
                 inItemsTable = true;
                 continue;
             }
-            if (inItemsTable && (lines[i].includes('Número de itens') || lines[i].includes('Soma das quantidades') || lines[i] === 'Forma de Pagamento' || lines[i] === 'Número de itens:' || lines[i] === 'Transportadora')) {
-                break; // exiting items table
-            }
 
             if (inItemsTable) {
-                // Heuristic: If it looks like a quantity (number, comma, 00 e.g 1,00)
-                const isQtd = /^\d+,\d{2}$/.test(lines[i]);
-                const isCodeStr = /^[A-Z0-9-]{3,15}$/.test(lines[i]) && !lines[i].includes(' R$');
+                if (lines[i].startsWith('Número de itens:') || lines[i].startsWith('Soma das')) {
+                    inItemsTable = false;
+                    continue;
+                }
 
-                // If it doesn't match standard numbers, assume it's the product name
-                if (!isQtd && lines[i].length > 5 && !lines[i].includes('R$') && isNaN(parseInt(lines[i], 10))) {
-                    if (currentItem.produto) {
-                        // Already had a product, so push it before starting a new one
-                        // Default quantity to 1 if we missed it
-                        if (!currentItem.quantidade) currentItem.quantidade = 1;
-                        extractedData.itens.push(currentItem);
-                        currentItem = {};
+                // In Bling, it often merges strings: "Toalha de Banho, Praia Personalizada 210gPP27520,0050,021.000,40"
+                // This is a nightmare to parse automatically without fixed columns.
+                // Let's try to extract info and push.
+                // We'll look for quantities like "20,00" inside the string.
+
+                let lineStr = lines[i];
+
+                // Regex para capturar Produto + Ref + Qtd
+                // Ex: "Toalha de Banho 210gPP27520,0050,021.000,40"
+                // Produto: [Texto]
+                // Ref/SKU: PP275
+                // Qtd: 20,00
+                // Matcher: (Texto livre) (Referencia em MAIUSCULO/Numeros) (Quantidade \d+,\d{2})
+                const itemMatch = lineStr.match(/^(.*?)([A-Z0-9-]{3,15})?(\d+,\d{2})(.*)$/);
+
+                if (itemMatch) {
+                    const rawProduto = itemMatch[1].trim();
+                    const rawReferencia = itemMatch[2] ? itemMatch[2].trim() : '';
+                    const rawQuantidade = parseInt(itemMatch[3].split(',')[0], 10);
+
+                    extractedData.itens.push({
+                        produto: rawProduto,
+                        referencia: rawReferencia,
+                        quantidade: isNaN(rawQuantidade) ? 1 : rawQuantidade
+                    });
+                } else {
+                    // Fallback to simple line-by-line if it's not merged
+                    // Se não conseguir parsear, insere a linha inteira como produto para o usario arrumar
+                    if (lineStr.length > 3) {
+                        extractedData.itens.push({
+                            produto: lineStr.substring(0, 50),
+                            referencia: '',
+                            quantidade: 1
+                        });
                     }
-                    currentItem.produto = lines[i];
-                }
-                else if (isQtd && currentItem.produto && !currentItem.quantidade) {
-                    // It's the first number after product name (Quantity)
-                    currentItem.quantidade = parseInt(lines[i].split(',')[0], 10) || 1;
-                }
-                else if (isCodeStr && currentItem.produto && !currentItem.referencia) {
-                    currentItem.referencia = lines[i];
                 }
             }
-        }
-        // Push the last item if exists
-        if (currentItem.produto) {
-            if (!currentItem.quantidade) currentItem.quantidade = 1;
-            extractedData.itens.push(currentItem);
         }
 
         res.json(extractedData);
