@@ -61,21 +61,6 @@ app.use('/api/collaborators', require('./routes/collaborators'));
 app.use('/api/dashboard', require('./routes/dashboard')); // NEW DASHBOARD ROUTE
 app.use('/api/manuals', require('./routes/manuals')); // Rota de Manuais
 
-// TEMP ROUTE TO CLEAR DB
-app.get('/api/admin/clear-tests', (req, res) => {
-    db.serialize(() => {
-        db.run('DELETE FROM eventos_producao');
-        db.run('DELETE FROM historico_pedidos');
-        db.run('DELETE FROM itens_pedido');
-        db.run('DELETE FROM pedidos');
-        db.run("DELETE FROM sqlite_sequence WHERE name='eventos_producao'");
-        db.run("DELETE FROM sqlite_sequence WHERE name='historico_pedidos'");
-        db.run("DELETE FROM sqlite_sequence WHERE name='itens_pedido'");
-        db.run("DELETE FROM sqlite_sequence WHERE name='pedidos'");
-    });
-    res.json({ message: 'Banco de dados de pedidos limpo com sucesso!' });
-});
-
 // Servir frontend
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
