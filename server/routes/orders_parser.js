@@ -22,6 +22,10 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
 
         const text = data.text;
 
+        console.log("=== PDF DUMP START ===");
+        console.log(text);
+        console.log("=== PDF DUMP END ===");
+
         const extractedData = {
             cliente: '',
             numero_pedido: '',
