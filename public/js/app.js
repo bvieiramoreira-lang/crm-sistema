@@ -1665,7 +1665,7 @@ function openNewOrderModal() {
 }
 
 async function viewOrderDetails(id) {
-    const res = await fetch(`/ api / orders / ${id} `);
+    const res = await fetch(`/api/orders/${id}`);
     const order = await res.json();
 
     const canEdit = currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro';
