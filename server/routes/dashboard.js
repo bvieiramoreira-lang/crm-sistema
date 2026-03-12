@@ -7,13 +7,13 @@ router.get('/live', (req, res) => {
     // Queries
     const queries = {
         total_ativos: "SELECT COUNT(DISTINCT p.id) as count, COUNT(i.id) as total_items FROM pedidos p LEFT JOIN itens_pedido i ON p.id = i.pedido_id WHERE p.status_geral != 'FINALIZADO'",
-        em_producao: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE status_atual = 'EM_PRODUCAO'",
-        aguardando_producao: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE status_atual = 'AGUARDANDO_PRODUCAO'",
-        arte_final: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE arte_status != 'APROVADO' AND status_atual != 'CANCELADO'",
-        separacao: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE status_atual = 'AGUARDANDO_SEPARACAO'",
-        desembale: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE status_atual = 'AGUARDANDO_DESEMBALE'",
-        embale: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE status_atual = 'AGUARDANDO_EMBALE'",
-        logistica: "SELECT COUNT(DISTINCT pedido_id) as count, COUNT(id) as total_items FROM itens_pedido WHERE status_atual = 'AGUARDANDO_ENVIO'",
+        em_producao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'EM_PRODUCAO' AND p.status_geral != 'FINALIZADO'",
+        aguardando_producao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_PRODUCAO' AND p.status_geral != 'FINALIZADO'",
+        arte_final: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' AND p.status_geral != 'FINALIZADO'",
+        separacao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_SEPARACAO' AND i.arte_status = 'APROVADO' AND p.status_geral != 'FINALIZADO'",
+        desembale: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_DESEMBALE' AND p.status_geral != 'FINALIZADO'",
+        embale: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_EMBALE' AND p.status_geral != 'FINALIZADO'",
+        logistica: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_ENVIO' AND p.status_geral != 'FINALIZADO'",
         urgentes: `
             SELECT p.id, p.numero_pedido, p.cliente, p.prazo_entrega, p.status_geral as status
             FROM pedidos p 
