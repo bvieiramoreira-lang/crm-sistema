@@ -56,7 +56,7 @@ router.get('/', async (req, res) => {
         // Calcular status oficial para cada pedido
         const ordersWithStatus = await Promise.all(orders.map(async (order) => {
             const items = await new Promise((resolve, reject) => {
-                db.all("SELECT status_atual, arte_status, setor_destino FROM itens_pedido WHERE pedido_id = ?", [order.id], (err, rows) => {
+                db.all("SELECT status_atual, arte_status, setor_destino, layout_path, layout_type FROM itens_pedido WHERE pedido_id = ?", [order.id], (err, rows) => {
                     if (err) reject(err);
                     else resolve(rows);
                 });
