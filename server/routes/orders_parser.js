@@ -131,42 +131,45 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
                 }
 
                 // In Bling, it often merges strings: "Toalha de Banho, Praia Personalizada 210gPP27520,0050,021.000,40"
-                // This is a nightmare to parse automatically without fixed columns.
-                // Let's try to extract info and push.
-                // We'll look for quantities like "20,00" inside the string.
-
+                // O padrão final sempre tem 3 ou 4 blocos de números com vírgula: Qtd, (Unidade string livre), Preço Unitário, Total
                 let lineStr = lines[i];
 
-                // Regex para ler de trás para frente os valores numéricos aglutinados.
-                // Ex: "Toalha de Banho 210gPP27520,0050,021.000,40"
-                // Match 1: (.*?) -> Toalha de Banho 210gPP275
-                // Match 2: (\d+,\d{2}) -> 20,00 (Quantidade)
-                // Match 3: ([A-Za-z]{0,5}) -> "" ou "UN" (Unidade opcional)
-                // Match 4: (\d+,\d{2}) -> 50,02 (Preço Unitário)
-                // Match 5: ([\d.]*,\d{2}) -> 1.000,40 (Total)
-                const itemMatch = lineStr.match(/^(.*?)(\d+,\d{2})\s*([A-Za-z]{0,5})\s*(\d+,\d{2})\s*([\d.]*,\d{2})$/);
+                // Extrair todos os números flutuantes no formato BR (1.000,00 ou 10,00)
+                const floatMatches = [...lineStr.matchAll(/(\d+(?:\.\d{3})*,\d{2,4})/g)];
+                let rawProduto = lineStr;
+                let rawReferencia = '';
+                let rawQuantidade = 1;
 
-                if (itemMatch) {
-                    let rawProduto = itemMatch[1].trim();
-                    const rawQuantidade = parseInt(itemMatch[2].split(',')[0], 10);
-                    let rawReferencia = '';
+                if (floatMatches.length >= 3) {
+                    // Os últimos 3 floats costumam ser: Qtd, Preço, Total
+                    const qtdStr = floatMatches[floatMatches.length - 3][0];
+                    rawQuantidade = parseInt(qtdStr.split(',')[0], 10);
 
-                    // Tenta extrair a Referência/SKU que costuma ficar grudada no final do nome.
-                    const skuGluedMatch = rawProduto.match(/^(.*?[a-z])([A-Z0-9-]{2,20})$/);
-                    const skuSpaceMatch = rawProduto.match(/^(.*?)\s+([A-Z0-9-]{2,20})$/);
+                    // Cortamos a string original logo antes de onde a quantidade apareceu pela última vez
+                    const stopIndex = lineStr.lastIndexOf(qtdStr);
+                    let pNameRef = lineStr.substring(0, stopIndex).trim();
 
-                    if (skuGluedMatch && /\d/.test(skuGluedMatch[2])) {
-                        rawProduto = skuGluedMatch[1].trim();
-                        rawReferencia = skuGluedMatch[2];
-                    } else if (skuSpaceMatch && /\d/.test(skuSpaceMatch[2])) {
-                        rawProduto = skuSpaceMatch[1].trim();
-                        rawReferencia = skuSpaceMatch[2];
-                    } else if (skuGluedMatch && skuGluedMatch[2].length <= 5) {
-                        rawProduto = skuGluedMatch[1].trim();
-                        rawReferencia = skuGluedMatch[2];
-                    } else if (skuSpaceMatch && skuSpaceMatch[2].length <= 2) {
-                        rawProduto = skuSpaceMatch[1].trim();
-                        rawReferencia = skuSpaceMatch[2];
+                    // Removemos possível " UN" ou " PC" ou " CX" que as vezes fica grudado no final
+                    pNameRef = pNameRef.replace(/\s+(UN|PC|CX|KG|MT|PR|DZ|M2)$/i, '').trim();
+
+                    // Tentar separar a Referência (SKU) do Produto
+                    const refMatchGlued = pNameRef.match(/^(.*?[a-z])([A-Z0-9-]{2,20})$/);
+                    const refMatchSpaced = pNameRef.match(/^(.*?)\s+([A-Z0-9-]{2,20})$/);
+
+                    if (refMatchGlued && /\d/.test(refMatchGlued[2])) {
+                        rawProduto = refMatchGlued[1].trim();
+                        rawReferencia = refMatchGlued[2];
+                    } else if (refMatchSpaced && /\d/.test(refMatchSpaced[2])) {
+                        rawProduto = refMatchSpaced[1].trim();
+                        rawReferencia = refMatchSpaced[2];
+                    } else if (refMatchGlued && refMatchGlued[2].length <= 5) {
+                        rawProduto = refMatchGlued[1].trim();
+                        rawReferencia = refMatchGlued[2];
+                    } else if (refMatchSpaced && refMatchSpaced[2].length <= 3) {
+                        rawProduto = refMatchSpaced[1].trim();
+                        rawReferencia = refMatchSpaced[2];
+                    } else {
+                        rawProduto = pNameRef;
                     }
 
                     extractedData.itens.push({
