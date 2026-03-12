@@ -1757,10 +1757,10 @@ async function updateArteStatus(itemId, status) {
     if (!confirm(`Confirmar alteração para status: ${status}?`)) return;
 
     // Capture current responsible to preserve state and persist
-    const responsavel = document.getElementById(`resp_select_${itemId} `) ? document.getElementById(`resp_select_${itemId} `).value : null;
+    const responsavel = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
 
     try {
-        await fetch(`/ api / production / item / ${itemId}/arte`, {
+        const res = await fetch(`/api/production/item/${itemId}/arte`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1768,11 +1768,17 @@ async function updateArteStatus(itemId, status) {
                 responsavel: responsavel // Persist to DB
             })
         });
+
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao atualizar status');
+        }
+
         // RELOAD IN PLACE preserving resp
         openArteAction(itemId, null, responsavel);
     } catch (e) {
         console.error(e);
-        alert('Erro ao atualizar status');
+        alert('Erro ao atualizar status: ' + e.message);
     }
 }
 
