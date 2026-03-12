@@ -138,11 +138,15 @@ async function fetchLiveStats() {
                 </div>
                 <div class="counter-card" style="background: #eab308; color: #422006;">
                     <span class="counter-val">${fmt(data.aguardando_producao)}</span>
-                    <span class="counter-label">AGUARDANDO PROD.</span>
+                    <span class="counter-label">AGUARDANDO IMPRESSÃO</span>
+                </div>
+                <div class="counter-card" style="background: #f97316;">
+                    <span class="counter-val">${fmt(data.aguardando_aprovacao)}</span>
+                    <span class="counter-label">AGUARD. APROVAÇÃO</span>
                 </div>
                 <div class="counter-card">
                     <span class="counter-val">${fmt(data.arte_final)}</span>
-                    <span class="counter-label">ARTE FINAL</span>
+                    <span class="counter-label">ARTE FINAL (TOTAL)</span>
                 </div>
                 <div class="counter-card">
                     <span class="counter-val">${fmt(data.separacao)}</span>
