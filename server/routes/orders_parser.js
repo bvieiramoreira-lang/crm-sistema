@@ -137,18 +137,37 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
 
                 let lineStr = lines[i];
 
-                // Regex para capturar Produto + Ref + Qtd
+                // Regex para ler de trás para frente os valores numéricos aglutinados.
                 // Ex: "Toalha de Banho 210gPP27520,0050,021.000,40"
-                // Produto: [Texto]
-                // Ref/SKU: PP275
-                // Qtd: 20,00
-                // Matcher: (Texto livre) (Referencia em MAIUSCULO/Numeros) (Quantidade \d+,\d{2})
-                const itemMatch = lineStr.match(/^(.*?)([A-Z0-9-]{3,15})?(\d+,\d{2})(.*)$/);
+                // Match 1: (.*?) -> Toalha de Banho 210gPP275
+                // Match 2: (\d+,\d{2}) -> 20,00 (Quantidade)
+                // Match 3: ([A-Za-z]{0,5}) -> "" ou "UN" (Unidade opcional)
+                // Match 4: (\d+,\d{2}) -> 50,02 (Preço Unitário)
+                // Match 5: ([\d.]*,\d{2}) -> 1.000,40 (Total)
+                const itemMatch = lineStr.match(/^(.*?)(\d+,\d{2})\s*([A-Za-z]{0,5})\s*(\d+,\d{2})\s*([\d.]*,\d{2})$/);
 
                 if (itemMatch) {
-                    const rawProduto = itemMatch[1].trim();
-                    const rawReferencia = itemMatch[2] ? itemMatch[2].trim() : '';
-                    const rawQuantidade = parseInt(itemMatch[3].split(',')[0], 10);
+                    let rawProduto = itemMatch[1].trim();
+                    const rawQuantidade = parseInt(itemMatch[2].split(',')[0], 10);
+                    let rawReferencia = '';
+
+                    // Tenta extrair a Referência/SKU que costuma ficar grudada no final do nome.
+                    const skuGluedMatch = rawProduto.match(/^(.*?[a-z])([A-Z0-9-]{2,20})$/);
+                    const skuSpaceMatch = rawProduto.match(/^(.*?)\s+([A-Z0-9-]{2,20})$/);
+
+                    if (skuGluedMatch && /\d/.test(skuGluedMatch[2])) {
+                        rawProduto = skuGluedMatch[1].trim();
+                        rawReferencia = skuGluedMatch[2];
+                    } else if (skuSpaceMatch && /\d/.test(skuSpaceMatch[2])) {
+                        rawProduto = skuSpaceMatch[1].trim();
+                        rawReferencia = skuSpaceMatch[2];
+                    } else if (skuGluedMatch && skuGluedMatch[2].length <= 5) {
+                        rawProduto = skuGluedMatch[1].trim();
+                        rawReferencia = skuGluedMatch[2];
+                    } else if (skuSpaceMatch && skuSpaceMatch[2].length <= 2) {
+                        rawProduto = skuSpaceMatch[1].trim();
+                        rawReferencia = skuSpaceMatch[2];
+                    }
 
                     extractedData.itens.push({
                         produto: rawProduto,
@@ -156,8 +175,7 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
                         quantidade: isNaN(rawQuantidade) ? 1 : rawQuantidade
                     });
                 } else {
-                    // Fallback to simple line-by-line if it's not merged
-                    // Se não conseguir parsear, insere a linha inteira como produto para o usario arrumar
+                    // Fallback se não bater com a regex
                     if (lineStr.length > 3) {
                         extractedData.itens.push({
                             produto: lineStr.substring(0, 50),
