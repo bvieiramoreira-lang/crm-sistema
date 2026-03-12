@@ -54,6 +54,7 @@ const productionRoutes = require('./routes/production');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/orders', require('./routes/orders_parser'));
 app.use('/api/production', productionRoutes);
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users')); // Mantido para login, mas não para tarefas

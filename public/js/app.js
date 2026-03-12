@@ -1409,11 +1409,23 @@ function injectNewOrderModal() {
     <div id="newOrderModal" class="modal">
         <div class="modal-content">
             <h2 style="margin-bottom: 1rem;">Novo Pedido</h2>
+            
+            <!-- ÁREA DE IMPORTAÇÃO DE PDF -->
+            <div id="pdfImportZone" style="border: 2px dashed var(--accent); border-radius: 8px; padding: 1.5rem; text-align: center; margin-bottom: 1.5rem; background: var(--bg-surface); cursor: pointer; transition: all 0.2s;">
+                <i class="ph-file-pdf" style="font-size: 2rem; color: var(--accent); margin-bottom: 0.5rem; display: block;"></i>
+                <h4 style="margin: 0 0 0.5rem 0; color: var(--text-primary);">Importação Automática (Opcional)</h4>
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Arraste ou clique para enviar um PDF do Pedido (Ex: Bling/Nuvemshop)</p>
+                <input type="file" id="pdfFileInput" accept="application/pdf" style="display: none;">
+                <div id="pdfLoadingIndicator" style="display: none; margin-top: 1rem; color: var(--info); font-size: 0.9rem;">
+                    <i class="ph-spinner" style="animation: spin 1s linear infinite;"></i> Extraindo dados do PDF...
+                </div>
+            </div>
+
             <form id="newOrderForm">
                 <div class="flex-row">
                     <div class="form-group" style="flex: 2">
                         <label>Cliente</label>
-                        <input type="text" name="cliente" class="form-control" required>
+                        <input type="text" name="cliente" id="no_cliente" class="form-control" required>
                     </div>
                 </div>
                 <div class="flex-row">
@@ -1482,6 +1494,117 @@ function injectNewOrderModal() {
     };
 
     document.getElementById('newOrderForm').onsubmit = handleNewOrderSubmit;
+
+    // --- PDF IMPORT LOGIC ---
+    const pdfZone = document.getElementById('pdfImportZone');
+    const pdfInput = document.getElementById('pdfFileInput');
+    const pdfIndicator = document.getElementById('pdfLoadingIndicator');
+    const form = document.getElementById('newOrderForm');
+
+    if (pdfZone && pdfInput) {
+        pdfZone.addEventListener('click', () => pdfInput.click());
+
+        pdfZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            pdfZone.style.borderColor = 'var(--info)';
+            pdfZone.style.background = 'var(--info-bg)';
+        });
+
+        pdfZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            pdfZone.style.borderColor = 'var(--accent)';
+            pdfZone.style.background = 'var(--bg-surface)';
+        });
+
+        pdfZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            pdfZone.style.borderColor = 'var(--accent)';
+            pdfZone.style.background = 'var(--bg-surface)';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handlePdfUpload(e.dataTransfer.files[0]);
+            }
+        });
+
+        pdfInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                handlePdfUpload(e.target.files[0]);
+            }
+        });
+    }
+
+    async function handlePdfUpload(file) {
+        if (file.type !== 'application/pdf') {
+            alert('Por favor, envie um arquivo PDF.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('pdf_file', file);
+
+        pdfIndicator.style.display = 'block';
+
+        try {
+            const res = await fetch('/api/orders/parse-pdf', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'Erro ao processar PDF');
+            }
+
+            const data = await res.json();
+
+            // Populate Basic Fields
+            if (data.cliente && form.elements['cliente']) form.elements['cliente'].value = data.cliente;
+            if (data.numero_pedido && form.elements['numero_pedido']) form.elements['numero_pedido'].value = data.numero_pedido;
+            if (data.prazo_entrega && form.elements['prazo_entrega']) form.elements['prazo_entrega'].value = data.prazo_entrega;
+
+            if (data.tipo_envio && form.elements['tipo_envio']) {
+                // Seleciona a option correta (TRANSPORTADORA, CORREIOS, RETIRADA)
+                form.elements['tipo_envio'].value = data.tipo_envio;
+            }
+            if (data.transportadora && form.elements['transportadora']) {
+                form.elements['transportadora'].value = data.transportadora;
+            }
+            if (data.observacao && form.elements['observacao']) {
+                form.elements['observacao'].value = data.observacao;
+            }
+
+            // Populate Items Container
+            container.innerHTML = ''; // Limpa itens existentes
+
+            if (data.itens && data.itens.length > 0) {
+                data.itens.forEach(it => {
+                    const div = document.createElement('div');
+                    div.className = 'flex-row';
+                    div.style.marginBottom = '0.5rem';
+                    div.innerHTML = `
+                        <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 3" value="${it.produto || ''}" required>
+                        <input type="text" placeholder="Ref (Opcional)" class="form-control" style="flex: 1.5; text-transform: uppercase;" value="${it.referencia || ''}">
+                        <input type="number" placeholder="Qtd" class="form-control" style="flex: 1" value="${it.quantidade || 1}" required>
+                        <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;" onclick="this.parentElement.remove()">
+                            <i class="ph-x"></i> Apagar
+                        </button>
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                // Add empty item if none found
+                document.getElementById('addItemBtn').click();
+            }
+
+            alert('PDF Processado! Verifique os dados no formulário antes de salvar.');
+
+        } catch (e) {
+            console.error(e);
+            alert(e.message);
+        } finally {
+            pdfIndicator.style.display = 'none';
+            pdfInput.value = ''; // Reset file input
+        }
+    }
 }
 
 async function handleNewOrderSubmit(e) {
@@ -1542,7 +1665,7 @@ function openNewOrderModal() {
 }
 
 async function viewOrderDetails(id) {
-    const res = await fetch(`/api/orders/${id}`);
+    const res = await fetch(`/ api / orders / ${id} `);
     const order = await res.json();
 
     const canEdit = currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro';
@@ -1556,7 +1679,7 @@ async function viewOrderDetails(id) {
     }
 
     let html = `
-        <div class="card">
+                        < div class="card" >
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                 <h3>Pedido ${order.numero_pedido} - ${order.cliente}</h3>
                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.5rem">
@@ -1634,10 +1757,10 @@ async function updateArteStatus(itemId, status) {
     if (!confirm(`Confirmar alteração para status: ${status}?`)) return;
 
     // Capture current responsible to preserve state and persist
-    const responsavel = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
+    const responsavel = document.getElementById(`resp_select_${itemId} `) ? document.getElementById(`resp_select_${itemId} `).value : null;
 
     try {
-        await fetch(`/api/production/item/${itemId}/arte`, {
+        await fetch(`/ api / production / item / ${itemId}/arte`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
