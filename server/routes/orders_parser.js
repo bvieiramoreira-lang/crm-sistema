@@ -134,25 +134,52 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
                 // O padrão final sempre tem 3 ou 4 blocos de números com vírgula: Qtd, (Unidade string livre), Preço Unitário, Total
                 let lineStr = lines[i];
 
-                // Extrair todos os números flutuantes no formato BR (1.000,00 ou 10,00)
-                const floatMatches = [...lineStr.matchAll(/(\d+(?:\.\d{3})*,\d{2,4})/g)];
+                // Regex estrutural das ultimas 3 virgulas numéricas
+                // 1. (.*?) -> Tudo antes (Nome + SKU + Integer da Qtd)
+                // 2. ,(\d{2}|\d{4}) -> Virgula da Qtd e seus decimais (2 ou 4)
+                // 3. ([\d.]*?) -> Integer do Preço
+                // 4. ,(\d{2}) -> Virgula do Preço e 2 decimais
+                // 5. ([\d.]*?) -> Integer do Total
+                // 6. ,(\d{2})$ -> Virgula do Total e 2 decimais no fim da string
+                const structRegex = /^(.*?),(\d{2}|\d{4})([\d.]*?),(\d{2})([\d.]*?),(\d{2})$/;
+                const match = lineStr.match(structRegex);
+
                 let rawProduto = lineStr;
                 let rawReferencia = '';
                 let rawQuantidade = 1;
 
-                if (floatMatches.length >= 3) {
-                    // Os últimos 3 floats costumam ser: Qtd, Preço, Total
-                    const qtdStr = floatMatches[floatMatches.length - 3][0];
-                    rawQuantidade = parseInt(qtdStr.split(',')[0], 10);
+                if (match) {
+                    const leftPart = match[1];
+                    const precoInt = match[3];
+                    const precoDec = match[4];
+                    const totalInt = match[5];
+                    const totalDec = match[6];
 
-                    // Cortamos a string original logo antes de onde a quantidade apareceu pela última vez
-                    const stopIndex = lineStr.lastIndexOf(qtdStr);
-                    let pNameRef = lineStr.substring(0, stopIndex).trim();
+                    const totalStr = totalInt + ',' + totalDec;
+                    const precoStr = precoInt + ',' + precoDec;
 
-                    // Removemos possível " UN" ou " PC" ou " CX" que as vezes fica grudado no final
+                    const total = parseFloat(totalStr.replace(/\./g, '').replace(',', '.'));
+                    const preco = parseFloat(precoStr.replace(/\./g, '').replace(',', '.'));
+
+                    let calcQtd = 1;
+                    if (preco > 0) calcQtd = Math.round(total / preco);
+
+                    let finalQtd = calcQtd;
+                    let pNameRef = leftPart;
+
                     pNameRef = pNameRef.replace(/\s+(UN|PC|CX|KG|MT|PR|DZ|M2)$/i, '').trim();
 
-                    // Tentar separar a Referência (SKU) do Produto
+                    if (pNameRef.endsWith(calcQtd.toString())) {
+                        pNameRef = pNameRef.substring(0, pNameRef.length - calcQtd.toString().length).trim();
+                    } else {
+                        const qMatch = pNameRef.match(/(\d+)$/);
+                        if (qMatch) {
+                            finalQtd = parseInt(qMatch[1], 10);
+                            pNameRef = pNameRef.substring(0, pNameRef.length - qMatch[1].length).trim();
+                        }
+                    }
+                    rawQuantidade = finalQtd;
+
                     const refMatchGlued = pNameRef.match(/^(.*?[a-z])([A-Z0-9-]{2,20})$/);
                     const refMatchSpaced = pNameRef.match(/^(.*?)\s+([A-Z0-9-]{2,20})$/);
 
@@ -171,15 +198,14 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
                     } else {
                         rawProduto = pNameRef;
                     }
-
+                    
                     extractedData.itens.push({
                         produto: rawProduto,
                         referencia: rawReferencia,
                         quantidade: isNaN(rawQuantidade) ? 1 : rawQuantidade
                     });
                 } else {
-                    // Fallback se não bater com a regex
-                    if (lineStr.length > 3) {
+                    if (lineStr.length > 3 && !lineStr.startsWith('Total')) {
                         extractedData.itens.push({
                             produto: lineStr.substring(0, 50),
                             referencia: '',
