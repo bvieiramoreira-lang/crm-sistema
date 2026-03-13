@@ -2268,8 +2268,8 @@ async function aprovarArte(itemId) {
             alert('Item aprovado e enviado para o próximo setor!'); // User feedback
 
             // REDIRECT TO THE INITIAL QUEUE
-            // The item has been processed so we just reload the user's current view
-            loadGenericQueue('AGUARDANDO_ARTE', 'Arte Final / Aprovação');
+            // The item has been processed so we just reload the user's current view (the Arte Queue)
+            loadArteQueue();
             document.getElementById('contentArea').innerHTML = 'Carregando...'; // quick visual feedback
 
         } else {
