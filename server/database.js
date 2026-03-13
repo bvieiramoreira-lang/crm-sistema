@@ -187,6 +187,10 @@ db.serialize(() => {
     criarUsuarioSeNaoExistir('Embale', 'embale', 'embale123', 'embale');
     criarUsuarioSeNaoExistir('Logística', 'logistica', 'logistica123', 'logistica');
 
+    // FIX MIGRATION (2026-03-13): Corrigir perfis de impressão antigos no banco em produção
+    db.run("UPDATE usuarios SET setor_impressao = 'IMPRESSAO_DIGITAL' WHERE setor_impressao = 'DIGITAL'");
+    db.run("UPDATE usuarios SET setor_impressao = 'IMPRESSAO_LASER' WHERE setor_impressao = 'LASER'");
+
     // Tabela SIMPLES de Colaboradores (MVP)
     db.run(`CREATE TABLE IF NOT EXISTS colaboradores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
