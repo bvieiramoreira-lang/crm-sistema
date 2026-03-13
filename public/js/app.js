@@ -2265,11 +2265,12 @@ async function aprovarArte(itemId) {
         });
 
         if (res.ok) {
-            alert('Item aprovado! Enviado para SEPARAÇÃO.'); // User feedback
+            alert('Item aprovado e enviado para o próximo setor!'); // User feedback
 
-            // REDIRECT TO SEPARATION QUEUE
-            // Next step in flow is Separation.
-            loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação');
+            // REDIRECT TO THE INITIAL QUEUE
+            // The item has been processed so we just reload the user's current view
+            loadGenericQueue('AGUARDANDO_ARTE', 'Arte Final / Aprovação');
+            document.getElementById('contentArea').innerHTML = 'Carregando...'; // quick visual feedback
 
         } else {
             const err = await res.json();
