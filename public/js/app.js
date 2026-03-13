@@ -2833,9 +2833,13 @@ async function handleEditSubmit(e, id, isRestricted) {
         document.querySelectorAll('#editItemsContainer .item-row').forEach(row => {
             const prod = row.querySelector('.item-prod').value;
             const qtd = row.querySelector('.item-qtd').value;
-            const itemId = row.getAttribute('data-id'); // ID se existir
+            const itemIdStr = row.getAttribute('data-id'); // ID se existir
             if (prod && qtd) {
-                itens.push({ id: itemId, produto: prod, quantidade: qtd });
+                const itemData = { produto: prod, quantidade: qtd };
+                if (itemIdStr) {
+                    itemData.id = Number(itemIdStr);
+                }
+                itens.push(itemData);
             }
         });
     }
@@ -2872,6 +2876,28 @@ async function handleEditSubmit(e, id, isRestricted) {
     } catch (e) {
         console.error('Erro Frontend/Fetch:', e);
         alert('Erro ao salvar: ' + e.message);
+    }
+}
+
+async function deleteOrder(id) {
+    if (!confirm('Tem certeza que deseja excluir o pedido completo e todos os itens\\n\\nESSA AÇÃO NÃO PODE SER DESFEITA.')) return;
+
+    try {
+        const res = await fetch(`/api/orders/${id}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            alert('Pedido excluído com sucesso!');
+            loadDashboard(); // Refresh current page
+        } else {
+            console.error('Erro Backend:', data);
+            alert('Erro: ' + (data.error || 'Erro desconhecido no servidor'));
+        }
+    } catch (e) {
+        console.error('Erro Frontend/Fetch:', e);
+        alert('Erro de conexão ao excluir o pedido: ' + e.message);
     }
 }
 

@@ -308,7 +308,7 @@ router.put('/:id', async (req, res) => {
             }
 
             if (!isRestricted && itens && Array.isArray(itens)) {
-                const payloadIds = itens.filter(i => i.id).map(i => i.id);
+                const payloadIds = itens.filter(i => i.id).map(i => Number(i.id));
                 const dbIds = currentItems.map(i => i.id);
 
                 // 1. Delete removed
