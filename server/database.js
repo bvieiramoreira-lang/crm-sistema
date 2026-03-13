@@ -181,8 +181,8 @@ db.serialize(() => {
     criarUsuarioSeNaoExistir('Silk Cilíndrica', 'silkcilindrica', 'silkcilindrica123', 'impressao', 'SILK_CILINDRICA');
     criarUsuarioSeNaoExistir('Silk Plano', 'silkplano', 'silkplano123', 'impressao', 'SILK_PLANO');
     criarUsuarioSeNaoExistir('Tampografia', 'tampografia', 'tampografia123', 'impressao', 'TAMPOGRAFIA');
-    criarUsuarioSeNaoExistir('Impressão Laser', 'laser', 'laser123', 'impressao', 'LASER');
-    criarUsuarioSeNaoExistir('Impressão Digital', 'digital', 'digital123', 'impressao', 'DIGITAL');
+    criarUsuarioSeNaoExistir('Impressão Laser', 'laser', 'laser123', 'impressao', 'IMPRESSAO_LASER');
+    criarUsuarioSeNaoExistir('Impressão Digital', 'digital', 'digital123', 'impressao', 'IMPRESSAO_DIGITAL');
     criarUsuarioSeNaoExistir('Estamparia', 'estamparia', 'estamparia123', 'impressao', 'ESTAMPARIA');
     criarUsuarioSeNaoExistir('Embale', 'embale', 'embale123', 'embale');
     criarUsuarioSeNaoExistir('Logística', 'logistica', 'logistica123', 'logistica');
