@@ -172,9 +172,9 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
                     if (pNameRef.endsWith(calcQtd.toString())) {
                         pNameRef = pNameRef.substring(0, pNameRef.length - calcQtd.toString().length).trim();
                     } else {
-                        const qMatch = pNameRef.match(/(\d+)$/);
+                        const qMatch = pNameRef.match(/([\d.]+)$/);
                         if (qMatch) {
-                            finalQtd = parseInt(qMatch[1], 10);
+                            finalQtd = parseInt(qMatch[1].replace(/\./g, ''), 10);
                             pNameRef = pNameRef.substring(0, pNameRef.length - qMatch[1].length).trim();
                         }
                     }
@@ -198,7 +198,7 @@ router.post('/parse-pdf', tempUpload.single('pdf_file'), async (req, res) => {
                     } else {
                         rawProduto = pNameRef;
                     }
-                    
+
                     extractedData.itens.push({
                         produto: rawProduto,
                         referencia: rawReferencia,

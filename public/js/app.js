@@ -1485,7 +1485,7 @@ function injectNewOrderModal() {
         div.innerHTML = `
             <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 3" required>
             <input type="text" placeholder="Ref (Opcional)" class="form-control" style="flex: 1.5; text-transform: uppercase;">
-            <input type="number" placeholder="Qtd" class="form-control" style="flex: 1" required>
+            <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="Qtd" class="form-control" style="flex: 1" required>
             <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;" onclick="this.parentElement.remove()">
                 <i class="ph-x"></i> Apagar
             </button>
@@ -1583,7 +1583,7 @@ function injectNewOrderModal() {
                     div.innerHTML = `
                         <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 3" value="${it.produto || ''}" required>
                         <input type="text" placeholder="Ref (Opcional)" class="form-control" style="flex: 1.5; text-transform: uppercase;" value="${it.referencia || ''}">
-                        <input type="number" placeholder="Qtd" class="form-control" style="flex: 1" value="${it.quantidade || 1}" required>
+                        <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="Qtd" class="form-control" style="flex: 1" value="${it.quantidade || 1}" required>
                         <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;" onclick="this.parentElement.remove()">
                             <i class="ph-x"></i> Apagar
                         </button>
@@ -2737,7 +2737,7 @@ async function openEditOrderModal(id) {
             itemsHtml += `
                 <div class="flex-row item-row" data-id="${item.id}">
                     <input type="text" value="${item.produto}" class="form-control item-prod" ${disabledAttr}>
-                    <input type="number" value="${item.quantidade}" class="form-control item-qtd" ${disabledAttr} style="flex: 0.3">
+                    <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" value="${item.quantidade}" class="form-control item-qtd" ${disabledAttr} style="flex: 0.3">
                     ${!isRestricted ? `<button type="button" class="btn" style="background:var(--danger); width:auto; padding:0.5rem" onclick="this.parentElement.remove()"><i class="ph-trash"></i></button>` : ''}
                 </div>
             `;
@@ -2817,7 +2817,7 @@ function addEditItemRow() {
     div.className = 'flex-row item-row';
     div.innerHTML = `
         <input type="text" placeholder="Novo Produto" class="form-control item-prod">
-        <input type="number" placeholder="1" class="form-control item-qtd" style="flex: 0.3">
+        <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="1" class="form-control item-qtd" style="flex: 0.3">
         <button type="button" class="btn" style="background:var(--danger); width:auto; padding:0.5rem" onclick="this.parentElement.remove()"><i class="ph-trash"></i></button>
     `;
     document.getElementById('editItemsContainer').appendChild(div);
