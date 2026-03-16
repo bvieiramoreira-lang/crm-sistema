@@ -185,6 +185,7 @@ db.serialize(() => {
     criarUsuarioSeNaoExistir('Impressão Digital', 'digital', 'digital123', 'impressao', 'IMPRESSAO_DIGITAL');
     criarUsuarioSeNaoExistir('Estamparia', 'estamparia', 'estamparia123', 'impressao', 'ESTAMPARIA');
     criarUsuarioSeNaoExistir('Embale', 'embale', 'embale123', 'embale');
+    criarUsuarioSeNaoExistir('Desembale', 'desembale', 'desembale123', 'desembale');
     criarUsuarioSeNaoExistir('Logística', 'logistica', 'logistica123', 'logistica');
 
     // FIX MIGRATION (2026-03-13): Corrigir perfis de impressão antigos no banco em produção
