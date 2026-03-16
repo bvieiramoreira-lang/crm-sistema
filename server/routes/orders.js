@@ -263,7 +263,7 @@ router.put('/:id', async (req, res) => {
         if (!currentOrder) return res.status(404).json({ error: 'Pedido não encontrado' });
 
         // Verificar Status Oficial (via itens) para saber se é Restrito
-        db.all("SELECT status_atual FROM itens_pedido WHERE pedido_id = ?", [pedidoId], (err, currentItems) => {
+        db.all("SELECT * FROM itens_pedido WHERE pedido_id = ?", [pedidoId], (err, currentItems) => {
             if (err) return res.status(500).json({ error: err.message });
 
             const isRestricted = currentItems.some(i =>
