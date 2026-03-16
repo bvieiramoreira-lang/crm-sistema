@@ -279,9 +279,14 @@ function setupNavigation() {
 }
 
 function loadDashboard() {
-    // Carrega a vista padrão baseada no perfil
-    const links = document.querySelectorAll('.nav-link');
-    if (links.length > 0) links[0].click();
+    // Carrega a vista atual (refresh), se não houver carrega a padrão (primeira)
+    const activeLink = document.querySelector('.nav-link.active') || document.querySelector('.nav-sub-item.active');
+    if (activeLink) {
+        activeLink.click();
+    } else {
+        const links = document.querySelectorAll('.nav-link');
+        if (links.length > 0) links[0].click();
+    }
 }
 
 // --- VISTAS ---
