@@ -53,14 +53,31 @@ router.get('/', async (req, res) => {
             });
         });
 
-        // Calcular status oficial para cada pedido
-        const ordersWithStatus = await Promise.all(orders.map(async (order) => {
-            const items = await new Promise((resolve, reject) => {
-                db.all("SELECT id, produto, quantidade, referencia, status_atual, arte_status, setor_destino, layout_path, layout_type FROM itens_pedido WHERE pedido_id = ?", [order.id], (err, rows) => {
+        const orderIds = orders.map(o => o.id);
+
+        let allItems = [];
+        if (orderIds.length > 0) {
+            const placeholders = orderIds.map(() => '?').join(',');
+            allItems = await new Promise((resolve, reject) => {
+                db.all(`SELECT id, pedido_id, produto, quantidade, referencia, status_atual, arte_status, setor_destino, layout_path, layout_type FROM itens_pedido WHERE pedido_id IN (${placeholders})`, orderIds, (err, rows) => {
                     if (err) reject(err);
                     else resolve(rows);
                 });
             });
+        }
+
+        // Group items by order
+        const itemsByOrder = new Map();
+        allItems.forEach(item => {
+            if (!itemsByOrder.has(item.pedido_id)) {
+                itemsByOrder.set(item.pedido_id, []);
+            }
+            itemsByOrder.get(item.pedido_id).push(item);
+        });
+
+        // Calcular status oficial para cada pedido
+        const ordersWithStatus = orders.map((order) => {
+            const items = itemsByOrder.get(order.id) || [];
 
             // Lógica do Status Oficial (Gargalo)
             // PRIORIDADE: Status Persistido (fonte da verdade para Finalizados)
@@ -109,7 +126,7 @@ router.get('/', async (req, res) => {
             }
 
             return { ...order, status_oficial: statusOficial, setor_detalhe: sectorDetail, itens: items };
-        }));
+        });
 
         res.json(ordersWithStatus);
     } catch (err) {

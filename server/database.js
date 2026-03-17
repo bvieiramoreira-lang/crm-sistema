@@ -161,6 +161,12 @@ db.serialize(() => {
     // Add operador_nome to eventos_producao
     addColumn('eventos_producao', 'operador_nome', 'TEXT');
 
+    // MIGRATIONS - INDICES DE PERFORMANCE (Fase 1 Otimização)
+    db.run(`CREATE INDEX IF NOT EXISTS idx_itens_pedido_id ON itens_pedido(pedido_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_itens_status_atual ON itens_pedido(status_atual)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_pedidos_status_geral ON pedidos(status_geral)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_eventos_item_id ON eventos_producao(item_id)`);
+
     // Criar usuários padrão
     const criarUsuarioSeNaoExistir = (nome, username, password, perfil, setor_impressao = null) => {
         db.get("SELECT * FROM usuarios WHERE username = ?", [username.toUpperCase()], (err, row) => {
