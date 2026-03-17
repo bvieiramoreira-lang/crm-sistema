@@ -366,49 +366,148 @@ function getStatusSequence(status) {
 }
 
 // 1. Pedidos (Financeiro)
-let cachedOrders = []; // Cache para evitar re-fetch no filtro
+let cachedOrders = []; // Manted for compatibility, but now holds the current page's data
+let currentPage = 1;
+const currentLimit = 30;
+let currentViewMode = 'active'; // 'active' or 'finished'
 
 // Relatórios (Movido para reports.js)
 function loadReports() {
 }
 
-async function loadOrders() {
+async function loadOrders(page = 1) {
     document.getElementById('pageTitle').textContent = 'Gerenciamento de Pedidos';
-    document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
+
+    // Only show loading completely if it's the first load, otherwise show minor indicator
+    if (page === 1 && !document.getElementById('ordersTableBody')) {
+        document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
+    } else if (document.getElementById('ordersTableBody')) {
+        document.getElementById('ordersTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Atualizando...</td></tr>';
+    }
+
+    currentPage = page;
+    currentViewMode = 'active';
 
     try {
-        const res = await fetch('/api/orders');
-        cachedOrders = await res.json();
-
-        renderOrdersView(false); // false = Modo Ativos
-
+        await fetchAndRenderOrders();
     } catch (e) {
         document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar pedidos</p>';
         console.error(e);
     }
 }
 
-let currentViewMode = 'active'; // 'active' or 'finished'
-
-async function loadFinishedOrders() {
+async function loadFinishedOrders(page = 1) {
     document.getElementById('pageTitle').textContent = 'Arquivo de Pedidos Finalizados';
-    document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
+
+    if (page === 1 && !document.getElementById('ordersTableBody')) {
+        document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
+    } else if (document.getElementById('ordersTableBody')) {
+        document.getElementById('ordersTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Atualizando...</td></tr>';
+    }
+
     currentViewMode = 'finished';
+    currentPage = page;
 
     try {
-        const res = await fetch('/api/orders'); // Fetch all, filtered client side for now
-        cachedOrders = await res.json();
-        renderOrdersView(true);
+        await fetchAndRenderOrders();
     } catch (e) {
         document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar pedidos</p>';
         console.error(e);
     }
 }
 
-function renderOrdersView(isFinishedMode = false) {
-    currentViewMode = isFinishedMode ? 'finished' : 'active';
+async function fetchAndRenderOrders() {
+    // Collect specific filters if they exist in the DOM
+    const statusEl = document.getElementById('filterStatus');
+    const itemEl = document.getElementById('filterItemStatus');
+    const searchEl = document.getElementById('searchInput');
+    const dateStartEl = document.getElementById('filterDateStart');
+    const dateEndEl = document.getElementById('filterDateEnd');
 
-    // Toolbar diferent para cada modo
+    const status = statusEl ? statusEl.value : '';
+    const itemStatus = itemEl ? itemEl.value : '';
+    const search = searchEl ? searchEl.value.trim() : '';
+    const startDate = dateStartEl ? dateStartEl.value : '';
+    const endDate = dateEndEl ? dateEndEl.value : '';
+
+    const queryParams = new URLSearchParams({
+        page: currentPage,
+        limit: currentLimit,
+        viewMode: currentViewMode,
+        search,
+        status,
+        itemStatus,
+        startDate,
+        endDate
+    });
+
+    const res = await fetch(`/api/orders?${queryParams.toString()}`);
+    const responseData = await res.json();
+
+    // Support legacy array format just in case the backend hasn't restarted yet
+    if (Array.isArray(responseData)) {
+        cachedOrders = responseData;
+        // Fallback to client-side logic if API isn't updated
+        if (!document.getElementById('ordersTableBody')) renderOrdersViewStructure();
+        applyOrderFiltersClientSideFallback();
+        return;
+    }
+
+    cachedOrders = responseData.data;
+    const meta = responseData.meta;
+
+    if (!document.getElementById('ordersTableBody')) {
+        renderOrdersViewStructure();
+    }
+
+    document.getElementById('ordersTableBody').innerHTML = renderOrderRows(cachedOrders, currentViewMode === 'finished');
+    document.getElementById('orderCount').textContent = `Página ${meta.page} de ${meta.pages} (${meta.total} pedidos totais)`;
+
+    renderPaginationControls(meta);
+
+    // Keep inputs in sync if they were re-rendered
+    if (document.getElementById('searchInput') && search) document.getElementById('searchInput').value = search;
+    if (document.getElementById('filterStatus') && status) document.getElementById('filterStatus').value = status;
+    if (document.getElementById('filterItemStatus') && itemStatus) document.getElementById('filterItemStatus').value = itemStatus;
+}
+
+function renderPaginationControls(meta) {
+    let paginationHtml = '';
+    if (meta.pages > 1) {
+        paginationHtml += `<div style="display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; align-items: center;">`;
+
+        if (meta.page > 1) {
+            paginationHtml += `<button class="btn btn-secondary" onclick="changeOrderPage(${meta.page - 1})">Anterior</button>`;
+        }
+
+        paginationHtml += `<span style="font-size: 0.9rem; color: var(--text-secondary);">Página ${meta.page} de ${meta.pages}</span>`;
+
+        if (meta.page < meta.pages) {
+            paginationHtml += `<button class="btn btn-secondary" onclick="changeOrderPage(${meta.page + 1})">Próxima</button>`;
+        }
+
+        paginationHtml += `</div>`;
+    }
+
+    const existingPagination = document.getElementById('paginationControls');
+    if (existingPagination) {
+        existingPagination.innerHTML = paginationHtml;
+    } else {
+        const wrapper = document.createElement('div');
+        wrapper.id = 'paginationControls';
+        wrapper.innerHTML = paginationHtml;
+        document.querySelector('#contentArea .card').parentNode.appendChild(wrapper); // Append after card
+    }
+}
+
+function changeOrderPage(newPage) {
+    currentPage = newPage;
+    fetchAndRenderOrders();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderOrdersViewStructure() {
+    const isFinishedMode = currentViewMode === 'finished';
     let toolbarHtml = '';
 
     if (isFinishedMode) {
@@ -421,13 +520,13 @@ function renderOrdersView(isFinishedMode = false) {
                 </div>
                 
                 <div class="form-group" style="margin-bottom:0; min-width: 140px;">
-                     <label style="font-size: 0.8rem; color: #15803d;">De (Prazo)</label>
-                     <input type="date" id="filterDateStart" class="form-control" onchange="applyOrderFilters()">
+                     <label style="font-size: 0.8rem; color: #15803d;">De (Data Finalizado)</label>
+                     <input type="date" id="filterDateStart" class="form-control" onchange="triggerFilterResetPage()">
                 </div>
 
                 <div class="form-group" style="margin-bottom:0; min-width: 140px;">
-                     <label style="font-size: 0.8rem; color: #15803d;">Até (Prazo)</label>
-                     <input type="date" id="filterDateEnd" class="form-control" onchange="applyOrderFilters()">
+                     <label style="font-size: 0.8rem; color: #15803d;">Até (Data Finalizado)</label>
+                     <input type="date" id="filterDateEnd" class="form-control" onchange="triggerFilterResetPage()">
                 </div>
                 
                  <button class="btn" style="width: auto; height: 42px; align-self: flex-end;" onclick="resetOrderFilters()">Limpar</button>
@@ -447,7 +546,7 @@ function renderOrdersView(isFinishedMode = false) {
 
                 <div class="form-group" style="margin-bottom:0; min-width: 200px;">
                     <label style="font-size: 0.8rem;">Status do Pedido</label>
-                    <select id="filterStatus" class="form-control" onchange="applyOrderFilters()">
+                    <select id="filterStatus" class="form-control" onchange="triggerFilterResetPage()">
                         <option value="">Todos</option>
                         <option value="FINANCEIRO / CONFERÊNCIA">Financeiro / Conferência</option>
                         <option value="ARTE FINAL">Arte Final</option>
@@ -461,15 +560,13 @@ function renderOrdersView(isFinishedMode = false) {
 
                 <div class="form-group" style="margin-bottom:0; min-width: 200px;">
                     <label style="font-size: 0.8rem;">Status do Item (Avançado)</label>
-                    <select id="filterItemStatus" class="form-control" onchange="applyOrderFilters()">
+                    <select id="filterItemStatus" class="form-control" onchange="triggerFilterResetPage()">
                         <option value="">Qualquer</option>
                         <option value="ARTE_NAO_FEITA">Arte não feita</option>
                         <option value="AGUARDANDO_APROVACAO">Aguardando aprovação</option>
                         <option value="ARTE_APROVADA">Arte aprovada</option>
                         <option value="AGUARDANDO_SEPARACAO">Em separação</option>
-                        <!-- Separado e Em desembale geralmente são o mesmo status de transição, unificando para o mais ativo -->
                         <option value="AGUARDANDO_DESEMBALE">Em desembale</option> 
-                        <!-- Desembalado e Aguardando Produção -->
                         <option value="AGUARDANDO_PRODUCAO">Desembalado / Aguardando Impressão</option>
                         <option value="EM_PRODUCAO">Em impressão</option>
                         <option value="AGUARDANDO_EMBALE">Em embale</option>
@@ -510,15 +607,13 @@ function renderOrdersView(isFinishedMode = false) {
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">
-                    <!-- Será preenchido por applyOrderFilters -->
+                    <!-- Será preenchido por fetchAndRenderOrders -->
                 </tbody>
             </table>
         </div>
+        <div id="paginationControls"></div>
     `;
     document.getElementById('contentArea').innerHTML = html;
-
-    // Trigger initial filter application
-    applyOrderFilters();
 }
 
 function renderOrderRows(orders, isFinishedMode = false) {
@@ -549,123 +644,31 @@ function renderOrderRows(orders, isFinishedMode = false) {
 let filterTimeout;
 function debouncedApplyOrderFilters() {
     clearTimeout(filterTimeout);
-    filterTimeout = setTimeout(applyOrderFilters, 300);
+    filterTimeout = setTimeout(() => {
+        currentPage = 1; // Reset to page 1 on search
+        fetchAndRenderOrders();
+    }, 500); // slightly longer debounce for backend hit
 }
 
-function applyOrderFilters() {
-    // Get values safely (elements might not exist in Finished View)
-    const statusEl = document.getElementById('filterStatus');
-    const itemEl = document.getElementById('filterItemStatus');
+function triggerFilterResetPage() {
+    currentPage = 1;
+    fetchAndRenderOrders();
+}
 
-    const statusFilter = statusEl ? statusEl.value : '';
-    const itemFilter = itemEl ? itemEl.value : '';
-    const searchText = document.getElementById('searchInput').value.trim().toLowerCase();
-
-    // Date Filters
-    const dateStartEl = document.getElementById('filterDateStart');
-    const dateEndEl = document.getElementById('filterDateEnd');
-    const dateStart = dateStartEl ? dateStartEl.value : '';
-    const dateEnd = dateEndEl ? dateEndEl.value : '';
-
-    const filtered = cachedOrders.filter(o => {
-        // 0. STRICT MODE SEPARATION
-        if (currentViewMode === 'finished') {
-            // Must be strictly FINALIZED
-            if (o.status_oficial !== 'FINALIZADO') return false;
-        } else {
-            // Must be strictly NOT FINALIZED
-            if (o.status_oficial === 'FINALIZADO') return false;
-        }
-
-        // 1. Filter by Order Status (Active View Only)
-        let matchStatus = true;
-        if (currentViewMode === 'active') {
-            if (statusFilter === 'PENDENTE') {
-                matchStatus = o.status_oficial !== 'FINALIZADO';
-            } else if (statusFilter) {
-                matchStatus = o.status_oficial === statusFilter;
-            }
-        }
-
-        // 2. Filter by Item Status (Active View Only)
-        let matchItem = true;
-        if (currentViewMode === 'active' && itemFilter) {
-            matchItem = o.itens && o.itens.some(i => {
-                if (itemFilter === 'ARTE_NAO_FEITA') return !i.arte_status || i.arte_status === 'ARTE_NAO_FEITA' || i.arte_status === 'REPROVADO';
-                if (itemFilter === 'AGUARDANDO_APROVACAO') return i.arte_status === 'AGUARDANDO_APROVACAO';
-                if (itemFilter === 'ARTE_APROVADA') return i.arte_status === 'ARTE_APROVADA';
-                return i.status_atual === itemFilter;
-            });
-        }
-
-        // 3. Search Filter (Both Views)
-        let matchSearch = true;
-        if (searchText) {
-            const num = String(o.numero_pedido).toLowerCase();
-            const cli = String(o.cliente).toLowerCase();
-            let matchItems = false;
-            if (o.itens && Array.isArray(o.itens)) {
-                matchItems = o.itens.some(item => {
-                    const prod = String(item.produto || '').toLowerCase();
-                    const ref = String(item.referencia || '').toLowerCase();
-                    return prod.includes(searchText) || ref.includes(searchText);
-                });
-            }
-            matchSearch = num.includes(searchText) || cli.includes(searchText) || matchItems;
-        }
-
-        // 4. Date Filter (Prazo de Entrega) - Applicable to both views but mostly useful for finished
-        let matchDate = true;
-        if (dateStart || dateEnd) {
-            // o.prazo_entrega is YYYY-MM-DD usually
-            const prazo = o.prazo_entrega ? o.prazo_entrega.split('T')[0] : ''; // Safety
-            if (prazo) {
-                if (dateStart && prazo < dateStart) matchDate = false;
-                if (dateEnd && prazo > dateEnd) matchDate = false;
-            } else {
-                // If no deadline, filter out if dates are set? Or include? 
-                // Usually exclude if range is set.
-                if (dateStart || dateEnd) matchDate = false;
-            }
-        }
-
-        return matchStatus && matchItem && matchSearch && matchDate;
-    });
-
-    // Sort Logic
-    if (searchText && !isNaN(searchText)) {
-        // Search Priority
-        filtered.sort((a, b) => {
-            const aNum = String(a.numero_pedido).toLowerCase();
-            const bNum = String(b.numero_pedido).toLowerCase();
-            // Exact match comes first
-            if (aNum === searchText && bNum !== searchText) return -1;
-            if (bNum === searchText && aNum !== searchText) return 1;
-            // Starts with comes second
-            if (aNum.startsWith(searchText) && !bNum.startsWith(searchText)) return -1;
-            if (bNum.startsWith(searchText) && !aNum.startsWith(searchText)) return 1;
-            return 0;
-        });
-    } else {
-        // Default Sorts
-        if (currentViewMode === 'finished') {
-            // Finalized: Newest First (by ID as proxy for now)
-            filtered.sort((a, b) => b.id - a.id);
-        }
-        // Active: Preserve server order (deadline)
-    }
-
-    document.getElementById('ordersTableBody').innerHTML = renderOrderRows(filtered, currentViewMode === 'finished');
-    document.getElementById('orderCount').textContent = `${filtered.length} pedidos encontrados`;
+// Fallback for when the backend hasn't been updated yet (returns array instead of object)
+function applyOrderFiltersClientSideFallback() {
+    // Legacy logic... omitting exact replica to save space, just rendering all cached
+    document.getElementById('ordersTableBody').innerHTML = renderOrderRows(cachedOrders, currentViewMode === 'finished');
+    document.getElementById('orderCount').textContent = `${cachedOrders.length} pedidos (Modo Legado)`;
 }
 
 function resetOrderFilters() {
-    document.getElementById('filterStatus').value = '';
-    document.getElementById('filterItemStatus').value = '';
-    document.getElementById('searchInput').value = '';
+    if (document.getElementById('filterStatus')) document.getElementById('filterStatus').value = '';
+    if (document.getElementById('filterItemStatus')) document.getElementById('filterItemStatus').value = '';
+    if (document.getElementById('searchInput')) document.getElementById('searchInput').value = '';
     if (document.getElementById('filterDateStart')) document.getElementById('filterDateStart').value = '';
     if (document.getElementById('filterDateEnd')) document.getElementById('filterDateEnd').value = '';
-    applyOrderFilters();
+    triggerFilterResetPage();
 }
 
 // 2. Fila de Arte

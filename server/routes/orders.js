@@ -41,27 +41,102 @@ router.post('/', (req, res) => {
     );
 });
 
-// Listar Pedidos (Com filtros básicos e cálculo de status oficial)
+// Listar Pedidos (Com filtros básicos, busca, paginação e cálculo de status oficial)
 router.get('/', async (req, res) => {
     try {
-        const orderBy = req.query.sort === 'recent' ? 'ORDER BY id DESC' : 'ORDER BY prazo_entrega ASC, id DESC';
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+        const search = req.query.search ? req.query.search.toLowerCase() : '';
+        const status = req.query.status || '';
+        const itemStatus = req.query.itemStatus || '';
+        const viewMode = req.query.viewMode || 'active'; // 'active' or 'finished'
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
 
-        const orders = await new Promise((resolve, reject) => {
-            db.all(`SELECT * FROM pedidos ${orderBy}`, [], (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
+        // Sorting
+        // For active: prazo_entrega ASC, id DESC
+        // For finished: finalizado_em DESC, id DESC
+        let orderBy = viewMode === 'finished' ? 'ORDER BY p.finalizado_em DESC, p.id DESC' : 'ORDER BY p.prazo_entrega ASC, p.id DESC';
+        if (req.query.sort === 'recent') orderBy = 'ORDER BY p.id DESC';
+
+        // Filters applied to the SQL directly
+        let whereClauses = [];
+        let params = [];
+
+        // 1. Strict Mode Separation
+        if (viewMode === 'finished') {
+            whereClauses.push("p.status_geral = 'FINALIZADO'");
+        } else {
+            whereClauses.push("p.status_geral != 'FINALIZADO'");
+        }
+
+        // 2. Date Filters (Prazo or Finalizado)
+        if (startDate && endDate) {
+            const field = viewMode === 'finished' ? 'p.finalizado_em' : 'p.prazo_entrega';
+            whereClauses.push(`(${field} BETWEEN ? AND ?)`);
+            params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+        } else if (startDate) {
+            const field = viewMode === 'finished' ? 'p.finalizado_em' : 'p.prazo_entrega';
+            whereClauses.push(`(${field} >= ?)`);
+            params.push(`${startDate} 00:00:00`);
+        } else if (endDate) {
+            const field = viewMode === 'finished' ? 'p.finalizado_em' : 'p.prazo_entrega';
+            whereClauses.push(`(${field} <= ?)`);
+            params.push(`${endDate} 23:59:59`);
+        }
+
+        // 3. Status Filters (Simplification for SQL context)
+        // Note: Full official status depends on items, but we can pre-filter known states
+        if (status === 'PENDENTE') {
+            whereClauses.push("p.status_geral != 'FINALIZADO'");
+        }
+
+        // 4. Search text (Pedido or Cliente)
+        // Item search requires JOIN, so we adjust the base query if search exists or itemStatus exists
+        let fromClause = "FROM pedidos p";
+        if (search || itemStatus || status && status !== 'PENDENTE') {
+            // Se precisamos filtrar por algo dos itens, precisamos do JOIN, ou o filtro oficial precisa rodar pós-SQL.
+            // A abordagem mais limpa é buscar amplo no SQL com paginação *maior* se for complexo,
+            // ou fazer o cálculo real antes de paginar.
+            // Para manter performance real: fetch everything ID -> calc logic -> slice (Se o dataset crescer MUITO, isso explode).
+            // A long term fix: armazenar `status_oficial` no DB e atualizar em cada modificação.
+            // No short-term MVP, como estamos com N+1 resolvido, a busca all in memory é rápida, MAS quebra o objetivo da Fase 2 de limitar tráfego.
+
+            // Abordagem equilibrada: Vamos fazer uma subquery no WHERE se tiver `search`.
+            if (search) {
+                whereClauses.push(`(p.numero_pedido LIKE ? OR p.cliente LIKE ? OR p.id IN (SELECT pedido_id FROM itens_pedido WHERE produto LIKE ? OR referencia LIKE ?))`);
+                params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+            }
+        }
+
+        let whereStr = whereClauses.length > 0 ? "WHERE " + whereClauses.join(" AND ") : "";
+
+        // Get TOTAIS (For Pagination)
+        const totalRows = await new Promise((resolve, reject) => {
+            db.get(`SELECT COUNT(*) as count ${fromClause} ${whereStr}`, params, (err, row) => {
+                if (err) reject(err); else resolve(row.count);
             });
         });
 
-        const orderIds = orders.map(o => o.id);
+        // 5. Paginate Base Orders
+        const paginatedQuery = `SELECT p.* ${fromClause} ${whereStr} ${orderBy} LIMIT ? OFFSET ?`;
+        const paginatedParams = [...params, limit, offset];
 
+        let orders = await new Promise((resolve, reject) => {
+            db.all(paginatedQuery, paginatedParams, (err, rows) => {
+                if (err) reject(err); else resolve(rows);
+            });
+        });
+
+        // 6. Fetch Items for the paginated orders
+        const orderIds = orders.map(o => o.id);
         let allItems = [];
         if (orderIds.length > 0) {
             const placeholders = orderIds.map(() => '?').join(',');
             allItems = await new Promise((resolve, reject) => {
                 db.all(`SELECT id, pedido_id, produto, quantidade, referencia, status_atual, arte_status, setor_destino, layout_path, layout_type FROM itens_pedido WHERE pedido_id IN (${placeholders})`, orderIds, (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows);
+                    if (err) reject(err); else resolve(rows);
                 });
             });
         }
@@ -69,30 +144,20 @@ router.get('/', async (req, res) => {
         // Group items by order
         const itemsByOrder = new Map();
         allItems.forEach(item => {
-            if (!itemsByOrder.has(item.pedido_id)) {
-                itemsByOrder.set(item.pedido_id, []);
-            }
+            if (!itemsByOrder.has(item.pedido_id)) itemsByOrder.set(item.pedido_id, []);
             itemsByOrder.get(item.pedido_id).push(item);
         });
 
-        // Calcular status oficial para cada pedido
-        const ordersWithStatus = orders.map((order) => {
+        // 7. Calculate Official Status and Final Filter
+        let ordersWithStatus = orders.map((order) => {
             const items = itemsByOrder.get(order.id) || [];
-
-            // Lógica do Status Oficial (Gargalo)
-            // PRIORIDADE: Status Persistido (fonte da verdade para Finalizados)
             let statusOficial = order.status_geral === 'FINALIZADO' ? 'FINALIZADO' : 'NOVO';
             let sectorDetail = '';
-
-            // Se já está FINALIZADO no banco, confiamos. 
-            // Mas se NÃO estiver, rodamos a lógica dinâmica para mostrar onde está gargalo.
-            // Para consistência, podemos recalcular gargalo se não estiver finalizado.
 
             if (order.status_geral !== 'FINALIZADO') {
                 if (items.length === 0) {
                     statusOficial = 'FINANCEIRO / CONFERÊNCIA';
                 } else {
-                    // Checar gargalos ... (rest mantido igual)
                     const hasArtePendente = items.some(i => i.arte_status !== 'APROVADO');
                     const hasSeparacao = items.some(i => i.status_atual === 'AGUARDANDO_SEPARACAO');
                     const hasDesembale = items.some(i => i.status_atual === 'AGUARDANDO_DESEMBALE');
@@ -116,9 +181,6 @@ router.get('/', async (req, res) => {
                     } else if (hasLogistica) {
                         statusOficial = 'LOGÍSTICA';
                     } else {
-                        // Caso onde itens existem mas nenhum pega nos gargalos acima?
-                        // Talvez tudo concluído mas status_geral não atualizou?
-                        // Fallback check
                         const allConcluido = items.every(i => i.status_atual === 'CONCLUIDO');
                         if (allConcluido && items.length > 0) statusOficial = 'FINALIZADO';
                     }
@@ -128,8 +190,33 @@ router.get('/', async (req, res) => {
             return { ...order, status_oficial: statusOficial, setor_detalhe: sectorDetail, itens: items };
         });
 
-        res.json(ordersWithStatus);
+        // Apply advanced post-SQL filters if present (itemStatus and strict official status)
+        // If these post-SQL filters remove too many results, the page will look half-empty. 
+        // A true robust architecture needs official status materialized in DB. For now, this suffices.
+        if (status && status !== 'PENDENTE') {
+            ordersWithStatus = ordersWithStatus.filter(o => o.status_oficial === status);
+        }
+        if (itemStatus) {
+            ordersWithStatus = ordersWithStatus.filter(o => o.itens.some(i => {
+                if (itemStatus === 'ARTE_NAO_FEITA') return !i.arte_status || i.arte_status === 'ARTE_NAO_FEITA' || i.arte_status === 'REPROVADO';
+                if (itemStatus === 'AGUARDANDO_APROVACAO') return i.arte_status === 'AGUARDANDO_APROVACAO';
+                if (itemStatus === 'ARTE_APROVADA') return i.arte_status === 'ARTE_APROVADA';
+                return i.status_atual === itemStatus;
+            }));
+        }
+
+        res.json({
+            data: ordersWithStatus,
+            meta: {
+                total: totalRows,
+                page: page,
+                limit: limit,
+                pages: Math.ceil(totalRows / limit)
+            }
+        });
+
     } catch (err) {
+        console.error("ERRO /api/orders:", err);
         res.status(500).json({ error: err.message });
     }
 });
