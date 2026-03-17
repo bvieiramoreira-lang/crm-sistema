@@ -603,7 +603,15 @@ function applyOrderFilters() {
         if (searchText) {
             const num = String(o.numero_pedido).toLowerCase();
             const cli = String(o.cliente).toLowerCase();
-            matchSearch = num.includes(searchText) || cli.includes(searchText);
+            let matchItems = false;
+            if (o.itens && Array.isArray(o.itens)) {
+                matchItems = o.itens.some(item => {
+                    const prod = String(item.produto || '').toLowerCase();
+                    const ref = String(item.referencia || '').toLowerCase();
+                    return prod.includes(searchText) || ref.includes(searchText);
+                });
+            }
+            matchSearch = num.includes(searchText) || cli.includes(searchText) || matchItems;
         }
 
         // 4. Date Filter (Prazo de Entrega) - Applicable to both views but mostly useful for finished
