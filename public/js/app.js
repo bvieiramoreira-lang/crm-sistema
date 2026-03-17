@@ -1828,9 +1828,10 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
     const step2Done = !!item.layout_path; // Simple check
 
     // ... (Visual helpers same as before)
+    // Build Responsible Dropdown
     const s1Class = step1Done ? 'step-done' : 'step-active';
-    const s2Class = step2Done ? 'step-done' : (step1Done ? 'step-active' : 'step-locked');
-    const s3Class = status === 'APROVADO' ? 'step-done' : (step2Done && step1Done ? 'step-active' : 'step-locked');
+    const s2Class = step2Done ? 'step-done' : 'step-active';
+    const s3Class = status === 'APROVADO' ? 'step-done' : (step1Done ? 'step-active' : 'step-locked');
 
     // Build Responsible Dropdown
     let respOptions = `<option value="">-- Selecione --</option>`;
@@ -1884,8 +1885,8 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
 
             <!-- PASSO 2 -->
             <div class="step-card ${s2Class}">
-                 <span class="step-badge">PASSO 2: Upload do Layout Aprovado</span>
-                 <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Faça o upload do arquivo final que foi aprovado (Obrigatório para prosseguir).</p>
+                 <span class="step-badge">PASSO 2: Upload do Layout Aprovado (Opcional)</span>
+                 <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Faça o upload do arquivo final que foi aprovado se desejar.</p>
                  
                  <div style="display:flex; gap: 1rem; align-items: center;">
                     ${item.layout_path
