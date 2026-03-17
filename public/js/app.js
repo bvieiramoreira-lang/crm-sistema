@@ -1849,7 +1849,8 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <div>
                    <h3 style="margin:0; font-size: 1.25rem;">Gestão de Arte (Item #${itemId})</h3>
-                   <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">Defina o responsável e o fluxo do item</div>
+                   <div style="font-size: 0.95rem; font-weight: 600; color: #334155; margin-top: 0.4rem; margin-bottom: 0.2rem;">${item.produto} <span style="color:var(--primary); font-weight: 700;">(x${item.quantidade})</span></div>
+                   <div style="font-size: 0.85rem; color: #64748b;">Defina o responsável e o fluxo do item</div>
                 </div>
                 <div style="width: 250px;">
                     <label style="font-size:0.75rem; font-weight:bold; text-transform:uppercase; color:#475569; display:block; margin-bottom:0.25rem;">Responsável Arte Final</label>
