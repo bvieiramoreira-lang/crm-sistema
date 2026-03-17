@@ -2,19 +2,22 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 
+// --- CACHE DE DASHBOARD ---
+let dashboardCache = null;
+let lastDashboardFetch = 0;
+const CACHE_TTL_MS = 15000; // 15 segundos
+
 // --- LIVE DASHBOARD (TV MODE) ---
 router.get('/live', (req, res) => {
-    // Queries
-    const queries = {
-        total_ativos: "SELECT COUNT(DISTINCT p.id) as count, COUNT(i.id) as total_items FROM pedidos p LEFT JOIN itens_pedido i ON p.id = i.pedido_id WHERE p.status_geral != 'FINALIZADO'",
-        em_producao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'EM_PRODUCAO' AND p.status_geral != 'FINALIZADO'",
-        aguardando_producao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_PRODUCAO' AND p.status_geral != 'FINALIZADO'",
-        arte_final: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' AND p.status_geral != 'FINALIZADO'",
-        aguardando_aprovacao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.arte_status = 'AGUARDANDO_APROVACAO' AND i.status_atual != 'CANCELADO' AND p.status_geral != 'FINALIZADO'",
-        separacao: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_SEPARACAO' AND i.arte_status = 'APROVADO' AND p.status_geral != 'FINALIZADO'",
-        desembale: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_DESEMBALE' AND p.status_geral != 'FINALIZADO'",
-        embale: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_EMBALE' AND p.status_geral != 'FINALIZADO'",
-        logistica: "SELECT COUNT(DISTINCT i.pedido_id) as count, COUNT(i.id) as total_items FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE i.status_atual = 'AGUARDANDO_ENVIO' AND p.status_geral != 'FINALIZADO'",
+    const now = Date.now();
+
+    // Retorna do cache se válido
+    if (dashboardCache && (now - lastDashboardFetch < CACHE_TTL_MS)) {
+        return res.json(dashboardCache);
+    }
+
+    // Queries Restantes (Arrays)
+    const arrayQueries = {
         urgentes: `
             SELECT p.id, p.numero_pedido, p.cliente, p.prazo_entrega, p.status_geral as status
             FROM pedidos p 
@@ -39,35 +42,94 @@ router.get('/live', (req, res) => {
         `
     };
 
+    // SINGLE MEGA-QUERY para Contagens (Substitui as 9 consultas isoladas)
+    const countsQuery = `
+        SELECT 
+            COUNT(DISTINCT p.id) as total_ativos_count, 
+            COUNT(i.id) as total_ativos_items,
+
+            COUNT(DISTINCT CASE WHEN i.status_atual = 'EM_PRODUCAO' THEN i.pedido_id END) as em_producao_count,
+            COUNT(CASE WHEN i.status_atual = 'EM_PRODUCAO' THEN i.id END) as em_producao_items,
+
+            COUNT(DISTINCT CASE WHEN i.status_atual = 'AGUARDANDO_PRODUCAO' THEN i.pedido_id END) as aguardando_producao_count,
+            COUNT(CASE WHEN i.status_atual = 'AGUARDANDO_PRODUCAO' THEN i.id END) as aguardando_producao_items,
+
+            COUNT(DISTINCT CASE WHEN (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as arte_final_count,
+            COUNT(CASE WHEN (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' THEN i.id END) as arte_final_items,
+
+            COUNT(DISTINCT CASE WHEN i.arte_status = 'AGUARDANDO_APROVACAO' AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as aguardando_aprovacao_count,
+            COUNT(CASE WHEN i.arte_status = 'AGUARDANDO_APROVACAO' AND i.status_atual != 'CANCELADO' THEN i.id END) as aguardando_aprovacao_items,
+
+            COUNT(DISTINCT CASE WHEN i.status_atual = 'AGUARDANDO_SEPARACAO' AND i.arte_status = 'APROVADO' THEN i.pedido_id END) as separacao_count,
+            COUNT(CASE WHEN i.status_atual = 'AGUARDANDO_SEPARACAO' AND i.arte_status = 'APROVADO' THEN i.id END) as separacao_items,
+
+            COUNT(DISTINCT CASE WHEN i.status_atual = 'AGUARDANDO_DESEMBALE' THEN i.pedido_id END) as desembale_count,
+            COUNT(CASE WHEN i.status_atual = 'AGUARDANDO_DESEMBALE' THEN i.id END) as desembale_items,
+
+            COUNT(DISTINCT CASE WHEN i.status_atual = 'AGUARDANDO_EMBALE' THEN i.pedido_id END) as embale_count,
+            COUNT(CASE WHEN i.status_atual = 'AGUARDANDO_EMBALE' THEN i.id END) as embale_items,
+
+            COUNT(DISTINCT CASE WHEN i.status_atual = 'AGUARDANDO_ENVIO' THEN i.pedido_id END) as logistica_count,
+            COUNT(CASE WHEN i.status_atual = 'AGUARDANDO_ENVIO' THEN i.id END) as logistica_items
+
+        FROM pedidos p 
+        LEFT JOIN itens_pedido i ON p.id = i.pedido_id 
+        WHERE p.status_geral != 'FINALIZADO'
+    `;
+
     const results = {};
-    let completed = 0;
-    const keys = Object.keys(queries);
+    let completedArrayQueries = 0;
+    const arrayKeys = Object.keys(arrayQueries);
 
-    if (keys.length === 0) return res.json({});
+    // Passo 1: Executar a Mega-Query de Contagens
+    db.get(countsQuery, [], (err, row) => {
+        if (err) {
+            console.error(`COUNTS QUERY ERROR:`, err.message);
+            // Fallback for counts
+            ['total_ativos', 'em_producao', 'aguardando_producao', 'arte_final', 'aguardando_aprovacao', 'separacao', 'desembale', 'embale', 'logistica'].forEach(k => {
+                results[k] = { count: 0, total_items: 0 };
+            });
+        } else {
+            // Mapeia colunas unificadas de volta para o formato esperado pelo Frontend
+            results.total_ativos = { count: row.total_ativos_count || 0, total_items: row.total_ativos_items || 0 };
+            results.em_producao = { count: row.em_producao_count || 0, total_items: row.em_producao_items || 0 };
+            results.aguardando_producao = { count: row.aguardando_producao_count || 0, total_items: row.aguardando_producao_items || 0 };
+            results.arte_final = { count: row.arte_final_count || 0, total_items: row.arte_final_items || 0 };
+            results.aguardando_aprovacao = { count: row.aguardando_aprovacao_count || 0, total_items: row.aguardando_aprovacao_items || 0 };
+            results.separacao = { count: row.separacao_count || 0, total_items: row.separacao_items || 0 };
+            results.desembale = { count: row.desembale_count || 0, total_items: row.desembale_items || 0 };
+            results.embale = { count: row.embale_count || 0, total_items: row.embale_items || 0 };
+            results.logistica = { count: row.logistica_count || 0, total_items: row.logistica_items || 0 };
+        }
 
-    keys.forEach(key => {
-        db.all(queries[key], [], (err, rows) => {
-            if (err) {
-                console.error(`QUERY ERROR [${key}]:`, err.message);
-                results[key] = key === 'urgentes' || key === 'production_history' || key === 'setores_producao' ? [] : 0;
-            } else {
-                if (key === 'urgentes' || key === 'production_history' || key === 'setores_producao') {
-                    results[key] = rows;
-                } else {
-                    // For single counts, return object with count and total_items
-                    results[key] = {
-                        count: rows[0]?.count || 0,
-                        total_items: rows[0]?.total_items || 0
-                    };
-                }
-            }
-            completed++;
-            if (completed === keys.length) {
-                res.json(results);
-            }
-        });
+        // Passo 2: Executar as 3 Queries de Arrays Restantes em Paralelo
+        if (arrayKeys.length === 0) {
+            updateCacheAndRespond(res, results);
+        } else {
+            arrayKeys.forEach(key => {
+                db.all(arrayQueries[key], [], (err, rows) => {
+                    if (err) {
+                        console.error(`ARRAY QUERY ERROR [${key}]:`, err.message);
+                        results[key] = [];
+                    } else {
+                        results[key] = rows;
+                    }
+
+                    completedArrayQueries++;
+                    if (completedArrayQueries === arrayKeys.length) {
+                        updateCacheAndRespond(res, results);
+                    }
+                });
+            });
+        }
     });
 });
+
+function updateCacheAndRespond(res, results) {
+    dashboardCache = results;
+    lastDashboardFetch = Date.now();
+    res.json(results);
+}
 
 // --- HISTÓRICO / RELATÓRIOS ---
 router.get('/history', (req, res) => {
