@@ -630,6 +630,7 @@ function renderOrderRows(orders, isFinishedMode = false) {
             <td>
                 ${renderOrderStatusBadge(o.status_oficial, o.setor_detalhe)}
                 <div style="margin-top:0.25rem">${renderShippingBadge(o.tipo_envio)}</div>
+                ${o.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${o.transportadora}</b></div>` : ''}
             </td>
             <td>
                 <div style="display:flex; gap:0.5rem; white-space: nowrap;">
@@ -731,6 +732,7 @@ async function loadArteQueue() {
                         <strong>${item.produto}</strong> (x${item.quantidade})
                         ${item.referencia ? `<div style="font-size:0.85rem; color:#475569; margin-top:0.2rem;">Referência: <strong>${item.referencia}</strong></div>` : ''}
                         <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
+                        ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
                         ${colorInfo}
                     </td>
                      <td>${new Date(item.prazo_entrega).toLocaleDateString()}</td>
@@ -1007,6 +1009,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                     <strong>${item.produto}</strong>
                     ${item.referencia ? `<div style="font-size:0.85rem; color:#475569;">Ref: ${item.referencia}</div>` : ''}
                     <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
+                    ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
                 </td>
                 <td>${renderDeadline(item.prazo_entrega)}</td>
                 <td>${item.quantidade}</td>
@@ -1303,6 +1306,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                         <strong>${item.produto}</strong>
                         ${item.referencia ? `<div style="font-size:0.85rem; color:#475569; margin-top:0.2rem;">Referência: <strong>${item.referencia}</strong></div>` : ''}
                         <div style="margin-top:0.25rem">${typeof renderShippingBadge === 'function' ? renderShippingBadge(item.tipo_envio) : ''}</div>
+                        ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
                      </td>
                      <td>${typeof renderDeadline === 'function' ? renderDeadline(item.prazo_entrega) : item.prazo_entrega}</td>
                      <td>${item.quantidade}</td>

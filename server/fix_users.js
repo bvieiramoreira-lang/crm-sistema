@@ -1,18 +1,15 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const dbPath = path.resolve(__dirname, '../data/sp_system.db');
-const db = new sqlite3.Database(dbPath);
+const sqlite3 = require('sqlite3');
+const bcrypt = require('bcrypt');
 
-console.log('Connecting to: ', dbPath);
+const db = new sqlite3.Database('/app/data/sp_system.db');
+const hash = bcrypt.hashSync('desembale123', 10);
 
-db.serialize(() => {
-    db.run("UPDATE usuarios SET setor_impressao = 'IMPRESSAO_DIGITAL' WHERE setor_impressao = 'DIGITAL'", function (err) {
-        if (err) console.error("Error updating IMPRESSAO_DIGITAL:", err.message);
-        else console.log(`Updated ${this.changes} rows for IMPRESSAO_DIGITAL.`);
-    });
-    db.run("UPDATE usuarios SET setor_impressao = 'IMPRESSAO_LASER' WHERE setor_impressao = 'LASER'", function (err) {
-        if (err) console.error("Error updating IMPRESSAO_LASER:", err.message);
-        else console.log(`Updated ${this.changes} rows for IMPRESSAO_LASER.`);
-    });
-});
-db.close();
+db.run("INSERT OR IGNORE INTO usuarios (nome, username, senha, perfil, setor_impressao) VALUES (?, ?, ?, ?, ?)",
+    ['Desembale', 'DESEMBALE', hash, 'desembale', null],
+    (err) => {
+        if (err) console.error(err);
+        else console.log('User created');
+
+        db.close();
+    }
+);
