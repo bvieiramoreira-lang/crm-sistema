@@ -3056,8 +3056,9 @@ function openLabelModal(item) {
                 <h4 style="margin-top: 1rem; font-size: 1rem; border-bottom: 1px solid #eee; padding-bottom: 0.25rem;">Volumes</h4>
                 ${volumesInfo}
                 
-                <div style="text-align: right; margin-top: 1.5rem; border-top: 1px solid #eee; padding-top: 1rem;">
-                    <button class="btn" style="background: var(--text-secondary); width: auto; margin-right: 0.5rem;" onclick="document.getElementById('labelModal').remove()">Fechar</button>
+                <div style="text-align: right; margin-top: 1.5rem; border-top: 1px solid #eee; padding-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('labelModal').remove()">Fechar</button>
+                    ${hasAlert ? `<button class="btn" style="background: #ea580c; width: auto;" onclick="dispatchItem(${item.id})" title="Ignora a falta de volumes e finaliza o pedido"> <i class="ph-warning"></i> Concluir sem Volumes</button>` : ''}
                     ${!hasAlert ? `<button class="btn" style="width: auto;" onclick="dispatchItem(${item.id})"> <i class="ph-paper-plane-right"></i> Gerar Etiqueta & Despachar</button>` : ''}
                 </div>
             </div>
