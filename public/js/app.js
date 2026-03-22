@@ -1300,7 +1300,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                 <tr style="${isReadOnly ? 'opacity: 0.8;' : ''}">
                      <td>
                          ${statusBar}
-                         ${item.numero_pedido}
+                         ${item.numero_pedido}<br><small>${item.cliente}</small>
                      </td>
                      <td>
                         <strong>${item.produto}</strong>
