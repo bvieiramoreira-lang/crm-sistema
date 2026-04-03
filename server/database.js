@@ -122,6 +122,7 @@ db.serialize(() => {
     addColumn('itens_pedido', 'dados_volumes', 'TEXT');
     addColumn('itens_pedido', 'flag_embale_sem_volumes', 'INTEGER');
     addColumn('itens_pedido', 'referencia', 'TEXT');
+    addColumn('itens_pedido', 'is_terceirizado', 'INTEGER DEFAULT 0');
 
     // New Columns for Digital Print File
     addColumn('itens_pedido', 'arquivo_impressao_digital_url', 'TEXT');

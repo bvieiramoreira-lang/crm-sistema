@@ -725,11 +725,14 @@ async function loadArteQueue() {
                 ? `<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);"><i class="ph-drop"></i> Cor de Impressão: <strong>${item.cor_impressao}</strong></div>`
                 : '';
 
+            const tercBadge = item.is_terceirizado ? `<div style="margin-top:0.3rem;"><span class="badge badge-warning" style="font-size:0.75rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c;"><i class="ph-truck"></i> TERCEIRIZADO</span></div>` : '';
+
             html += `
                 <tr>
                     <td>${item.numero_pedido}<br><small>${item.cliente}</small></td>
                     <td>
                         <strong>${item.produto}</strong> (x${item.quantidade})
+                        ${tercBadge}
                         ${item.referencia ? `<div style="font-size:0.85rem; color:#475569; margin-top:0.2rem;">Referência: <strong>${item.referencia}</strong></div>` : ''}
                         <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
                         ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
@@ -876,8 +879,13 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
         // Status Logic (Only for Execution)
         if (!isReadOnly) {
             if (statusFiltro === 'AGUARDANDO_SEPARACAO') {
-                nextStatus = 'AGUARDANDO_DESEMBALE';
-                btnLabel = 'Separado OK';
+                if (item.is_terceirizado) {
+                    nextStatus = 'AGUARDANDO_EMBALE';
+                    btnLabel = 'Separado (Pular p/ Embale)';
+                } else {
+                    nextStatus = 'AGUARDANDO_DESEMBALE';
+                    btnLabel = 'Separado OK';
+                }
             } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
                 nextStatus = 'AGUARDANDO_PRODUCAO';
                 btnLabel = 'Liberar Produção';
@@ -940,6 +948,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
         // Layout & Prints
         const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
         const colorInfo = item.cor_impressao ? `<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);"><i class="ph-drop"></i> Cor: <strong>${item.cor_impressao}</strong></div>` : '';
+        const tercBadge = item.is_terceirizado ? `<div style="margin-bottom: 0.5rem;"><span class="badge badge-warning" style="font-size:0.75rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c;"><i class="ph-truck"></i> TERCEIRIZADO (Pula Produção)</span></div>` : '';
 
         let printSectorInfo = '';
         if (item.setor_destino) {
@@ -1024,6 +1033,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                          <!-- Coluna Direita: Infos -->
                          <div style="display:flex; flex-direction:column; gap:0.25rem; align-items: flex-start;">
                             <!-- Linha 1: Badges -->
+                            ${tercBadge}
                             ${printSectorInfo}
                             ${productionDurationInfo}
                             
@@ -1213,6 +1223,8 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                      <i class="ph-warning"></i> COR NÃO INFORMADA
                    </div>`;
 
+            const tercBadge = item.is_terceirizado ? `<div style="margin-bottom: 0.5rem;"><span class="badge badge-warning" style="font-size:0.75rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c;"><i class="ph-truck"></i> TERCEIRIZADO (Pula Produção)</span></div>` : '';
+
             // Obs Arte
             const obsStyle = item.observacao_arte
                 ? `background: #fff7ed; border: 2px solid #fdba74; color: #c2410c; box-shadow: 0 2px 4px rgba(0,0,0,0.05);`
@@ -1321,6 +1333,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                              <!-- Coluna Direita: Infos -->
                              <div style="display:flex; flex-direction:column; gap:0.25rem; align-items: flex-start;">
                                 <!-- Linha 1: Badges -->
+                                ${tercBadge}
                                 ${!isReadOnly ? `<div>${actionBtn}</div>` : `<div style="margin-top:0.2rem"><span class="badge" style="background:#e2e8f0; color:#64748b;">${item.status_atual}</span></div>`}
                                 
                                 <!-- Linha 2: Cor / Arquivo Digital -->
@@ -1503,10 +1516,14 @@ function injectNewOrderModal() {
         div.className = 'flex-row';
         div.style.marginBottom = '0.5rem';
         div.innerHTML = `
-            <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 3" required>
+            <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 2" required>
             <input type="text" placeholder="Ref (Opcional)" class="form-control" style="flex: 1.5; text-transform: uppercase;">
-            <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="Qtd" class="form-control" style="flex: 1" required>
-            <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;" onclick="this.parentElement.remove()">
+            <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="Qtd" class="form-control" style="flex: 0.8" required>
+            <label style="display:flex; align-items:center; gap:0.25rem; flex:0.7; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;" title="Produto terceirizado, pula de Separação para Embale">
+                <input type="checkbox" class="terc-check" style="width:16px; height:16px; cursor: pointer;">
+                Terc.
+            </label>
+            <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.25rem 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex: 0.8;" onclick="this.parentElement.remove()">
                 <i class="ph-x"></i> Apagar
             </button>
         `;
@@ -1601,10 +1618,14 @@ function injectNewOrderModal() {
                     div.className = 'flex-row';
                     div.style.marginBottom = '0.5rem';
                     div.innerHTML = `
-                        <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 3" value="${it.produto || ''}" required>
+                        <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 2" value="${it.produto || ''}" required>
                         <input type="text" placeholder="Ref (Opcional)" class="form-control" style="flex: 1.5; text-transform: uppercase;" value="${it.referencia || ''}">
-                        <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="Qtd" class="form-control" style="flex: 1" value="${it.quantidade || 1}" required>
-                        <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;" onclick="this.parentElement.remove()">
+                        <input type="text" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="Qtd" class="form-control" style="flex: 0.8" value="${it.quantidade || 1}" required>
+                        <label style="display:flex; align-items:center; gap:0.25rem; flex:0.7; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;" title="Produto terceirizado, pula de Separação para Embale">
+                            <input type="checkbox" class="terc-check" style="width:16px; height:16px; cursor: pointer;">
+                            Terc.
+                        </label>
+                        <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.25rem 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex: 0.8;" onclick="this.parentElement.remove()">
                             <i class="ph-x"></i> Apagar
                         </button>
                     `;
@@ -1637,7 +1658,8 @@ async function handleNewOrderSubmit(e) {
         itens.push({
             produto: row.children[0].value,
             referencia: row.children[1].value,
-            quantidade: row.children[2].value
+            quantidade: row.children[2].value,
+            is_terceirizado: row.querySelector('.terc-check') ? row.querySelector('.terc-check').checked : false
         });
     }
 
@@ -1918,8 +1940,8 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
                         <input type="text" id="corImpressao" class="form-control" placeholder="Ex: Pantone 186 C" value="${item.cor_impressao || ''}">
                     </div>
                     <div class="form-group">
-                        <label>Setor Destino</label>
-                        <select id="setorDestino" class="form-control">
+                        <label>Setor Destino ${item.is_terceirizado ? '<span style="color:#854d0e">(Terceirizado - Pula Impressão)</span>' : ''}</label>
+                        <select id="setorDestino" class="form-control" ${item.is_terceirizado ? 'disabled' : ''}>
                             <option value="">Selecione...</option>
                             <option value="SILK_PLANO">Silk Plano</option>
                             <option value="SILK_CILINDRICA">Silk Cilíndrica</option>
@@ -1927,6 +1949,7 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
                             <option value="IMPRESSAO_LASER">Impressão Laser</option>
                             <option value="IMPRESSAO_DIGITAL">Impressão Digital</option>
                             <option value="ESTAMPARIA">Estamparia</option>
+                            <option value="TERCEIRIZADO" ${item.is_terceirizado ? 'selected' : 'style="display:none;"'}>Terceirizado</option>
                         </select>
                     </div>
                 </div>
@@ -2268,7 +2291,7 @@ async function aprovarArte(itemId) {
     const responsavel = document.getElementById(`resp_select_${itemId}`).value;
 
     if (!cor) return alert('Cor de impressão é obrigatória!');
-    if (!setor) return alert('Setor de destino é obrigatório!');
+    if (!setor && document.getElementById('setorDestino').disabled === false) return alert('Setor de destino é obrigatório!');
 
     const payload = {
         arte_status: 'APROVADO',

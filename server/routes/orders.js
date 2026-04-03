@@ -18,13 +18,13 @@ router.post('/', (req, res) => {
 
             // Inserir Itens
             if (itens && itens.length > 0) {
-                const placeholders = itens.map(() => '(?, ?, ?, ?, ?)').join(',');
+                const placeholders = itens.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
                 const values = [];
                 itens.forEach(item => {
-                    values.push(pedidoId, item.produto, item.quantidade, item.setor_destino || null, item.referencia ? item.referencia.toUpperCase() : null);
+                    values.push(pedidoId, item.produto, item.quantidade, item.setor_destino || null, item.referencia ? item.referencia.toUpperCase() : null, item.is_terceirizado ? 1 : 0);
                 });
 
-                db.run(`INSERT INTO itens_pedido (pedido_id, produto, quantidade, setor_destino, referencia) VALUES ` + placeholders, values, (err) => {
+                db.run(`INSERT INTO itens_pedido (pedido_id, produto, quantidade, setor_destino, referencia, is_terceirizado) VALUES ` + placeholders, values, (err) => {
                     if (err) {
                         console.error("**** SQL ERROR INSERTING ITEMS ****", err);
                         console.error("Values:", values);
@@ -135,7 +135,7 @@ router.get('/', async (req, res) => {
         if (orderIds.length > 0) {
             const placeholders = orderIds.map(() => '?').join(',');
             allItems = await new Promise((resolve, reject) => {
-                db.all(`SELECT id, pedido_id, produto, quantidade, referencia, status_atual, arte_status, setor_destino, layout_path, layout_type FROM itens_pedido WHERE pedido_id IN (${placeholders})`, orderIds, (err, rows) => {
+                db.all(`SELECT id, pedido_id, produto, quantidade, referencia, status_atual, arte_status, setor_destino, layout_path, layout_type, is_terceirizado FROM itens_pedido WHERE pedido_id IN (${placeholders})`, orderIds, (err, rows) => {
                     if (err) reject(err); else resolve(rows);
                 });
             });
