@@ -207,6 +207,12 @@ db.serialize(() => {
         ativo INTEGER DEFAULT 1, -- 1 = Ativo, 0 = Inativo
         destaque_comportamento TEXT
     )`);
+
+    // FIX MIGRATION: Garante que a coluna destaque será adicionada se a tabela já existia (Deploy remoto)
+    db.run("ALTER TABLE colaboradores ADD COLUMN destaque_comportamento TEXT", (err) => {
+        // Pode falhar silenciosamente se a coluna já existir :)
+    });
+
     // Tabela de Manuais do Sistema
     db.run(`CREATE TABLE IF NOT EXISTS manuais (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
