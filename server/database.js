@@ -204,7 +204,8 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
         setor TEXT NOT NULL, -- "Arte Final", "Separação", etc.
-        ativo INTEGER DEFAULT 1 -- 1 = Ativo, 0 = Inativo
+        ativo INTEGER DEFAULT 1, -- 1 = Ativo, 0 = Inativo
+        destaque_comportamento TEXT
     )`);
     // Tabela de Manuais do Sistema
     db.run(`CREATE TABLE IF NOT EXISTS manuais (

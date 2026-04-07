@@ -6,9 +6,70 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     setupNavigation();
     loadDashboard();
+    loadGlobalHighlights();
 
     document.getElementById('logoutBtn').addEventListener('click', logout);
 });
+
+// Helper: Global Highlights (Destaques da Semana)
+async function loadGlobalHighlights() {
+    try {
+        const res = await fetch('/api/collaborators/destaques');
+        if (!res.ok) return;
+        const destaques = await res.json();
+        
+        const banner = document.getElementById('globalHighlightsBanner');
+        if (!destaques || destaques.length === 0) {
+            banner.style.display = 'none';
+            return;
+        }
+
+        // Definindo as cores e icones baseadas no principio
+        const comportamentos = {
+            "Excelência no que faz": { cor: "#ca8a04", icone: "ph-star" },
+            "Ser resolutivo": { cor: "#2563eb", icone: "ph-lightning" },
+            "Ser responsável": { cor: "#059669", icone: "ph-shield-check" },
+            "Ser organizado": { cor: "#7c3aed", icone: "ph-list-checks" },
+            "Ser detalhista": { cor: "#0891b2", icone: "ph-magnifying-glass" },
+            "Ser comprometido": { cor: "#ea580c", icone: "ph-handshake" },
+            "Ser positivo": { cor: "#db2777", icone: "ph-smiley" }
+        };
+
+        let itemsHtml = destaques.map(c => {
+            const config = comportamentos[c.destaque_comportamento] || { cor: "#334155", icone: "ph-star" };
+            return `
+                <div style="display: flex; align-items: center; gap: 0.75rem; background: rgba(255,255,255,0.1); padding: 0.5rem 1rem; border-radius: 9999px; margin-right: 0.5rem; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2);">
+                    <div style="background: ${config.cor}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 8px ${config.cor}80;">
+                        <i class="${config.icone}" style="font-size: 1.1rem; color: #fff;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; font-size: 0.9rem; line-height: 1;">${c.nome}</div>
+                        <div style="font-size: 0.7rem; color: rgba(255,255,255,0.7);">${c.destaque_comportamento}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        banner.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; border-right: 1px solid rgba(255,255,255,0.2); padding-right: 1rem; white-space: nowrap;">
+                    <i class="ph-star" style="color: #fbbf24; font-size: 1.5rem;"></i>
+                    <span style="font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color:#f8fafc;">Destaques da Semana</span>
+                </div>
+                <div style="display: flex; overflow-x: auto; padding-bottom: 2px;">
+                    ${itemsHtml}
+                </div>
+            </div>
+            <div style="opacity: 0.5; cursor: pointer;" onclick="document.getElementById('globalHighlightsBanner').style.display='none'" title="Fechar">
+                <i class="ph-x"></i>
+            </div>
+        `;
+        banner.style.display = 'flex';
+
+    } catch(e) {
+        console.error('Erro ao buscar destaques', e);
+    }
+}
 
 // Helper: Badge de Envio Universal
 // Helper: Badge de Envio Universal

@@ -47,9 +47,12 @@ function renderCollaborators(list) {
                 <span class="badge ${c.ativo ? 'badge-success' : 'badge-danger'}">
                     ${c.ativo ? 'Ativo' : 'Inativo'}
                 </span>
+                ${c.destaque_comportamento ? `<br><span class="badge" style="background:#ca8a04; color:#fff; font-size:0.7rem; margin-top:4px;"><i class="ph-star"></i> Destaque</span>` : ''}
             </td>
             <td style="padding: 0.75rem;">
-                <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem;" 
+                <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem; background: #fbbf24; color: #78350f;" 
+                    onclick='openHighlightModal(${c.id})' title="Destacar Semana">⭐</button>
+                <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem; margin-left: 0.5rem;" 
                     onclick='openCollaboratorModal(${JSON.stringify(c)})'>Editar</button>
                 <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem; background: #dc2626; margin-left: 0.5rem;" 
                     onclick='deleteCollaborator(${c.id})'>Excluir</button>
@@ -89,7 +92,8 @@ function openCollaboratorModal(collab = null) {
         { value: "IMPRESSAO_DIGITAL", label: "Impressão Digital" },
         { value: "ESTAMPARIA", label: "Estamparia" },
         { value: "EMBALE", label: "Embale" },
-        { value: "LOGISTICA", label: "Logística" }
+        { value: "LOGISTICA", label: "Logística" },
+        { value: "ESCRITORIO", label: "Escritório" }
     ];
 
     // Determine currently selected sectors
@@ -176,6 +180,71 @@ async function saveCollaborator(idParam) {
             loadCollaborators();
         } else {
             alert('Erro ao salvar');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão');
+    }
+}
+
+// Lógica de Destaques da Semana
+function openHighlightModal(collabId) {
+    const comportamentos = [
+        { id: 1, nome: "Excelência no que faz", cor: "#ca8a04", icone: "ph-star" },
+        { id: 2, nome: "Ser resolutivo", cor: "#2563eb", icone: "ph-lightning" },
+        { id: 3, nome: "Ser responsável", cor: "#059669", icone: "ph-shield-check" },
+        { id: 4, nome: "Ser organizado", cor: "#7c3aed", icone: "ph-list-checks" },
+        { id: 5, nome: "Ser detalhista", cor: "#0891b2", icone: "ph-magnifying-glass" },
+        { id: 6, nome: "Ser comprometido", cor: "#ea580c", icone: "ph-handshake" },
+        { id: 7, nome: "Ser positivo", cor: "#db2777", icone: "ph-smiley" }
+    ];
+
+    const cardsHtml = comportamentos.map(c => `
+        <button onclick="setDestaque(${collabId}, '${c.nome}')" style="display: flex; align-items: center; gap: 0.5rem; text-align: left; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; background: #fff; width: 100%; margin-bottom: 0.5rem; transition: background 0.2s;">
+            <div style="background: ${c.cor}; color: #fff; width: 32px; height: 32px; border-radius: 20%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                <i class="${c.icone}"></i>
+            </div>
+            <span style="font-weight: 500; color: #1e293b; flex: 1;">${c.nome}</span>
+        </button>
+    `).join('');
+
+    const modalHtml = `
+        <div id="highlightModal" class="modal show">
+            <div class="modal-content" style="max-width: 450px;">
+                <h3 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="ph-star" style="color:#ca8a04"></i> Promover (Destaque da Semana)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">Escolha qual dos 7 comportamentos padrão este colaborador se destacou.</p>
+                
+                <div style="max-height: 400px; overflow-y: auto; padding-right: 0.5rem;">
+                    ${cardsHtml}
+                </div>
+
+                <div style="margin-top: 1.5rem; display: flex; justify-content: space-between;">
+                    <button class="btn" style="background: #dc2626; width: auto;" onclick="setDestaque(${collabId}, null)">Remover Destaque</button>
+                    <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('highlightModal').remove()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const old = document.getElementById('highlightModal');
+    if (old) old.remove();
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function setDestaque(collabId, comportamento) {
+    try {
+        const res = await fetch(`/api/collaborators/${collabId}/destaque`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ destaque_comportamento: comportamento })
+        });
+        
+        if (res.ok) {
+            document.getElementById('highlightModal')?.remove();
+            loadCollaborators();
+        } else {
+            alert('Erro ao definir destaque');
         }
     } catch (e) {
         console.error(e);

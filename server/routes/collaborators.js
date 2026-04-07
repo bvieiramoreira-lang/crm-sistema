@@ -11,6 +11,25 @@ router.get('/', (req, res) => {
     });
 });
 
+// Listar os destaques (Para exibição global)
+router.get('/destaques', (req, res) => {
+    db.all("SELECT id, nome, setor, destaque_comportamento FROM colaboradores WHERE destaque_comportamento IS NOT NULL AND ativo = 1 ORDER BY nome ASC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Promover ou remover destaque (comportamento)
+router.put('/:id/destaque', (req, res) => {
+    const { destaque_comportamento } = req.body; // se null ou vazio, limpa o destaque
+    
+    db.run("UPDATE colaboradores SET destaque_comportamento = ? WHERE id = ?",
+        [destaque_comportamento || null, req.params.id], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Destaque atualizado' });
+        });
+});
+
 // Listar por Setor (Apenas ATIVOS)
 router.get('/sector/:sector', (req, res) => {
     const sector = req.params.sector;
