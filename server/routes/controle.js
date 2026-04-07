@@ -21,16 +21,17 @@ router.get('/', (req, res) => {
 
     // Se as datas vierem vazias, limitamos por alguma condicional?
     // Vamos permitir sem data (traz os ativos/não finalizados)
-    let conditions = [];
+    // Ocultar produtos já finalizados (CONCLUIDO) e pedidos totalmente FINALIZADOS por padrão
+    let conditions = [
+        `i.status_atual != 'CONCLUIDO'`,
+        `p.status_geral != 'FINALIZADO'`
+    ];
 
     if (start && end) {
         // Se vieram datas, usar o prazo_entrega ou data_criacao.
         // Optamos pelo prazo_entrega para a "semana de produção".
         conditions.push(`p.prazo_entrega >= ? AND p.prazo_entrega <= ?`);
         queryParams.push(start, end);
-    } else {
-        // Por padrão, mostra pedidos que estão em andamento ou que têm prazos próximos
-        conditions.push(`p.status_geral != 'FINALIZADO'`);
     }
 
     if (conditions.length > 0) {
