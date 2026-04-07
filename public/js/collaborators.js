@@ -202,7 +202,7 @@ function openHighlightModal(collabId) {
     const cardsHtml = comportamentos.map(c => `
         <button onclick="setDestaque(${collabId}, '${c.nome}')" style="display: flex; align-items: center; gap: 0.5rem; text-align: left; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; background: #fff; width: 100%; margin-bottom: 0.5rem; transition: background 0.2s;">
             <div style="background: ${c.cor}; color: #fff; width: 32px; height: 32px; border-radius: 20%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
-                <i class="${c.icone}"></i>
+                <i class="ph ${c.icone}"></i>
             </div>
             <span style="font-weight: 500; color: #1e293b; flex: 1;">${c.nome}</span>
         </button>
@@ -211,7 +211,7 @@ function openHighlightModal(collabId) {
     const modalHtml = `
         <div id="highlightModal" class="modal show">
             <div class="modal-content" style="max-width: 450px;">
-                <h3 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="ph-star" style="color:#ca8a04"></i> Promover (Destaque da Semana)</h3>
+                <h3 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="ph-fill ph-star" style="color:#ca8a04"></i> Promover (Destaque da Semana)</h3>
                 <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">Escolha qual dos 7 comportamentos padrão este colaborador se destacou.</p>
                 
                 <div style="max-height: 400px; overflow-y: auto; padding-right: 0.5rem;">
