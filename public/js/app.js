@@ -117,6 +117,7 @@ function setupNavigation() {
                 action: openDashboard
             },
             { id: 'orders', label: 'Todos os Pedidos', icon: 'ph-stack', profiles: ['financeiro', 'admin'], action: loadOrders },
+            { id: 'controle', label: 'Controle', icon: 'ph-chart-bar', profiles: ['admin'], action: loadControleQueue },
             { id: 'new_order', label: 'Novo Pedido', icon: 'ph-plus-circle', profiles: ['financeiro', 'admin'], action: openNewOrderModal },
             { id: 'arte', label: 'Arte Final', icon: 'ph-paint-brush', profiles: ['arte', 'admin'], action: loadArteQueue },
             { id: 'separacao', label: 'Separação', icon: 'ph-basket', profiles: ['separacao', 'admin'], action: () => loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação') },

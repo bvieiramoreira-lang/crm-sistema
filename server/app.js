@@ -60,6 +60,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users')); // Mantido para login, mas não para tarefas
 app.use('/api/collaborators', require('./routes/collaborators'));
 app.use('/api/dashboard', require('./routes/dashboard')); // NEW DASHBOARD ROUTE
+app.use('/api/controle', require('./routes/controle')); // Rota de controle gerencial
 app.use('/api/manuals', require('./routes/manuals')); // Rota de Manuais
 
 // Servir frontend
