@@ -243,6 +243,7 @@ async function setDestaque(collabId, comportamento) {
         if (res.ok) {
             document.getElementById('highlightModal')?.remove();
             loadCollaborators();
+            if (typeof loadGlobalHighlights === "function") loadGlobalHighlights();
         } else {
             alert('Erro ao definir destaque');
         }
