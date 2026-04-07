@@ -36,32 +36,32 @@ async function loadGlobalHighlights() {
         };
 
         let itemsHtml = destaques.map(c => {
-            const config = comportamentos[c.destaque_comportamento] || { cor: "#334155", icone: "ph-star" };
+            const config = comportamentos[c.destaque_comportamento] || { cor: "#ca8a04", icone: "ph-star" };
             return `
-                <div style="display: flex; align-items: center; gap: 0.75rem; background: rgba(255,255,255,0.1); padding: 0.5rem 1rem; border-radius: 9999px; margin-right: 0.5rem; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2);">
-                    <div style="background: ${config.cor}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 8px ${config.cor}80;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; background: #ffffff; padding: 0.5rem 1rem; border-radius: 9999px; margin-right: 0.5rem; flex-shrink: 0; border: 1px solid #fde047; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="background: ${config.cor}; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 6px ${config.cor}60;">
                         <i class="${config.icone}" style="font-size: 1.1rem; color: #fff;"></i>
                     </div>
                     <div>
-                        <div style="font-weight: 700; font-size: 0.9rem; line-height: 1;">${c.nome}</div>
-                        <div style="font-size: 0.7rem; color: rgba(255,255,255,0.7);">${c.destaque_comportamento}</div>
+                        <div style="font-weight: 700; font-size: 0.95rem; line-height: 1.2; color: #1e293b;">${c.nome}</div>
+                        <div style="font-size: 0.75rem; color: #64748b; font-weight: 500;">${c.destaque_comportamento}</div>
                     </div>
                 </div>
             `;
         }).join('');
 
         banner.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; border-right: 1px solid rgba(255,255,255,0.2); padding-right: 1rem; white-space: nowrap;">
-                    <i class="ph-star" style="color: #fbbf24; font-size: 1.5rem;"></i>
-                    <span style="font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color:#f8fafc;">Destaques da Semana</span>
+            <div style="display: flex; align-items: center; gap: 1.2rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; border-right: 2px solid #fde047; padding-right: 1.2rem; white-space: nowrap;">
+                    <i class="ph-star-fill" style="color: #eab308; font-size: 2rem; filter: drop-shadow(0 2px 4px rgba(234,179,8,0.3));"></i>
+                    <span style="font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color:#451a03; font-size: 1.2rem;">Destaques da Semana</span>
                 </div>
                 <div style="display: flex; overflow-x: auto; padding-bottom: 2px;">
                     ${itemsHtml}
                 </div>
             </div>
-            <div style="opacity: 0.5; cursor: pointer;" onclick="document.getElementById('globalHighlightsBanner').style.display='none'" title="Fechar">
-                <i class="ph-x"></i>
+            <div style="color: #a16207; cursor: pointer; padding: 0.5rem;" onclick="document.getElementById('globalHighlightsBanner').style.display='none'" title="Ocultar">
+                <i class="ph-x" style="font-weight:bold; font-size:1.2rem;"></i>
             </div>
         `;
         banner.style.display = 'flex';
