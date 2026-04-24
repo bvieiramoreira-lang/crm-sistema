@@ -1346,7 +1346,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                     }
 
                     if (isPaused) {
-                        actionBtn = `${timerHtml}<button class="btn" style="background: var(--primary); padding: 0.35rem 0.5rem; margin-bottom:0.25rem;" onclick="resumeProducao(${item.id}, '${setor}')"><i class="ph-play"></i> Retomar Produção</button>`;
+                        actionBtn = `${timerHtml}<button class="btn" style="background: #0284c7; color: white; border: 1px solid #0369a1; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2); padding: 0.35rem 0.5rem; margin-bottom:0.25rem;" onclick="resumeProducao(${item.id}, '${setor}')"><i class="ph-play"></i> Retomar Produção</button>`;
                     } else if (pauseRequested) {
                         actionBtn = `${timerHtml}
                         <button class="btn" style="background: var(--danger); opacity: 0.5; filter: grayscale(1); margin-bottom: 0.25rem; pointer-events: none;"><i class="ph-check"></i> Finalizar Produção</button><br>
