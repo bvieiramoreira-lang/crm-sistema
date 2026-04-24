@@ -1055,7 +1055,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
 
             if (nextStatus) {
                 if (statusFiltro === 'AGUARDANDO_EMBALE') {
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="if(validateResponsible(${item.id})) openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}', ${item.quantidade})">Conferir Embale</button>`;
+                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}', ${item.quantidade})">Conferir Embale</button>`;
                 } else if (statusFiltro === 'AGUARDANDO_ENVIO') {
                     const itemJson = JSON.stringify(item).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
                     // Validate before opening label modal
@@ -1064,7 +1064,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                     if (!item.setor_destino) {
                         actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem; background: var(--text-secondary); cursor: not-allowed;" onclick="alert('Defina a forma de impressão na Arte Final antes de concluir o Desembale.')">Liberar Produção</button>`;
                     } else {
-                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="if(validateResponsible(${item.id})) openDesembaleConfirmation(${item.id}, '${nextStatus}', ${item.quantidade})">${btnLabel}</button>`;
+                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="openDesembaleConfirmation(${item.id}, '${nextStatus}', ${item.quantidade})">${btnLabel}</button>`;
                     }
                 } else {
                     actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="mudarStatusItem(${item.id}, '${nextStatus}')">${btnLabel}</button>`;
@@ -2678,6 +2678,10 @@ function openEmbaleConfirmationWrapper(itemId, pedidoId, tipoEnvio, isBypass, it
     // Validação Inicial (apenas se NÃO for bypass)
     
     // Validate Multiplos early
+    
+    if (!document.getElementById('checkMultiplos').checked) {
+        if (!validateResponsible(itemId)) { document.getElementById('embaleModal').remove(); return; }
+    }
     if(document.getElementById('checkMultiplos').checked) {
         if(window.getMultiplosData(false, itemQuantidade) === false) return; // failed validation
     }
@@ -3947,6 +3951,10 @@ function openDesembaleConfirmation(itemId, nextStatus, itemQuantidade) {
 // Custom submitDesembale Function to handle API and Multiplos
 window.submitDesembale = async function(itemId, nextStatus, itemQuantidade) {
     const mData = window.getMultiplosData(true, itemQuantidade);
+    
+    if (!document.getElementById('checkMultiplosDesembale').checked) {
+        if (!validateResponsible(itemId)) { document.getElementById('desembaleModal').remove(); return; }
+    }
     if(document.getElementById('checkMultiplosDesembale').checked && mData === false) return; // failed validation
 
     try {
