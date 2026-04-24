@@ -3930,22 +3930,51 @@ function openDesembaleConfirmation(itemId, nextStatus, itemQuantidade) {
                 </div>
                 <h3 style="margin-bottom: 1rem;">Confirmação de Desembale</h3>
                 
-                <ul style="text-align: left; background: #f8fafc; padding: 1rem 1rem 1rem 2rem; border-radius: 0.5rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    <li style="margin-bottom: 0.5rem">Conferi os itens 1 a 1</li>
-                    <li style="margin-bottom: 0.5rem">Realizei a contagem corretamente</li>
-                    <li style="margin-bottom: 0.5rem">Fiz o desembale e separação</li>
-                    <li>Encaminhei etapa correta</li>
-                </ul>
+                <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #e2e8f0; text-align: left;">
+                    <p style="font-weight: bold; margin-bottom: 0.75rem; color: #475569; text-transform: uppercase; font-size: 0.8rem;">Checklist Obrigatório</p>
+                    <ul style="list-style: none; padding: 0; margin: 0;">
+                        <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <input type="checkbox" id="check-des-0" class="desembale-checkbox" style="transform: scale(1.2); margin-top: 2px;" onchange="window.updateDesembaleBtnState()">
+                            <label for="check-des-0" style="cursor: pointer; text-transform: uppercase; font-size: 0.85rem; color: #334155; line-height: 1.4;">Conferi os itens 1 a 1</label>
+                        </li>
+                        <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <input type="checkbox" id="check-des-1" class="desembale-checkbox" style="transform: scale(1.2); margin-top: 2px;" onchange="window.updateDesembaleBtnState()">
+                            <label for="check-des-1" style="cursor: pointer; text-transform: uppercase; font-size: 0.85rem; color: #334155; line-height: 1.4;">Realizei a contagem corretamente</label>
+                        </li>
+                        <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <input type="checkbox" id="check-des-2" class="desembale-checkbox" style="transform: scale(1.2); margin-top: 2px;" onchange="window.updateDesembaleBtnState()">
+                            <label for="check-des-2" style="cursor: pointer; text-transform: uppercase; font-size: 0.85rem; color: #334155; line-height: 1.4;">Fiz o desembale e separação dos produtos</label>
+                        </li>
+                        <li style="margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <input type="checkbox" id="check-des-3" class="desembale-checkbox" style="transform: scale(1.2); margin-top: 2px;" onchange="window.updateDesembaleBtnState()">
+                            <label for="check-des-3" style="cursor: pointer; text-transform: uppercase; font-size: 0.85rem; color: #334155; line-height: 1.4;">Encaminhei o pedido para a etapa correta</label>
+                        </li>
+                    </ul>
+                </div>
+                
+                <p style="margin-bottom: 1.5rem; font-size: 0.8rem; color: #64748b; font-style: italic; text-align: left;">
+                    * Marque todos os itens para habilitar a confirmação.
+                </p>
 
                 ${multiHtml}
 
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                     <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('desembaleModal').remove()">Voltar</button>
-                    <button class="btn" style="width: auto;" onclick="submitDesembale(${itemId}, '${nextStatus}', ${itemQuantidade})">Confirmar e avançar</button>
+                    <button class="btn" id="confirmDesembaleBtn" disabled style="width: auto; opacity: 0.5; cursor: not-allowed;" onclick="submitDesembale(${itemId}, '${nextStatus}', ${itemQuantidade})">Confirmar e avançar</button>
                 </div>
             </div>
         </div>
     `);
+}
+
+window.updateDesembaleBtnState = function() {
+    const checkboxes = document.querySelectorAll('.desembale-checkbox');
+    const btn = document.getElementById('confirmDesembaleBtn');
+    if (!btn || checkboxes.length === 0) return;
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    btn.disabled = !allChecked;
+    btn.style.opacity = allChecked ? '1' : '0.5';
+    btn.style.cursor = allChecked ? 'pointer' : 'not-allowed';
 }
 
 // Custom submitDesembale Function to handle API and Multiplos
