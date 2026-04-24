@@ -743,7 +743,7 @@ router.put('/item/:id/resume', (req, res) => {
 
 
 // Get all pausas solicitadas
-router.get('/itens/pausas', (req, res) => {
+router.get('/pausas/pendentes', (req, res) => {
     const query = "SELECT i.*, p.numero_pedido, p.cliente FROM itens_pedido i JOIN pedidos p ON i.pedido_id = p.id WHERE i.pausa_solicitada = 1";
     db.all(query, [], (err, rows) => {
         if(err) return res.status(500).json({error: err.message});

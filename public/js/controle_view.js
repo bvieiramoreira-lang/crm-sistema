@@ -139,7 +139,7 @@ async function fetchControleData() {
 
 async function fetchPendingPauses() {
     try {
-        const res = await fetch('/api/production/itens/pausas');
+        const res = await fetch('/api/production/pausas/pendentes');
         const data = await res.json();
         
         const container = document.getElementById('pendingPausesContainer');
