@@ -3977,19 +3977,6 @@ window.submitDesembale = async function(itemId, nextStatus, itemQuantidade) {
     } catch(e) { console.error('Erro desembale', e); }
 }
 
-function REPLACED_OLD_CONFIRMATION() 
-        "Confirmação de Desembale",
-        [
-            "Conferi os itens 1 a 1",
-            "Realizei a contagem corretamente",
-            "Fiz o desembale e separação dos produtos",
-            "Encaminhei o pedido para a etapa correta"
-        ],
-        "Confirmar e avançar",
-        () => mudarStatusItem(itemId, nextStatus)
-    );
-}
-
 function openPrintingConfirmation(itemId, sector) {
     const isEstamparia = sector === 'ESTAMPARIA';
     const title = isEstamparia ? "Confirmação antes de iniciar Estamparia" : "Confirmação antes de iniciar a impressão";
