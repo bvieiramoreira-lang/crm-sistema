@@ -39,7 +39,7 @@ window.addMultiplosRow = async function(isDesembale) {
     row.innerHTML = `
         <select class="form-control" style="flex:1; padding:0.25rem;">${options}</select>
         <input type="number" class="form-control" style="width:80px; padding:0.25rem;" min="1" placeholder="Qtd">
-        <button class="btn" style="width:30px; padding:0.25rem; background:transparent; border:1px solid red; color:red;" onclick="this.parentElement.remove()"><i class="ph-trash"></i></button>
+        <button type="button" style="width:34px; height:34px; display:flex; align-items:center; justify-content:center; background:#fee2e2; border:1px solid #f87171; border-radius:6px; color:#ef4444; cursor:pointer; font-weight:bold; flex-shrink:0; flex-grow:0; padding:0; line-height:1;" onclick="this.parentElement.remove()" title="Remover">✕</button>
     `;
     container.appendChild(row);
 }
