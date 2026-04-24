@@ -711,7 +711,7 @@ router.put('/item/:id/pause-approve', (req, res) => {
                 UPDATE itens_pedido SET 
                     is_pausado_producao = 1,
                     pausa_solicitada = 0,
-                    segundos_acumulados_producao = segundos_acumulados_producao + CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = itens_pedido.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
+                    segundos_acumulados_producao = COALESCE(segundos_acumulados_producao, 0) + CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = itens_pedido.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
                 WHERE id = ?
             `;
             
