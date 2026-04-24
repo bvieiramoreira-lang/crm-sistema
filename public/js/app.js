@@ -922,23 +922,7 @@ async function assignItem(itemId, sectorCode, paramsOrName) {
         });
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             // Sucesso silencioso (MVP) ou Toast?
             // Toast simples
@@ -1843,23 +1827,7 @@ async function handleNewOrderSubmit(e) {
         const resData = await res.json();
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Pedido criado com sucesso!');
             document.getElementById('newOrderModal').classList.remove('show');
@@ -2279,23 +2247,7 @@ async function uploadLayout(itemId) {
         }
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Layout enviado com sucesso!');
             // Capture current responsible to preserve it
@@ -2343,23 +2295,7 @@ async function uploadDigitalFile(itemId) {
         const data = await res.json();
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Arquivo de Impressão anexado com sucesso!');
             const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
@@ -2402,23 +2338,7 @@ async function uploadLaserFile(itemId) {
         const data = await res.json();
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Arquivo Laser anexado com sucesso!');
             const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
@@ -2538,23 +2458,7 @@ async function aprovarArte(itemId) {
         });
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Item aprovado e enviado para o próximo setor!'); // User feedback
 
@@ -2790,7 +2694,6 @@ async function submitEmbale(itemId, isBypass, tipoEnvio, pedidoId, itemQuantidad
             // ==== MULTIPLOS OPERADORES INJECT ====
             const mData = window.getMultiplosData(false, itemQuantidade);
             if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
                 try {
                     await fetch('/api/production/evento', {
                         method: 'POST',
@@ -2804,6 +2707,8 @@ async function submitEmbale(itemId, isBypass, tipoEnvio, pedidoId, itemQuantidad
                     });
                 } catch(err) { console.error('Erro ao salvar multiples: ', err); }
             }
+
+
 
             // Custom Logic for RETIRADA
             if (tipoEnvio === 'RETIRADA') {
@@ -2989,23 +2894,7 @@ async function confirmarEmbale(itemId, pedidoId, tipoEnvio) {
         console.log("Server Response:", data);
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             document.getElementById('embaleModal').remove();
             alert('Embalagem confirmada! Item movido para Logística.');
@@ -3219,23 +3108,7 @@ async function handleEditSubmit(e, id, isRestricted) {
         const data = await res.json();
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Pedido atualizado com sucesso!');
             document.getElementById('editOrderModal').remove();
@@ -3260,23 +3133,7 @@ async function deleteOrder(id) {
         const data = await res.json();
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert('Pedido excluído com sucesso!');
             loadDashboard(); // Refresh current page
@@ -3784,23 +3641,7 @@ async function submitRollback(itemId) {
         });
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             alert("Item retornado com sucesso!");
             closeRollbackModal();
@@ -4122,23 +3963,7 @@ async function skipProduction(itemId, setor) {
         });
 
         if (res.ok) {
-            // ==== MULTIPLOS OPERADORES INJECT ====
-            const mData = window.getMultiplosData(false, itemQuantidade);
-            if(mData !== null) {
-                // If mData is not null, it means checkbox is checked and it passed validation
-                try {
-                    await fetch('/api/production/evento', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: itemId,
-                            setor: 'EMBALE',
-                            acao: 'FIM',
-                            multiplos_operadores: mData
-                        })
-                    });
-                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
-            }
+
 
             loadProductionQueue(setor); // Atualiza a tela local imediatamente
         } else {
