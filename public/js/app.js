@@ -1316,7 +1316,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                                 <span style="font-size: 0.8rem; color: #15803d; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 150px;">
                                     ${item.arquivo_impressao_digital_nome}
                                 </span>
-                                <a href="${item.arquivo_impressao_digital_url}" download target="_blank" class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem; background: #22c55e;">
+                                <a href="${item.arquivo_impressao_digital_url}" download="${item.arquivo_impressao_digital_nome}" target="_blank" class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem; background: #22c55e;">
                                     <i class="ph-download"></i> Baixar
                                 </a>
                             </div>
@@ -1339,7 +1339,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                                 <span style="font-size: 0.8rem; color: #92400e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 150px;">
                                     ${item.arquivo_impressao_laser_nome}
                                 </span>
-                                <a href="${item.arquivo_impressao_laser_url}" download target="_blank" class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem; background: #d97706;">
+                                <a href="${item.arquivo_impressao_laser_url}" download="${item.arquivo_impressao_laser_nome}" target="_blank" class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem; background: #d97706;">
                                     <i class="ph-download"></i> Baixar
                                 </a>
                             </div>
@@ -1351,7 +1351,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                         fallbackBtn = `
                             <div style="margin-top:0.4rem; border-top:1px solid #fca5a5; padding-top:0.4rem;">
                                 <div style="font-size:0.7rem; color:#7f1d1d; margin-bottom:0.2rem;">Arquivo específico não encontrado.</div>
-                                <a href="${item.layout_path}" download target="_blank" class="btn" style="width:100%; padding:0.25rem; font-size:0.75rem; background:#fff; border:1px solid #b91c1c; color:#b91c1c; font-weight:bold;">
+                                <a href="${item.layout_path}" download="Layout_Item_${item.id}" target="_blank" class="btn" style="width:100%; padding:0.25rem; font-size:0.75rem; background:#fff; border:1px solid #b91c1c; color:#b91c1c; font-weight:bold;">
                                     <i class="ph-download"></i> Baixar Layout (Aprovação)
                                 </a>
                             </div>
