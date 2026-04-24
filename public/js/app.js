@@ -1346,7 +1346,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                     }
 
                     if (isPaused) {
-                        actionBtn = `${timerHtml}<button class="btn" style="background: var(--primary); padding: 0.35rem 0.5rem; margin-bottom:0.25rem;" onclick="resumeProducao(${item.id})"><i class="ph-play"></i> Retomar Produção</button>`;
+                        actionBtn = `${timerHtml}<button class="btn" style="background: var(--primary); padding: 0.35rem 0.5rem; margin-bottom:0.25rem;" onclick="resumeProducao(${item.id}, '${setor}')"><i class="ph-play"></i> Retomar Produção</button>`;
                     } else if (pauseRequested) {
                         actionBtn = `${timerHtml}
                         <button class="btn" style="background: var(--danger); opacity: 0.5; filter: grayscale(1); margin-bottom: 0.25rem; pointer-events: none;"><i class="ph-check"></i> Finalizar Produção</button><br>
@@ -1354,7 +1354,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                     } else {
                         actionBtn = `${timerHtml}
                         <button class="btn" style="background: var(--warning); color: #78350f; margin-bottom: 0.3rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar Produção</button><br>
-                        <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; margin-bottom:0.25rem;" onclick="solicitarPausa(${item.id})"><i class="ph-pause"></i> Solicitar Pausa</button>`;
+                        <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; margin-bottom:0.25rem;" onclick="solicitarPausa(${item.id}, '${setor}')"><i class="ph-pause"></i> Solicitar Pausa</button>`;
                     }
                 } else {
 
@@ -2971,6 +2971,53 @@ async function registrarEvento(itemId, setor, acao, qtd) {
         })
     });
     loadProductionQueue(setor);
+}
+
+async function solicitarPausa(itemId, setor) {
+    const motivo = prompt('Por favor, informe o motivo da pausa:');
+    if (motivo === null) return; // Cancelado
+    
+    try {
+        const res = await fetch(`/api/production/item/${itemId}/pause-request`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motivo: motivo || 'Sem motivo detalhado' })
+        });
+        const data = await res.json();
+        if (res.ok || data.success || data.message) {
+            alert('Solicitação de pausa enviada/processada.');
+            if (setor) loadProductionQueue(setor);
+            else location.reload();
+        } else {
+            alert('Erro: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão ao solicitar pausa.');
+    }
+}
+
+async function resumeProducao(itemId, setor) {
+    if (!confirm('Deseja retomar a produção deste item? O cronômetro voltará a contar.')) return;
+    
+    try {
+        const res = await fetch(`/api/production/item/${itemId}/resume`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operador_id: currentUser.id, operador_nome: currentUser.nome || currentUser.username || 'Operador' })
+        });
+        const data = await res.json();
+        if (res.ok || data.success || data.message) {
+            alert('Produção retomada com sucesso!');
+            if (setor) loadProductionQueue(setor);
+            else location.reload();
+        } else {
+            alert('Erro: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão ao retomar produção.');
+    }
 }
 
 // --- EDITAR PEDIDO ---
