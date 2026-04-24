@@ -40,8 +40,18 @@ router.get('/itens/:contexto', (req, res) => {
     // SELECT BASE (Com joins comuns)
     const baseSelect = `
         SELECT i.*, 
-        CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'INICIO' ORDER BY id DESC LIMIT 1)) AS INTEGER) as decorrido_segundos,
-        (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'INICIO' ORDER BY id DESC LIMIT 1) as inicio_producao_timestamp,
+        CAST(
+            COALESCE(i.segundos_acumulados_producao, 0) + 
+            CASE 
+                WHEN i.is_pausado_producao = 1 THEN 0
+                WHEN i.status_atual = 'EM_PRODUCAO' THEN 
+                    CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
+                WHEN (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1) IS NOT NULL THEN
+                    CAST(strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1)) - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
+                ELSE 0
+            END 
+        AS INTEGER) as decorrido_segundos,
+        (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1) as inicio_producao_timestamp,
         (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1) as fim_producao_timestamp,
         p.numero_pedido, p.cliente, p.prazo_entrega, p.tipo_envio, p.transportadora, p.observacao 
         FROM itens_pedido i
@@ -670,6 +680,83 @@ router.put('/item/:id/return', (req, res) => {
 
             res.json({ message: 'Item retornado com sucesso', new_status: target_status });
         });
+    });
+});
+
+
+// Solicitar Pausa
+router.put('/item/:id/pause-request', (req, res) => {
+    const itemId = req.params.id;
+    const { motivo } = req.body;
+    db.run("UPDATE itens_pedido SET pausa_solicitada = 1, motivo_pausa_producao = ? WHERE id = ?", [motivo, itemId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Pausa solicitada com sucesso.' });
+    });
+});
+
+// Aprovar Pausa (Somente ADMIN no frontend deveria chamar)
+router.put('/item/:id/pause-approve', (req, res) => {
+    const itemId = req.params.id;
+    const { operador_id, operador_nome } = req.body;
+    
+    // Calcula tempo do ultimo fluxo ativo ate agora e soma
+    db.get("SELECT status_atual FROM itens_pedido WHERE id = ?", [itemId], (err, itemRow) => {
+        if (err || !itemRow) return res.status(404).json({ error: 'Item nao encontrado' });
+        
+        db.get("SELECT timestamp FROM eventos_producao WHERE item_id = ? AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1", [itemId], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            // It's safer to do this fully inside SQLite:
+            const query = `
+                UPDATE itens_pedido SET 
+                    is_pausado_producao = 1,
+                    pausa_solicitada = 0,
+                    segundos_acumulados_producao = segundos_acumulados_producao + CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = itens_pedido.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
+                WHERE id = ?
+            `;
+            
+            db.run(query, [itemId], function(err2) {
+                if(err2) return res.status(500).json({ error: err2.message });
+                // Registrar evento de pausa
+                db.run("INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao, timestamp) VALUES (?, ?, ?, (SELECT setor_destino FROM itens_pedido WHERE id = ?), 'PAUSA', DATETIME('now', 'localtime'))", [itemId, operador_id, operador_nome, itemId], (err3) => {
+                    res.json({ message: 'Pausa aprovada e cronometro congelado.' });
+                });
+            });
+        });
+    });
+});
+
+// Retomar Producao
+router.put('/item/:id/resume', (req, res) => {
+    const itemId = req.params.id;
+    const { operador_id, operador_nome } = req.body;
+    
+    db.run("UPDATE itens_pedido SET is_pausado_producao = 0 WHERE id = ?", [itemId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        // Insere evento de retomada
+        db.run("INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao, timestamp) VALUES (?, ?, ?, (SELECT setor_destino FROM itens_pedido WHERE id = ?), 'RETOMADA', DATETIME('now', 'localtime'))", [itemId, operador_id, operador_nome, itemId], (err2) => {
+            res.json({ message: 'Producao retomada.' });
+        });
+    });
+});
+
+
+// Get all pausas solicitadas
+router.get('/itens/pausas', (req, res) => {
+    const query = "SELECT i.*, p.numero_pedido, p.cliente FROM itens_pedido i JOIN pedidos p ON i.pedido_id = p.id WHERE i.pausa_solicitada = 1";
+    db.all(query, [], (err, rows) => {
+        if(err) return res.status(500).json({error: err.message});
+        res.json(rows);
+    });
+});
+
+// Negar pausa
+router.put('/item/:id/pause-deny', (req, res) => {
+    const itemId = req.params.id;
+    db.run("UPDATE itens_pedido SET pausa_solicitada = 0 WHERE id = ?", [itemId], (err) => {
+         if (err) return res.status(500).json({ error: err.message });
+         res.json({ message: 'Pausa negada.' });
     });
 });
 

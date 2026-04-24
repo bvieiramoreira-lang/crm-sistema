@@ -124,6 +124,11 @@ db.serialize(() => {
     addColumn('itens_pedido', 'referencia', 'TEXT');
     addColumn('itens_pedido', 'is_terceirizado', 'INTEGER DEFAULT 0');
 
+    // MIGRATION: Colunas para o Sistema de Pausa
+    addColumn('itens_pedido', 'is_pausado_producao', 'INTEGER DEFAULT 0');
+    addColumn('itens_pedido', 'motivo_pausa_producao', 'TEXT');
+    addColumn('itens_pedido', 'segundos_acumulados_producao', 'INTEGER DEFAULT 0');
+    addColumn('itens_pedido', 'pausa_solicitada', 'INTEGER DEFAULT 0');
     // New Columns for Digital Print File
     addColumn('itens_pedido', 'arquivo_impressao_digital_url', 'TEXT');
     addColumn('itens_pedido', 'arquivo_impressao_digital_nome', 'TEXT');

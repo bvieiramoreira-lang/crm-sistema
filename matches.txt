@@ -1,0 +1,1 @@
+1337: actionBtn = `${timerHtml}<button class="btn" style="background: var(--warning); color: #78350f" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar Produção</button>`;
