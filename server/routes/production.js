@@ -261,12 +261,27 @@ router.put('/item/:id/status', (req, res) => {
 
 // Registrar Evento de Produção (Inicio/Fim)
 router.post('/evento', (req, res) => {
-    const { item_id, operador_id, operador_nome, setor, acao, quantidade_produzida } = req.body;
-    console.log(`[EVENTO-DEBUG] Setor: '${setor}', Acao: '${acao}', ID: ${item_id}, Nome: ${operador_nome}`);
+    const { item_id, operador_id, operador_nome, setor, acao, quantidade_produzida, multiplos_operadores } = req.body;
+    console.log(`[EVENTO-DEBUG] Setor: '${setor}', Acao: '${acao}', ID: ${item_id}, Nome: ${operador_nome}, Multiplos: ${multiplos_operadores ? 'Sim' : 'Nao'}`);
 
-    // Função interna para processar o registro com o nome garantido
-    const processarRegistro = (nomeFinal) => {
-        // Determinar coluna de responsável baseada no setor
+    // Helpers function to insert events
+    const insertEvent = (op_id, op_nome, op_qtd) => {
+        return new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO eventos_producao(item_id, operador_id, operador_nome, setor, acao, quantidade_produzida) VALUES(?, ?, ?, ?, ?, ?)`,
+                [item_id, op_id, op_nome || null, setor, acao, op_qtd],
+                function (err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+    };
+
+    // Função principal
+    const processarRegistroGeral = async (operadoresInfo) => {
+        // operadoresInfo é um array: [{operador_id, operador_nome, quantidade_produzida}]
+        
         let responsavelCol = null;
         if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(setor)) {
             responsavelCol = 'responsavel_impressao';
@@ -280,80 +295,91 @@ router.post('/evento', (req, res) => {
             responsavelCol = 'responsavel_logistica';
         }
 
-        // 1. Inserir Evento
-        db.run(
-            `INSERT INTO eventos_producao(item_id, operador_id, operador_nome, setor, acao, quantidade_produzida) VALUES(?, ?, ?, ?, ?, ?)`,
-            [item_id, operador_id, nomeFinal || null, setor, acao, quantidade_produzida],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
+        try {
+            // 1. Inserir todos os eventos
+            for (const op of operadoresInfo) {
+                await insertEvent(op.operador_id, op.operador_nome, op.quantidade_produzida);
+            }
 
-                // 2. Atualizar Status do Item (se aplicável) E Responsável
-                let queryUpdate = '';
-                let paramsUpdate = [];
+            // 2. Montar Atualizacao do Item
+            let queryUpdate = '';
+            let paramsUpdate = [];
 
-                // Base Status Logic
-                let newStatus = null;
-                if (acao === 'INICIO') {
-                    newStatus = 'EM_PRODUCAO';
-                } else if (acao === 'FIM') {
-                    if (setor === 'IMPRESSAO_DIGITAL') {
-                        // Digital -> Estamparia (Special Flow)
-                    } else {
-                        newStatus = 'AGUARDANDO_EMBALE';
-                    }
-                } else if (acao === 'PULAR') {
-                    // Pular Produção (Direto para o Embale)
+            // Valor do responsável (Se multiplos, converte pra JSON array)
+            let responsavelValue = null;
+            if (operadoresInfo.length === 1) {
+                responsavelValue = operadoresInfo[0].operador_nome;
+            } else if (operadoresInfo.length > 1) {
+                responsavelValue = JSON.stringify(operadoresInfo.map(op => ({
+                    nome: op.operador_nome,
+                    quantidade: op.quantidade_produzida
+                })));
+            }
+
+            let newStatus = null;
+            if (acao === 'INICIO') {
+                newStatus = 'EM_PRODUCAO';
+            } else if (acao === 'FIM') {
+                if (setor === 'IMPRESSAO_DIGITAL') {
+                    // Digital -> Estamparia (Special Flow)
+                } else {
                     newStatus = 'AGUARDANDO_EMBALE';
                 }
-
-                // Construct Dynamic Update Query
-                let updates = [];
-                let updateParams = [];
-
-                if (newStatus) {
-                    updates.push("status_atual = ?");
-                    updateParams.push(newStatus);
-                }
-
-                // Special case Digital -> Estamparia
-                if (acao === 'FIM' && setor === 'IMPRESSAO_DIGITAL') {
-                    updates.push("status_atual = ?");
-                    updateParams.push('AGUARDANDO_PRODUCAO');
-                    updates.push("setor_destino = ?");
-                    updateParams.push('ESTAMPARIA');
-                }
-
-                // Update Responsible if column identified and name available
-                if (responsavelCol && nomeFinal) {
-                    updates.push(`${responsavelCol} = ?`);
-                    updateParams.push(nomeFinal);
-                }
-
-                if (updates.length > 0) {
-                    queryUpdate = `UPDATE itens_pedido SET ${updates.join(', ')} WHERE id = ?`;
-                    paramsUpdate = [...updateParams, item_id];
-
-                    db.run(queryUpdate, paramsUpdate, (err2) => {
-                        if (err2) console.error("Erro ao atualizar status/resp item na produção", err2);
-                        res.json({ message: 'Evento registrado e status atualizado' });
-                    });
-                } else {
-                    res.json({ message: 'Evento registrado' });
-                }
+            } else if (acao === 'PULAR') {
+                newStatus = 'AGUARDANDO_EMBALE';
             }
-        );
+
+            let updates = [];
+            let updateParams = [];
+
+            if (newStatus) {
+                updates.push("status_atual = ?");
+                updateParams.push(newStatus);
+            }
+
+            if (acao === 'FIM' && setor === 'IMPRESSAO_DIGITAL') {
+                updates.push("status_atual = ?");
+                updateParams.push('AGUARDANDO_PRODUCAO');
+                updates.push("setor_destino = ?");
+                updateParams.push('ESTAMPARIA');
+            }
+
+            if (responsavelCol && responsavelValue) {
+                updates.push(`${responsavelCol} = ?`);
+                updateParams.push(responsavelValue);
+            }
+
+            if (updates.length > 0) {
+                queryUpdate = `UPDATE itens_pedido SET ${updates.join(', ')} WHERE id = ?`;
+                paramsUpdate = [...updateParams, item_id];
+
+                db.run(queryUpdate, paramsUpdate, (err2) => {
+                    if (err2) return res.status(500).json({ error: err2.message });
+                    res.json({ message: 'Evento registrado e status atualizado' });
+                });
+            } else {
+                res.json({ message: 'Evento registrado' });
+            }
+
+        } catch (error) {
+            console.error("Erro ao processar registros:", error);
+            res.status(500).json({ error: error.message });
+        }
     };
 
-    // Lógica de Fallback: Se não vier nome, buscar no banco
-    if (!operador_nome && operador_id) {
-        db.get("SELECT nome FROM usuarios WHERE id = ?", [operador_id], (err, row) => {
-            if (err) console.error("Erro ao buscar usuario fallback:", err);
-            const recoveredName = row ? row.nome : null;
-            if (recoveredName) console.log(`[EVENTO-FIX] Nome recuperado do banco: ${recoveredName}`);
-            processarRegistro(recoveredName);
-        });
+    // Prepara a lista de operadores
+    if (multiplos_operadores && Array.isArray(multiplos_operadores) && multiplos_operadores.length > 0) {
+        processarRegistroGeral(multiplos_operadores);
     } else {
-        processarRegistro(operador_nome);
+        // Fallback: Se não vier nome, buscar no banco (modo antigo unitario)
+        if (!operador_nome && operador_id) {
+            db.get("SELECT nome FROM usuarios WHERE id = ?", [operador_id], (err, row) => {
+                const recoveredName = row ? row.nome : null;
+                processarRegistroGeral([{ operador_id, operador_nome: recoveredName, quantidade_produzida }]);
+            });
+        } else {
+            processarRegistroGeral([{ operador_id, operador_nome, quantidade_produzida }]);
+        }
     }
 });
 

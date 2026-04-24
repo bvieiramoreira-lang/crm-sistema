@@ -2,6 +2,82 @@
 let currentUser = null;
 
 // Inicialização
+
+// ==== START MULTIPLOS OPERADORES INJECT ====
+let sectorUsersCache = [];
+async function fetchSectorUsersCache(sectorCode) {
+    if(sectorUsersCache.length === 0) {
+        try {
+            const r = await fetch('/api/collaborators/sector/' + sectorCode);
+            sectorUsersCache = await r.json();
+        } catch(e) {}
+    }
+    return sectorUsersCache;
+}
+
+window.toggleMultiplosUI = function(isDesembale) {
+    const isChecked = document.getElementById(isDesembale ? 'checkMultiplosDesembale' : 'checkMultiplos').checked;
+    document.getElementById(isDesembale ? 'multiplosUIDesembale' : 'multiplosUI').style.display = isChecked ? 'block' : 'none';
+    if(isChecked && document.getElementById(isDesembale ? 'multiplosListDesembale' : 'multiplosList').children.length === 0) {
+        window.addMultiplosRow(isDesembale);
+    }
+}
+
+window.addMultiplosRow = async function(isDesembale) {
+    const listId = isDesembale ? 'multiplosListDesembale' : 'multiplosList';
+    const container = document.getElementById(listId);
+    if(!container) return;
+    
+    // Ensure cache is loaded
+    await fetchSectorUsersCache(isDesembale ? 'DESEMBALE' : 'EMBALE');
+    
+    let options = '<option value="">-Selecione-</option>';
+    sectorUsersCache.forEach(u => options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
+    row.innerHTML = `
+        <select class="form-control" style="flex:1; padding:0.25rem;">${options}</select>
+        <input type="number" class="form-control" style="width:80px; padding:0.25rem;" min="1" placeholder="Qtd">
+        <button class="btn" style="width:30px; padding:0.25rem; background:transparent; border:1px solid red; color:red;" onclick="this.parentElement.remove()"><i class="ph-trash"></i></button>
+    `;
+    container.appendChild(row);
+}
+
+window.getMultiplosData = function(isDesembale, totalEsperado) {
+    const isChecked = document.getElementById(isDesembale ? 'checkMultiplosDesembale' : 'checkMultiplos')?.checked;
+    if(!isChecked) return null; // Retorna null significa que NAO usou modo múltiplo
+    
+    const rows = document.getElementById(isDesembale ? 'multiplosListDesembale' : 'multiplosList').children;
+    let data = [];
+    let soma = 0;
+    
+    for(let r of rows) {
+        const val = r.querySelector('select').value;
+        const qtdStr = r.querySelector('input').value;
+        if(!val || val === '') { alert('Selecione todos os colaboradores nas linhas adcionadas.'); return false; }
+        if(!qtdStr || parseInt(qtdStr) <= 0) { alert('A quantidade deve ser maior que zero.'); return false; }
+        
+        let qtd = parseInt(qtdStr);
+        let id_nome = val.split('|');
+        data.push({ operador_id: id_nome[0], operador_nome: id_nome[1], quantidade_produzida: qtd });
+        soma += qtd;
+    }
+    
+    if(data.length === 0) {
+        alert('Adicione ao menos um colaborador ou desmarque a opção Múltiplos.');
+        return false;
+    }
+    
+    if(soma !== totalEsperado) {
+        alert(`A soma das quantidades (${soma}) não bate com a quantidade do item (${totalEsperado})!`);
+        return false; // Bloqueia!
+    }
+    
+    return data;
+}
+// ==== END MULTIPLOS OPERADORES INJECT ====
+
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     setupNavigation();
@@ -846,6 +922,24 @@ async function assignItem(itemId, sectorCode, paramsOrName) {
         });
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             // Sucesso silencioso (MVP) ou Toast?
             // Toast simples
             const toast = document.createElement('div');
@@ -961,7 +1055,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
 
             if (nextStatus) {
                 if (statusFiltro === 'AGUARDANDO_EMBALE') {
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="if(validateResponsible(${item.id})) openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}')">Conferir Embale</button>`;
+                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="if(validateResponsible(${item.id})) openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}', ${item.quantidade})">Conferir Embale</button>`;
                 } else if (statusFiltro === 'AGUARDANDO_ENVIO') {
                     const itemJson = JSON.stringify(item).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
                     // Validate before opening label modal
@@ -970,7 +1064,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                     if (!item.setor_destino) {
                         actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem; background: var(--text-secondary); cursor: not-allowed;" onclick="alert('Defina a forma de impressão na Arte Final antes de concluir o Desembale.')">Liberar Produção</button>`;
                     } else {
-                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="if(validateResponsible(${item.id})) openDesembaleConfirmation(${item.id}, '${nextStatus}')">${btnLabel}</button>`;
+                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="if(validateResponsible(${item.id})) openDesembaleConfirmation(${item.id}, '${nextStatus}', ${item.quantidade})">${btnLabel}</button>`;
                     }
                 } else {
                     actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="mudarStatusItem(${item.id}, '${nextStatus}')">${btnLabel}</button>`;
@@ -1749,6 +1843,24 @@ async function handleNewOrderSubmit(e) {
         const resData = await res.json();
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Pedido criado com sucesso!');
             document.getElementById('newOrderModal').classList.remove('show');
             e.target.reset();
@@ -2167,6 +2279,24 @@ async function uploadLayout(itemId) {
         }
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Layout enviado com sucesso!');
             // Capture current responsible to preserve it
             const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
@@ -2213,6 +2343,24 @@ async function uploadDigitalFile(itemId) {
         const data = await res.json();
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Arquivo de Impressão anexado com sucesso!');
             const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
             openArteAction(itemId, currentSector, currentResp);
@@ -2254,6 +2402,24 @@ async function uploadLaserFile(itemId) {
         const data = await res.json();
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Arquivo Laser anexado com sucesso!');
             const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
             openArteAction(itemId, currentSector, currentResp);
@@ -2372,6 +2538,24 @@ async function aprovarArte(itemId) {
         });
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Item aprovado e enviado para o próximo setor!'); // User feedback
 
             // REDIRECT TO THE INITIAL QUEUE
@@ -2404,7 +2588,7 @@ async function mudarStatusItem(itemId, novoStatus) {
 
 // --- EMBALE (PACKING) ---
 
-function openEmbaleAction(itemId, pedidoId, tipoEnvio) {
+function openEmbaleAction(itemId, pedidoId, tipoEnvio, itemQuantidade) {
     const isRetirada = tipoEnvio === 'RETIRADA';
 
     // Base HTML structure
@@ -2439,6 +2623,22 @@ function openEmbaleAction(itemId, pedidoId, tipoEnvio) {
         `;
     }
 
+    
+
+    const multiHtml = `
+        <div style="margin-bottom: 1rem; padding: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600; color: #334155;">
+                <input type="checkbox" id="checkMultiplos" onchange="toggleMultiplosUI(false)">
+                Múltiplos Colaboradores (Mutirão)
+            </label>
+            <div id="multiplosUI" style="display: none; margin-top: 1rem;">
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Adicione os colaboradores e a quantidade que cada um embalou (Soma deve ser igual a <span style="font-weight:bold;">${itemQuantidade}</span>).</p>
+                <div id="multiplosList" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+                <button class="btn" style="width:auto; padding: 0.25rem 0.5rem; margin-top: 0.5rem; border: 1px dashed #64748b; background: transparent; color: #64748b;" onclick="addMultiplosRow(false)">+ Add Colaborador</button>
+            </div>
+        </div>
+    `;
+    
     const html = `
         <div id="embaleModal" class="modal show">
             <div class="modal-content" style="min-width: 600px;">
@@ -2446,19 +2646,20 @@ function openEmbaleAction(itemId, pedidoId, tipoEnvio) {
                 <p>Pedido #${pedidoId} - Envio: <strong>${tipoEnvio}</strong></p>
                 <hr style="margin: 1rem 0; border: 0; border-top: 1px solid var(--border)">
                 
+                ${multiHtml}
                 ${baseHtml}
 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
                     <!-- Botão de Bypass (Esquerda) -->
                     <button class="btn" style="background: transparent; border: 1px solid var(--warning); color: #b45309; font-size: 0.8rem;" 
-                            onclick="openEmbaleConfirmationWrapper(${itemId}, ${pedidoId}, '${tipoEnvio}', true)">
+                            onclick="openEmbaleConfirmationWrapper(${itemId}, ${pedidoId}, '${tipoEnvio}', true, ${itemQuantidade})">
                         <i class="ph-warning"></i> Enviar p/ Logística sem info. volumes
                     </button>
 
                     <!-- Botões Padrão (Direita) -->
                     <div style="text-align: right;">
                         <button class="btn" style="background: var(--text-secondary); width: auto; margin-right: 0.5rem;" onclick="document.getElementById('embaleModal').remove()">Cancelar</button>
-                        <button class="btn" style="width: auto;" onclick="openEmbaleConfirmationWrapper(${itemId}, ${pedidoId}, '${tipoEnvio}', false)">Confirmar e Liberar</button>
+                        <button class="btn" style="width: auto;" onclick="openEmbaleConfirmationWrapper(${itemId}, ${pedidoId}, '${tipoEnvio}', false, ${itemQuantidade})">Confirmar e Liberar</button>
                     </div>
                 </div>
             </div>
@@ -2473,8 +2674,13 @@ function openEmbaleAction(itemId, pedidoId, tipoEnvio) {
 }
 
 // Wrapper para diferenciar confirmação normal vs bypass
-function openEmbaleConfirmationWrapper(itemId, pedidoId, tipoEnvio, isBypass) {
+function openEmbaleConfirmationWrapper(itemId, pedidoId, tipoEnvio, isBypass, itemQuantidade) {
     // Validação Inicial (apenas se NÃO for bypass)
+    
+    // Validate Multiplos early
+    if(document.getElementById('checkMultiplos').checked) {
+        if(window.getMultiplosData(false, itemQuantidade) === false) return; // failed validation
+    }
     if (!isBypass) {
         const qtd = document.getElementById('qtdVolumes').value;
         if (!qtd || qtd < 1) return alert("Informe a quantidade de volumes.");
@@ -2499,7 +2705,7 @@ function openEmbaleConfirmationWrapper(itemId, pedidoId, tipoEnvio, isBypass) {
                 "Confirmo que o pedido está embalado"
             ],
             "Confirmar Envio SEM VOLUMES",
-            () => submitEmbale(itemId, true, tipoEnvio, pedidoId) // Pass pedidoId
+            () => submitEmbale(itemId, true, tipoEnvio, pedidoId, itemQuantidade) // Pass pedidoId
         );
     } else {
         openConfirmationModal(
@@ -2510,12 +2716,12 @@ function openEmbaleConfirmationWrapper(itemId, pedidoId, tipoEnvio, isBypass) {
                 "O pedido está pronto para coleta/envio"
             ],
             "Finalizar e Enviar p/ Logística",
-            () => submitEmbale(itemId, false, tipoEnvio, pedidoId) // Pass pedidoId
+            () => submitEmbale(itemId, false, tipoEnvio, pedidoId, itemQuantidade) // Pass pedidoId
         );
     }
 }
 
-async function submitEmbale(itemId, isBypass, tipoEnvio, pedidoId) { // Accept tipoEnvio
+async function submitEmbale(itemId, isBypass, tipoEnvio, pedidoId, itemQuantidade) { // Accept tipoEnvio
     let payload = {};
 
     if (isBypass) {
@@ -2577,6 +2783,24 @@ async function submitEmbale(itemId, isBypass, tipoEnvio, pedidoId) { // Accept t
         });
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             // Custom Logic for RETIRADA
             if (tipoEnvio === 'RETIRADA') {
                 // POPUP BLOCKER FIX: Show a modal with a button so user click triggers the open.
@@ -2761,6 +2985,24 @@ async function confirmarEmbale(itemId, pedidoId, tipoEnvio) {
         console.log("Server Response:", data);
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             document.getElementById('embaleModal').remove();
             alert('Embalagem confirmada! Item movido para Logística.');
             loadDashboard(); // Force full dashboard reload to ensure proper state
@@ -2973,6 +3215,24 @@ async function handleEditSubmit(e, id, isRestricted) {
         const data = await res.json();
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Pedido atualizado com sucesso!');
             document.getElementById('editOrderModal').remove();
             loadOrders(); // Refresh
@@ -2996,6 +3256,24 @@ async function deleteOrder(id) {
         const data = await res.json();
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert('Pedido excluído com sucesso!');
             loadDashboard(); // Refresh current page
         } else {
@@ -3118,7 +3396,7 @@ function openLabelModal(item) {
                     <i class="ph-warning"></i> <strong>Dados incompletos!</strong><br>
                     Não foram encontrados pesos/dimensões para todos os ${item.quantidade_volumes} volumes.<br>
                     <small>Verifique se todos os campos foram preenchidos no Embale.</small>
-                    <button class="btn" style="margin-top:0.5rem; width:100%" onclick="document.getElementById('labelModal').remove(); openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}')">Voltar para Embale</button>
+                    <button class="btn" style="margin-top:0.5rem; width:100%" onclick="document.getElementById('labelModal').remove(); openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}', ${item.quantidade})">Voltar para Embale</button>
                 </div>
             `;
         }
@@ -3502,6 +3780,24 @@ async function submitRollback(itemId) {
         });
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             alert("Item retornado com sucesso!");
             closeRollbackModal();
 
@@ -3604,8 +3900,84 @@ function openConfirmationModal(title, checklistItems, confirmText, onConfirm) {
     };
 }
 
-function openDesembaleConfirmation(itemId, nextStatus) {
-    openConfirmationModal(
+function openDesembaleConfirmation(itemId, nextStatus, itemQuantidade) {
+    const multiHtml = `
+        <div style="margin-bottom: 1rem; padding: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; text-align: left;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600; color: #334155;">
+                <input type="checkbox" id="checkMultiplosDesembale" onchange="toggleMultiplosUI(true)">
+                Múltiplos Colaboradores (Mutirão)
+            </label>
+            <div id="multiplosUIDesembale" style="display: none; margin-top: 1rem;">
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Adicione os colaboradores e a quantidade que cada um desembalou (Soma deve ser igual a <span style="font-weight:bold;">${itemQuantidade}</span>).</p>
+                <div id="multiplosListDesembale" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+                <button class="btn" style="width:auto; padding: 0.25rem 0.5rem; margin-top: 0.5rem; border: 1px dashed #64748b; background: transparent; color: #64748b;" onclick="addMultiplosRow(true)">+ Add Colaborador</button>
+            </div>
+        </div>
+    `;
+
+    // Cannot use standard Confirmation Modal if we want to inject inputs, we must build a custom modal!
+    document.body.insertAdjacentHTML('beforeend', `
+        <div id="desembaleModal" class="modal show">
+            <div class="modal-content" style="min-width: 500px; text-align: center;">
+                <div style="margin-bottom: 1rem;">
+                    <div style="background:var(--bg-app); border:1px solid var(--border); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: var(--text-primary);">
+                        <i class="ph-warning" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <h3 style="margin-bottom: 1rem;">Confirmação de Desembale</h3>
+                
+                <ul style="text-align: left; background: #f8fafc; padding: 1rem 1rem 1rem 2rem; border-radius: 0.5rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                    <li style="margin-bottom: 0.5rem">Conferi os itens 1 a 1</li>
+                    <li style="margin-bottom: 0.5rem">Realizei a contagem corretamente</li>
+                    <li style="margin-bottom: 0.5rem">Fiz o desembale e separação</li>
+                    <li>Encaminhei etapa correta</li>
+                </ul>
+
+                ${multiHtml}
+
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('desembaleModal').remove()">Voltar</button>
+                    <button class="btn" style="width: auto;" onclick="submitDesembale(${itemId}, '${nextStatus}', ${itemQuantidade})">Confirmar e avançar</button>
+                </div>
+            </div>
+        </div>
+    `);
+}
+
+// Custom submitDesembale Function to handle API and Multiplos
+window.submitDesembale = async function(itemId, nextStatus, itemQuantidade) {
+    const mData = window.getMultiplosData(true, itemQuantidade);
+    if(document.getElementById('checkMultiplosDesembale').checked && mData === false) return; // failed validation
+
+    try {
+        // Change Status First (existing logic)
+        await fetch(`/api/production/item/${itemId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ novo_status_item: nextStatus, operador_id: currentUser.id })
+        });
+
+        // Insert Multiplos if needed
+        if(mData !== null) {
+            await fetch('/api/production/evento', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: itemId,
+                    setor: 'DESEMBALE',
+                    acao: 'FIM',
+                    multiplos_operadores: mData
+                })
+            });
+        }
+        
+        document.getElementById('desembaleModal').remove();
+        loadGenericQueue('AGUARDANDO_DESEMBALE', 'Desembale');
+        
+    } catch(e) { console.error('Erro desembale', e); }
+}
+
+function REPLACED_OLD_CONFIRMATION() 
         "Confirmação de Desembale",
         [
             "Conferi os itens 1 a 1",
@@ -3726,6 +4098,24 @@ async function skipProduction(itemId, setor) {
         });
 
         if (res.ok) {
+            // ==== MULTIPLOS OPERADORES INJECT ====
+            const mData = window.getMultiplosData(false, itemQuantidade);
+            if(mData !== null) {
+                // If mData is not null, it means checkbox is checked and it passed validation
+                try {
+                    await fetch('/api/production/evento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: itemId,
+                            setor: 'EMBALE',
+                            acao: 'FIM',
+                            multiplos_operadores: mData
+                        })
+                    });
+                } catch(err) { console.error('Erro ao salvar multiples: ', err); }
+            }
+
             loadProductionQueue(setor); // Atualiza a tela local imediatamente
         } else {
             const errData = await res.json();
