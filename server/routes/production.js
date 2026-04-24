@@ -317,16 +317,20 @@ router.post('/evento', (req, res) => {
             }
 
             let newStatus = null;
-            if (acao === 'INICIO') {
-                newStatus = 'EM_PRODUCAO';
-            } else if (acao === 'FIM') {
-                if (setor === 'IMPRESSAO_DIGITAL') {
-                    // Digital -> Estamparia (Special Flow)
-                } else {
+            const isProductionSector = ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(setor);
+
+            if (isProductionSector) {
+                if (acao === 'INICIO') {
+                    newStatus = 'EM_PRODUCAO';
+                } else if (acao === 'FIM') {
+                    if (setor === 'IMPRESSAO_DIGITAL') {
+                        // Special Flow logic handled below for extraCols
+                    } else {
+                        newStatus = 'AGUARDANDO_EMBALE';
+                    }
+                } else if (acao === 'PULAR') {
                     newStatus = 'AGUARDANDO_EMBALE';
                 }
-            } else if (acao === 'PULAR') {
-                newStatus = 'AGUARDANDO_EMBALE';
             }
 
             let updates = [];
@@ -337,7 +341,9 @@ router.post('/evento', (req, res) => {
                 updateParams.push(newStatus);
             }
 
-            if (acao === 'FIM' && setor === 'IMPRESSAO_DIGITAL') {
+            if (isProductionSector && acao === 'FIM' && setor === 'IMPRESSAO_DIGITAL') {
+                // Ensure it overrides if not already in updates, or just replaces it (handled purely here)
+                updates = updates.filter(u => u !== "status_atual = ?"); // Safety cleanup
                 updates.push("status_atual = ?");
                 updateParams.push('AGUARDANDO_PRODUCAO');
                 updates.push("setor_destino = ?");
