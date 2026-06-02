@@ -3,16 +3,24 @@ let currentUser = null;
 
 // Inicialização
 
-// ==== START MULTIPLOS OPERADORES INJECT ====
-let sectorUsersCache = [];
-async function fetchSectorUsersCache(sectorCode) {
-    if(sectorUsersCache.length === 0) {
+// ==== CACHE GLOBAL DE COLABORADORES POR SETOR ====
+const globalSectorUsersCache = {};
+async function getSectorUsersCached(sectorCode) {
+    if (!globalSectorUsersCache[sectorCode] || globalSectorUsersCache[sectorCode].length === 0) {
         try {
-            const r = await fetch('/api/collaborators/sector/' + sectorCode);
-            sectorUsersCache = await r.json();
-        } catch(e) {}
+            const res = await fetch('/api/collaborators/sector/' + sectorCode);
+            if (res.ok) {
+                globalSectorUsersCache[sectorCode] = await res.json();
+            }
+        } catch (e) {
+            console.error(`Erro ao carregar colaboradores do setor ${sectorCode}:`, e);
+        }
     }
-    return sectorUsersCache;
+    return globalSectorUsersCache[sectorCode] || [];
+}
+
+async function fetchSectorUsersCache(sectorCode) {
+    return await getSectorUsersCached(sectorCode);
 }
 
 window.toggleMultiplosUI = function(isDesembale) {
@@ -812,12 +820,12 @@ function resetOrderFilters() {
 
 // 2. Fila de Arte
 // 2. Fila de Arte
-// Helper: Filtro Local de Tabela (Genérico)
+// Helper: Filtro Local de Tabela (Genérico e Otimizado)
 function filterLocalTable(query) {
     const rows = document.querySelectorAll('#contentArea table tbody tr');
     const q = query.toLowerCase();
     rows.forEach(row => {
-        const text = row.innerText.toLowerCase();
+        const text = row.textContent.toLowerCase();
         row.style.display = text.includes(q) ? '' : 'none';
     });
 }
@@ -829,13 +837,7 @@ async function loadArteQueue() {
         const itens = await res.json();
 
         // --- BUSCAR COLABORADORES DA ARTE ---
-        let sectorUsers = [];
-        try {
-            const resUsers = await fetch('/api/collaborators/sector/ARTE_FINAL');
-            sectorUsers = await resUsers.json();
-        } catch (e) {
-            console.error("Erro carregando colaboradores de arte:", e);
-        }
+        let sectorUsers = await getSectorUsersCached('ARTE_FINAL');
 
         let html = `
             <div class="form-group" style="max-width: 400px; margin-bottom: 1rem;">
@@ -968,8 +970,7 @@ async function loadGenericQueue(statusFiltro, titulo) {
             else if (targetSectorCode === 'logistica') searchID = 'LOGISTICA';
 
             if (searchID) {
-                const resUsers = await fetch(`/api/collaborators/sector/${searchID}`);
-                sectorUsers = await resUsers.json();
+                sectorUsers = await getSectorUsersCached(searchID);
             }
         }
 
@@ -1199,17 +1200,7 @@ async function loadProductionQueue(setor) {
     document.getElementById('pageTitle').textContent = `Produção: ${setor.replace('_', ' ')}`;
 
     // --- BUSCAR COLABORADORES DO SUB-SETOR ---
-    let sectorUsers = [];
-    try {
-        const resUsers = await fetch(`/api/collaborators/sector/${setor}`);
-        if (resUsers.ok) {
-            sectorUsers = await resUsers.json();
-        }
-    } catch (e) {
-        console.error("Erro users impressao", e);
-    }
-
-    if (!Array.isArray(sectorUsers)) sectorUsers = [];
+    let sectorUsers = await getSectorUsersCached(setor);
 
     // Fetch Parallel: Execution + Future
     let itensExec = [];
@@ -1276,6 +1267,7 @@ async function loadProductionQueue(setor) {
     document.getElementById('contentArea').innerHTML = html;
 
     // START TIMERS
+    window.activeTimersCache = [];
     if (window.productionTimerInterval) clearInterval(window.productionTimerInterval);
     updateLiveTimers(); // Immediate run
     window.productionTimerInterval = setInterval(updateLiveTimers, 1000);
@@ -2006,11 +1998,7 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
     }
 
     // Fetch users for 'arte' sector to populate dropdown
-    let arteUsers = [];
-    try {
-        const resUsers = await fetch(`/api/collaborators/sector/ARTE_FINAL`); // Use standard code
-        arteUsers = await resUsers.json();
-    } catch (e) { console.error("Error fetching arte users", e); }
+    let arteUsers = await getSectorUsersCached('ARTE_FINAL');
 
     const status = item.arte_status || 'ARTE_NAO_FEITA';
 
@@ -3944,10 +3932,26 @@ function openPrintingConfirmation(itemId, sector) {
 
 // --- LIVE TIMER LOGIC ---
 function updateLiveTimers() {
-    const timers = document.querySelectorAll('.production-timer');
+    // Inicializa o cache se não existir
+    if (!window.activeTimersCache || window.activeTimersCache.length === 0) {
+        window.activeTimersCache = Array.from(document.querySelectorAll('#contentArea .production-timer'));
+    }
+
+    // Filtra para remover elementos que já foram removidos da tela (evitando vazamento de memória e processamento)
+    window.activeTimersCache = window.activeTimersCache.filter(timer => timer.isConnected);
+
+    if (window.activeTimersCache.length === 0) {
+        // Se não há cronômetros ativos na tela, podemos parar o intervalo temporariamente
+        if (window.productionTimerInterval) {
+            clearInterval(window.productionTimerInterval);
+            window.productionTimerInterval = null;
+        }
+        return;
+    }
+
     const now = new Date();
 
-    timers.forEach(timer => {
+    window.activeTimersCache.forEach(timer => {
         const elapsedInitial = timer.getAttribute('data-elapsed-initial');
         const clientStart = timer.getAttribute('data-client-start');
 
