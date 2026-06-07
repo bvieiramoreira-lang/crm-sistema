@@ -587,3 +587,38 @@ tr:hover td {
     color: var(--text-primary);
     border-color: var(--accent);
 }
+
+/* DENSE TABLES (e.g., for production Controle view) */
+.table-dense {
+    font-size: 0.8rem !important;
+}
+
+.table-dense th {
+    padding: 0.4rem 0.6rem !important;
+    font-size: 0.7rem !important;
+}
+
+.table-dense td {
+    padding: 0.4rem 0.6rem !important;
+    font-size: 0.8rem !important;
+    line-height: 1.25 !important;
+}
+
+.table-dense tr:hover td {
+    background: #f1f5f9;
+}
+
+.table-dense small {
+    font-size: 0.725rem !important;
+}
+
+.table-dense .badge {
+    font-size: 0.65rem !important;
+    padding: 0.15rem 0.4rem !important;
+}
+
+.table-dense .btn {
+    padding: 0.2rem 0.4rem !important;
+    font-size: 0.75rem !important;
+    border-radius: var(--radius-sm) !important;
+}

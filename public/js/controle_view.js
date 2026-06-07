@@ -29,8 +29,8 @@ async function loadControleQueue() {
             <input type="text" id="controleSearch" class="form-control" placeholder="🔍 Pesquisar na fila de controle..." oninput="filterLocalTable(this.value)">
         </div>
         
-        <div class="card">
-            <table>
+        <div class="card" style="padding: 0.75rem;">
+            <table class="table-dense">
                 <thead>
                     <tr>
                         <th>Pedido / Cliente</th>
@@ -147,9 +147,9 @@ async function fetchPendingPauses() {
         
         if (data.length > 0) {
             let html = `
-                <div class="card" style="border: 1px solid var(--danger); background: #fef2f2;">
-                    <h3 style="color: var(--danger); margin-top: 0; margin-bottom: 1rem;"><i class="ph-warning"></i> Solicitações de Pausa Pendentes (${data.length})</h3>
-                    <table style="background: white;">
+                <div class="card" style="border: 1px solid var(--danger); background: #fef2f2; padding: 0.75rem;">
+                    <h3 style="color: var(--danger); margin-top: 0; margin-bottom: 0.75rem;"><i class="ph-warning"></i> Solicitações de Pausa Pendentes (${data.length})</h3>
+                    <table class="table-dense" style="background: white;">
                         <thead>
                             <tr>
                                 <th>Pedido / Cliente</th>
