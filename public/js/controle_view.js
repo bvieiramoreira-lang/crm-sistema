@@ -8,16 +8,29 @@ async function loadControleQueue() {
         <div id="pendingPausesContainer" style="display: none; margin-bottom: 1.5rem;"></div>
         
         <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap;">
-            <div class="card" style="padding: 1rem; flex: 1; display:flex; gap: 1rem; align-items: flex-end; background: #f8fafc; border: 1px solid #e2e8f0;">
-                <div class="form-group" style="margin-bottom:0;">
+            <div class="card" style="padding: 1rem; flex: 1; display:flex; gap: 1rem; align-items: flex-end; background: #f8fafc; border: 1px solid #e2e8f0; flex-wrap: wrap;">
+                <div class="form-group" style="margin-bottom:0; min-width: 150px;">
                     <label style="font-size: 0.8rem; font-weight: bold; color: var(--text-secondary);">Filtrar por Prazo (Início)</label>
                     <input type="date" id="controleStart" class="form-control" onchange="fetchControleData()">
                 </div>
-                <div class="form-group" style="margin-bottom:0;">
+                <div class="form-group" style="margin-bottom:0; min-width: 150px;">
                     <label style="font-size: 0.8rem; font-weight: bold; color: var(--text-secondary);">Filtrar por Prazo (Fim)</label>
                     <input type="date" id="controleEnd" class="form-control" onchange="fetchControleData()">
                 </div>
-                <button class="btn btn-secondary" style="height: 42px;" onclick="document.getElementById('controleStart').value=''; document.getElementById('controleEnd').value=''; fetchControleData();"><i class="ph-eraser"></i> Limpar Omissos</button>
+                <div class="form-group" style="margin-bottom:0; min-width: 180px;">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: var(--text-secondary);">Filtrar por Setor</label>
+                    <select id="controleSetor" class="form-control" onchange="applyControleFilters()">
+                        <option value="">Todos os Setores</option>
+                        <option value="SEM_SETOR">Sem Setor Definido</option>
+                        <option value="SILK_PLANO">Silk Plano</option>
+                        <option value="SILK_CILINDRICA">Silk Cilíndrica</option>
+                        <option value="TAMPOGRAFIA">Tampografia</option>
+                        <option value="IMPRESSAO_LASER">Impressão Laser</option>
+                        <option value="IMPRESSAO_DIGITAL">Impressão Digital</option>
+                        <option value="ESTAMPARIA">Estamparia</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary" style="height: 42px;" onclick="document.getElementById('controleStart').value=''; document.getElementById('controleEnd').value=''; document.getElementById('controleSetor').value=''; fetchControleData();"><i class="ph-eraser"></i> Limpar Filtros</button>
             </div>
             
             <div id="controleMetrics" style="display:flex; gap: 1rem;">
@@ -26,7 +39,7 @@ async function loadControleQueue() {
         </div>
         
         <div class="form-group" style="max-width: 400px; margin-bottom: 1rem;">
-            <input type="text" id="controleSearch" class="form-control" placeholder="🔍 Pesquisar na fila de controle..." oninput="filterLocalTable(this.value)">
+            <input type="text" id="controleSearch" class="form-control" placeholder="🔍 Pesquisar na fila de controle..." oninput="applyControleFilters()">
         </div>
         
         <div class="card" style="padding: 0.75rem;">
@@ -109,7 +122,7 @@ async function fetchControleData() {
             const prazoLabel = item.prazo_entrega ? new Date(item.prazo_entrega).toLocaleDateString() : '-';
             
             rowsHtml += `
-                <tr>
+                <tr data-setor="${item.setor_destino || ''}">
                     <td><strong>${item.numero_pedido}</strong><br><small style="color:var(--text-secondary)">${item.cliente}</small></td>
                     <td><strong>${item.produto}</strong></td>
                     <td>x${item.quantidade}</td>
@@ -126,11 +139,8 @@ async function fetchControleData() {
 
         document.getElementById('controleTableBody').innerHTML = rowsHtml;
         
-        // Re-aplicar filtro textual base caso o campo n\u00e3o esteja vazio
-        const searchInput = document.getElementById('controleSearch');
-        if(searchInput && searchInput.value) {
-            filterLocalTable(searchInput.value);
-        }
+        // Re-aplicar filtros (texto e setor)
+        applyControleFilters();
 
     } catch (e) {
         document.getElementById('controleTableBody').innerHTML = `<tr><td colspan="8" style="text-align:center; color:red;">Erro ao processar dados de Controle: ${e.message}</td></tr>`;
@@ -218,5 +228,60 @@ async function denyPausa(itemId) {
         console.error(e);
         alert('Erro ao negar pausa.');
     }
+}
+
+function applyControleFilters() {
+    const searchVal = (document.getElementById('controleSearch')?.value || '').toLowerCase();
+    const sectorVal = document.getElementById('controleSetor')?.value || '';
+    
+    const rows = document.querySelectorAll('#controleTableBody tr');
+    
+    if (rows.length === 1 && rows[0].cells.length === 1 && 
+        (rows[0].textContent.includes('Buscando') || rows[0].textContent.includes('Nenhum') || rows[0].textContent.includes('Erro'))) {
+        return;
+    }
+
+    let totalPedidosSet = new Set();
+    let totalProdutos = 0;
+    let totalUnidadesVolume = 0;
+
+    rows.forEach(row => {
+        const rowText = row.textContent.toLowerCase();
+        const rowSector = row.getAttribute('data-setor') || '';
+        
+        const matchesSearch = rowText.includes(searchVal);
+        const matchesSector = !sectorVal || 
+                              (sectorVal === 'SEM_SETOR' && !rowSector) || 
+                              (rowSector === sectorVal);
+        
+        if (matchesSearch && matchesSector) {
+            row.style.display = '';
+            totalProdutos++;
+            
+            // Extrair número do pedido (td[0] -> strong)
+            const pedidoStrong = row.cells[0]?.querySelector('strong');
+            if (pedidoStrong) {
+                totalPedidosSet.add(pedidoStrong.textContent.trim());
+            }
+            
+            // Extrair quantidade (td[2], ex: "x50" -> 50)
+            const qtdCell = row.cells[2];
+            if (qtdCell) {
+                const qtdText = qtdCell.textContent.replace('x', '').trim();
+                totalUnidadesVolume += parseInt(qtdText) || 0;
+            }
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    // Atualizar os cards de métricas
+    const totalPedidosEl = document.querySelector('#controleMetrics div:nth-child(1) .value');
+    const totalProdutosEl = document.querySelector('#controleMetrics div:nth-child(2) .value');
+    const totalItensEl = document.querySelector('#controleMetrics div:nth-child(3) .value');
+
+    if (totalPedidosEl) totalPedidosEl.textContent = totalPedidosSet.size;
+    if (totalProdutosEl) totalProdutosEl.textContent = totalProdutos;
+    if (totalItensEl) totalItensEl.textContent = totalUnidadesVolume;
 }
 
