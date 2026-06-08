@@ -45,17 +45,27 @@ router.get('/itens/:contexto', (req, res) => {
             CASE 
                 WHEN i.is_pausado_producao = 1 THEN 0
                 WHEN i.status_atual = 'EM_PRODUCAO' THEN 
-                    CAST(strftime('%s', 'now') - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
-                WHEN (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1) IS NOT NULL THEN
-                    CAST(strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1)) - strftime('%s', (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1)) AS INTEGER)
+                    CAST(strftime('%s', 'now') - strftime('%s', ev_ini.timestamp) AS INTEGER)
+                WHEN ev_fim.timestamp IS NOT NULL THEN
+                    CAST(strftime('%s', ev_fim.timestamp) - strftime('%s', ev_ini.timestamp) AS INTEGER)
                 ELSE 0
             END 
         AS INTEGER) as decorrido_segundos,
-        (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') ORDER BY id DESC LIMIT 1) as inicio_producao_timestamp,
-        (SELECT timestamp FROM eventos_producao WHERE item_id = i.id AND acao = 'FIM' ORDER BY id DESC LIMIT 1) as fim_producao_timestamp,
+        ev_ini.timestamp as inicio_producao_timestamp,
+        ev_fim.timestamp as fim_producao_timestamp,
         p.numero_pedido, p.cliente, p.prazo_entrega, p.tipo_envio, p.transportadora, p.observacao 
         FROM itens_pedido i
         JOIN pedidos p ON i.pedido_id = p.id
+        LEFT JOIN eventos_producao ev_ini ON ev_ini.id = (
+            SELECT id FROM eventos_producao 
+            WHERE item_id = i.id AND acao IN ('INICIO', 'RETOMADA') 
+            ORDER BY id DESC LIMIT 1
+        )
+        LEFT JOIN eventos_producao ev_fim ON ev_fim.id = (
+            SELECT id FROM eventos_producao 
+            WHERE item_id = i.id AND acao = 'FIM' 
+            ORDER BY id DESC LIMIT 1
+        )
     `;
 
     if (contexto === 'ARTE') {

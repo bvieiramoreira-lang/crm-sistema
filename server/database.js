@@ -172,6 +172,8 @@ db.serialize(() => {
     db.run(`CREATE INDEX IF NOT EXISTS idx_itens_status_atual ON itens_pedido(status_atual)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_pedidos_status_geral ON pedidos(status_geral)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_eventos_item_id ON eventos_producao(item_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_eventos_item_id_acao_id ON eventos_producao(item_id, acao, id DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_itens_setor_status ON itens_pedido(setor_destino, status_atual)`);
 
     // Criar usuários padrão
     const criarUsuarioSeNaoExistir = (nome, username, password, perfil, setor_impressao = null) => {
