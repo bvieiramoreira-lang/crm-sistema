@@ -30,7 +30,7 @@ router.get('/live', (req, res) => {
             SELECT date(data_alteracao) as data, COUNT(DISTINCT pedido_id) as total
             FROM historico_pedidos
             WHERE valor_novo = 'FINALIZADO'
-            AND data_alteracao >= date('now', 'localtime', '-6 days')
+            AND data_alteracao >= date('now', 'localtime', '-14 days')
             GROUP BY date(data_alteracao)
             ORDER BY date(data_alteracao) ASC
         `,

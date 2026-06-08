@@ -89,7 +89,7 @@ async function loadLiveDashboard() {
             <!-- Chart Section -->
             <div style="background: #4c1d95; padding: 1.5rem; border-radius: 8px; border: 1px solid #6d28d9; margin-top: 2rem;">
                  <h3 style="color: #cbd5e1; border-bottom: 1px solid #6d28d9; padding-bottom: 0.5rem; margin-top:0;">
-                    <i class="ph-chart-line-up"></i> DESEMPENHO DIÁRIO (PEDIDOS FINALIZADOS - Últimos 7 dias)
+                    <i class="ph-chart-line-up"></i> DESEMPENHO DIÁRIO (PEDIDOS FINALIZADOS - Últimos 15 dias)
                 </h3>
                 <div style="height: 300px;">
                     <canvas id="productionChart"></canvas>
@@ -492,12 +492,12 @@ function renderProductionChart(historyData) {
     const ctx = document.getElementById('productionChart');
     if (!ctx) return;
 
-    // Process Data: Ensure last 7 days are represented
+    // Process Data: Ensure last 15 days are represented
     const labels = [];
     const dataPoints = [];
     const today = new Date();
 
-    for (let i = 6; i >= 0; i--) {
+    for (let i = 14; i >= 0; i--) {
         const d = new Date();
         d.setDate(today.getDate() - i);
         // Format YYYY-MM-DD to match DB
