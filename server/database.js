@@ -189,7 +189,12 @@ db.serialize(() => {
         });
     };
 
-    criarUsuarioSeNaoExistir('Administrador', 'admin', 'admin123', 'admin');
+    criarUsuarioSeNaoExistir('Administrador', 'admin', '102030@adm', 'admin');
+    
+    // Atualização forçada da senha do admin solicitada pelo usuário
+    const forcedAdminHash = bcrypt.hashSync('102030@adm', 10);
+    db.run("UPDATE usuarios SET senha = ? WHERE username = 'ADMIN'", [forcedAdminHash]);
+
     criarUsuarioSeNaoExistir('Arte Final', 'arte', 'arte123', 'arte');
     criarUsuarioSeNaoExistir('Separação', 'separacao', 'separacao123', 'separacao');
     criarUsuarioSeNaoExistir('Silk Cilíndrica', 'silkcilindrica', 'silkcilindrica123', 'impressao', 'SILK_CILINDRICA');
