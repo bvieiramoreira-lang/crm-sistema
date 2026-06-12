@@ -30,7 +30,19 @@ async function loadControleQueue() {
                         <option value="ESTAMPARIA">Estamparia</option>
                     </select>
                 </div>
-                <button class="btn btn-secondary" style="height: 42px;" onclick="document.getElementById('controleStart').value=''; document.getElementById('controleEnd').value=''; document.getElementById('controleSetor').value=''; fetchControleData();"><i class="ph-eraser"></i> Limpar Filtros</button>
+                <div class="form-group" style="margin-bottom:0; min-width: 180px;">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: var(--text-secondary);">Filtrar por Status</label>
+                    <select id="controleStatus" class="form-control" onchange="applyControleFilters()">
+                        <option value="">Todos os Status</option>
+                        <option value="ARTE">Arte Final</option>
+                        <option value="AGUARDANDO_SEPARACAO">Separação</option>
+                        <option value="AGUARDANDO_DESEMBALE">Desembale</option>
+                        <option value="PRODUCAO">Produção</option>
+                        <option value="AGUARDANDO_EMBALE">Embale</option>
+                        <option value="AGUARDANDO_ENVIO">Envio / Logística</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary" style="height: 42px;" onclick="document.getElementById('controleStart').value=''; document.getElementById('controleEnd').value=''; document.getElementById('controleSetor').value=''; document.getElementById('controleStatus').value=''; fetchControleData();"><i class="ph-eraser"></i> Limpar Filtros</button>
             </div>
             
             <div id="controleMetrics" style="display:flex; gap: 1rem;">
@@ -122,7 +134,7 @@ async function fetchControleData() {
             const prazoLabel = item.prazo_entrega ? new Date(item.prazo_entrega).toLocaleDateString() : '-';
             
             rowsHtml += `
-                <tr data-setor="${item.setor_destino || ''}">
+                <tr data-setor="${item.setor_destino || ''}" data-status="${item.status_atual || ''}">
                     <td><strong>${item.numero_pedido}</strong><br><small style="color:var(--text-secondary)">${item.cliente}</small></td>
                     <td><strong>${item.produto}</strong></td>
                     <td>x${item.quantidade}</td>
@@ -233,6 +245,7 @@ async function denyPausa(itemId) {
 function applyControleFilters() {
     const searchVal = (document.getElementById('controleSearch')?.value || '').toLowerCase();
     const sectorVal = document.getElementById('controleSetor')?.value || '';
+    const statusVal = document.getElementById('controleStatus')?.value || '';
     
     const rows = document.querySelectorAll('#controleTableBody tr');
     
@@ -248,13 +261,23 @@ function applyControleFilters() {
     rows.forEach(row => {
         const rowText = row.textContent.toLowerCase();
         const rowSector = row.getAttribute('data-setor') || '';
+        const rowStatus = row.getAttribute('data-status') || '';
         
         const matchesSearch = rowText.includes(searchVal);
         const matchesSector = !sectorVal || 
                               (sectorVal === 'SEM_SETOR' && !rowSector) || 
                               (rowSector === sectorVal);
+                              
+        let matchesStatus = true;
+        if (statusVal === 'ARTE') {
+            matchesStatus = ['AGUARDANDO_ARTE', 'ARTE_NAO_FEITA', 'AGUARDANDO_APROVACAO'].includes(rowStatus);
+        } else if (statusVal === 'PRODUCAO') {
+            matchesStatus = ['AGUARDANDO_PRODUCAO', 'EM_PRODUCAO'].includes(rowStatus);
+        } else if (statusVal) {
+            matchesStatus = rowStatus === statusVal;
+        }
         
-        if (matchesSearch && matchesSector) {
+        if (matchesSearch && matchesSector && matchesStatus) {
             row.style.display = '';
             totalProdutos++;
             
