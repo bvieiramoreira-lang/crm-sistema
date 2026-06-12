@@ -229,7 +229,7 @@ function loadHistoryDashboard() {
         <div style="background: #fff; padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border);">
             <h3><i class="ph-file-text"></i> Relatórios de Produção</h3>
             <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                Métricas calculadas apenas sobre pedidos <strong>FINALIZADOS</strong>.
+                Métricas calculadas sobre etapas concluídas por cada colaborador no período.
             </p>
 
             <div class="filter-bar" style="margin: 1.5rem 0; display:flex; gap: 1rem; align-items:flex-end; flex-wrap:wrap;">
@@ -333,7 +333,7 @@ async function runHistoryReport() {
         const data = await res.json();
 
         if (data.length === 0) {
-            div.innerHTML = '<div class="alert alert-warning">Nenhum dado encontrado para os filtros selecionados (Lembre-se: Apenas pedidos FINALIZADOS).</div>';
+            div.innerHTML = '<div class="alert alert-warning">Nenhum dado encontrado para os filtros selecionados.</div>';
             return;
         }
 
