@@ -1,1362 +1,131 @@
-// Estado Global
-let currentUser = null;
+const fs = require('fs');
+const path = require('path');
 
-// Inicialização
-document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
-    setupNavigation();
-    loadDashboard();
-    updateMenuCounts(); // Initial Load
-    setInterval(updateMenuCounts, 30000); // Poll every 30s
+const filePath = 'c:\\Users\\Bruno\\Desktop\\CRM\\public\\js\\app.js';
 
-    document.getElementById('logoutBtn').addEventListener('click', logout);
-});
+let content = fs.readFileSync(filePath, 'utf8');
 
-async function updateMenuCounts() {
-    if (!currentUser) return;
-    try {
-        const res = await fetch('/api/production/stats');
-        const stats = await res.json();
+// Normalize newlines to LF for easy replacing
+content = content.replace(/\r\n/g, '\n');
 
-        // Stats example: { 'SILK_PLANO': 5, 'IMPRESSAO_DIGITAL': 2, 'ARTE': 3, ... }
+// 1. Locate loadArteQueue
+const startMarker = "async function loadArteQueue() {";
+const endMarker = "async function assignItem(itemId, sectorCode, paramsOrName) {";
 
-        // Printing Sectors
-        ['SILK_CILINDRICA', 'SILK_PLANO', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].forEach(sector => {
-            const badge = document.getElementById(`badge_menu_${sector}`);
-            if (badge) {
-                const count = stats[sector] || 0;
-                badge.textContent = count;
-                badge.style.display = count > 0 ? 'inline-block' : 'none';
-            }
-        });
+const startIdx = content.indexOf(startMarker);
+const endIdx = content.indexOf(endMarker, startIdx);
 
-        // Global Sectors
-        ['ARTE', 'DESEMBALE', 'EMBALE', 'LOGISTICA'].forEach(sector => {
-            const badge = document.getElementById(`badge_menu_${sector}`);
-            if (badge) {
-                const count = stats[sector] || 0;
-                badge.textContent = count;
-                badge.style.display = count > 0 ? 'inline-block' : 'none';
-            }
-        });
-
-    } catch (e) {
-        console.error("Error updating menu counts:", e);
-    }
+if (startIdx === -1 || endIdx === -1) {
+    console.error("Error: Could not find loadArteQueue markers in app.js");
+    process.exit(1);
 }
 
-// Helper: Badge de Envio Universal
-function renderShippingBadge(tipo) {
-    if (!tipo) return '<span class="badge" style="background:var(--text-secondary)">ENVIO: NÃO DEFINIDO</span>';
-
-    let color = 'var(--text-secondary)';
-    let icon = 'ph-question';
-
-    if (tipo === 'RETIRADA') {
-        color = '#0369a1'; // Blue
-        icon = 'ph-user';
-    } else if (tipo === 'TRANSPORTADORA') {
-        color = '#b45309'; // Amber
-        icon = 'ph-truck';
-    } else if (tipo === 'CORREIOS') {
-        color = '#eab308'; // Yellow/Gold
-        icon = 'ph-envelope-simple';
-    }
-
-    // Style adjustments for visibility
-    return `<span class="badge" style="background:${color}; color:white; display:inline-flex; align-items:center; gap:0.25rem;">
-        <i class="${icon}"></i> ENVIO: ${tipo}
-    </span>`;
-}
-
-// Helper: Deadline Badge with Logic
-function renderDeadline(dateStr) {
-    if (!dateStr) return '<span class="badge" style="background:#ccc">Sem Prazo</span>';
-
-    const deadline = new Date(dateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    deadline.setHours(0, 0, 0, 0);
-
-    const diffTime = deadline - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    let badgeClass = 'badge-blue'; // Default
-    let icon = 'ph-calendar';
-    let label = deadline.toLocaleDateString();
-    let style = '';
-
-    if (diffDays < 0) {
-        // Atrasado
-        style = 'background: #dc2626; color: white;'; // Red
-        icon = 'ph-warning';
-        label += ' (Atrasado)';
-    } else if (diffDays === 0 || diffDays === 1) {
-        // Hoje/Amanhã (Urgente)
-        style = 'background: #ea580c; color: white;'; // Orange
-        icon = 'ph-fire';
-        label += ' (Urgente)';
-    } else if (diffDays <= 3) {
-        // Atenção
-        style = 'background: #ca8a04; color: white;'; // Yellow/Gold darken
-        icon = 'ph-bell';
-        label += ' (Atenção)';
-    } else {
-        // Normal
-        style = 'background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;'; // Blue
-    }
-
-    return `<span class="badge" style="${style} display:inline-flex; align-items:center; gap:0.25rem;">
-        <i class="${icon}"></i> ${label}
-    </span>`;
-}
-
-// Helper: Modal de Etiqueta (Logística)
-
-function checkAuth() {
-    const userStr = localStorage.getItem('user');
-    if (!userStr) {
-        window.location.href = 'index.html';
-        return;
-    }
-    currentUser = JSON.parse(userStr);
-    document.getElementById('userInfo').textContent = `${currentUser.nome} (${currentUser.perfil})`;
-}
-
-function logout() {
-    localStorage.removeItem('user');
-    window.location.href = 'index.html';
-}
-
-// Configuração básica de navegação (Simplificada)
-function setupNavigation() {
-    const nav = document.getElementById('navMenu');
-    let items = [];
-
-    if (currentUser.perfil === 'financeiro' || currentUser.perfil === 'admin') {
-        items.push({ label: 'Pedidos', icon: 'ph-receipt', action: loadOrders });
-        items.push({ label: 'Novo Pedido', icon: 'ph-plus-circle', action: openNewOrderModal });
-    }
-
-    if (currentUser.perfil === 'arte' || currentUser.perfil === 'admin') {
-        items.push({ label: 'Fila de Arte', icon: 'ph-paint-brush', action: loadArteQueue, id: 'menu_ARTE' });
-    }
-
-    if (currentUser.perfil === 'separacao' || currentUser.perfil === 'admin') {
-        items.push({ label: 'Separação', icon: 'ph-package', action: () => loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação') });
-    }
-
-    if (currentUser.perfil === 'desembale' || currentUser.perfil === 'admin') {
-        items.push({ label: 'Desembale', icon: 'ph-box-open', action: () => loadGenericQueue('AGUARDANDO_DESEMBALE', 'Desembale'), id: 'menu_DESEMBALE' });
-    }
-
-    // Setores de Impressão
-    if (currentUser.perfil === 'admin') {
-        // ADMIN: Menu "Impressão" com submenus para TODOS os setores
-        items.push({
-            label: 'Impressão',
-            icon: 'ph-printer',
-            children: [
-                { label: 'Silk Cilíndrica', action: () => loadProductionQueue('SILK_CILINDRICA'), id: 'menu_SILK_CILINDRICA' },
-                { label: 'Silk Plano', action: () => loadProductionQueue('SILK_PLANO'), id: 'menu_SILK_PLANO' },
-                { label: 'Tampografia', action: () => loadProductionQueue('TAMPOGRAFIA'), id: 'menu_TAMPOGRAFIA' },
-                { label: 'Impressão Laser', action: () => loadProductionQueue('IMPRESSAO_LASER'), id: 'menu_IMPRESSAO_LASER' },
-                { label: 'Impressão Digital', action: () => loadProductionQueue('IMPRESSAO_DIGITAL'), id: 'menu_IMPRESSAO_DIGITAL' },
-                { label: 'Estamparia', action: () => loadProductionQueue('ESTAMPARIA'), id: 'menu_ESTAMPARIA' }
-            ]
-        });
-    } else if (currentUser.perfil === 'impressao') {
-        // USUÁRIO COMUM: Apenas seu setor
-        const setor = currentUser.setor_impressao || 'SILK_PLANO';
-        items.push({ label: `Produção (${setor})`, icon: 'ph-printer', action: () => loadProductionQueue(setor) });
-    }
-
-    if (currentUser.perfil === 'embale' || currentUser.perfil === 'admin') {
-        items.push({ label: 'Embale', icon: 'ph-gift', action: () => loadGenericQueue('AGUARDANDO_EMBALE', 'Embale'), id: 'menu_EMBALE' });
-    }
-
-    if (currentUser.perfil === 'logistica' || currentUser.perfil === 'admin') {
-        items.push({ label: 'Logística', icon: 'ph-truck', action: () => loadGenericQueue('AGUARDANDO_ENVIO', 'Logística'), id: 'menu_LOGISTICA' });
-    }
-
-    // RELATÓRIOS
-    items.push({ label: 'Relatórios', icon: 'ph-chart-line-up', action: loadReports, id: 'menu_REPORTS' });
-
-    if (currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro') {
-        items.push({ label: 'Finalizados/Arquivo', icon: 'ph-archive', action: loadFinishedOrders });
-    }
-
-    if (currentUser.perfil === 'admin') {
-        items.push({ label: 'Colaboradores', icon: 'ph-users', action: loadCollaborators });
-    }
-
-    nav.innerHTML = '';
-
-    items.forEach(item => {
-        if (item.children) {
-            // Render Parent with Submenu
-            const container = document.createElement('div');
-
-            // Parent Toggle
-            const toggle = document.createElement('div');
-            toggle.className = 'nav-link';
-            toggle.style.cursor = 'pointer';
-            toggle.innerHTML = `<div style="display:flex; align-items:center; flex:1;"><i class="${item.icon}" style="font-size: 1.2rem; margin-right: 0.5rem;"></i> ${item.label}</div> <i class="ph-caret-down" style="font-size:0.8rem;"></i>`;
-
-            // Submenu Container
-            const subNav = document.createElement('div');
-            subNav.style.display = 'none';
-            subNav.style.paddingLeft = '1.5rem';
-            subNav.style.background = 'rgba(0,0,0,0.02)';
-
-            toggle.onclick = (e) => {
-                e.preventDefault();
-                const isOpen = subNav.style.display === 'block';
-                subNav.style.display = isOpen ? 'none' : 'block';
-                toggle.querySelector('.ph-caret-down').style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
-                toggle.querySelector('.ph-caret-down').style.transition = 'transform 0.2s';
-            };
-
-            item.children.forEach(child => {
-                const subLink = document.createElement('a');
-                subLink.href = '#';
-                subLink.className = 'nav-link';
-                subLink.style.fontSize = '0.9rem';
-                // Add Badge Span
-                subLink.innerHTML = `<div style="display:flex; justify-content:space-between; width:100%">
-                    <span><i class="ph-caret-right" style="font-size:0.8rem; margin-right:0.5rem; color:#ccc;"></i> ${child.label}</span>
-                    <span id="badge_${child.id}" class="badge badge-blue" style="font-size:0.75rem; padding:0.1rem 0.4rem; display:none;">0</span>
-                </div>`;
-                subLink.onclick = (e) => {
-                    e.preventDefault();
-                    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                    subLink.classList.add('active');
-                    child.action();
-                };
-                subNav.appendChild(subLink);
-            });
-
-            container.appendChild(toggle);
-            container.appendChild(subNav);
-            nav.appendChild(container);
-
-        } else {
-            // Render Standard Item
-            const a = document.createElement('a');
-            a.href = '#';
-            a.className = 'nav-link';
-
-            let labelHtml = `<i class="${item.icon}" style="font-size: 1.2rem; margin-right: 0.5rem;"></i> ${item.label}`;
-
-            // Support Badge for standard items
-            if (item.id) {
-                labelHtml = `<div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                    <span><i class="${item.icon}" style="font-size: 1.2rem; margin-right: 0.5rem;"></i> ${item.label}</span>
-                    <span id="badge_${item.id}" class="badge badge-blue" style="font-size:0.75rem; padding:0.1rem 0.4rem; display:none;">0</span>
-                </div>`;
-            }
-
-            a.innerHTML = labelHtml;
-            a.onclick = (e) => {
-                e.preventDefault();
-                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                a.classList.add('active');
-                item.action();
-            };
-            nav.appendChild(a);
-        }
-    });
-}
-
-function loadDashboard() {
-    // Carrega a vista padrão baseada no perfil
-    const links = document.querySelectorAll('.nav-link');
-    if (links.length > 0) links[0].click();
-}
-
-// --- VISTAS ---
-
-// Helper: Validar Autenticação
-function renderOrderStatusBadge(status, detail) {
-    let color = '#64748b'; // Default gray
-    if (status === 'ARTE FINAL') color = '#eab308';
-    if (status === 'SEPARAÇÃO') color = '#f97316';
-    if (status === 'DESEMBALE') color = '#8b5cf6';
-    if (status === 'IMPRESSÃO') color = '#ec4899';
-    if (status === 'EMBALE') color = '#06b6d4';
-    if (status === 'LOGÍSTICA') color = '#3b82f6';
-    if (status === 'FINALIZADO') color = '#22c55e';
-
-    return `<span class="badge" style="background:${color}; color:white; font-size: 0.9em; padding: 0.35em 0.6em;">
-        ${status} ${detail ? `<small style="opacity:0.9">(${detail})</small>` : ''}
-    </span>`;
-}
-
-// 1. Pedidos (Financeiro)
-let cachedOrders = []; // Cache para evitar re-fetch no filtro
-
-// Relatórios (Movido para reports.js)
-function loadReports() {
-}
-
-async function loadOrders() {
-    document.getElementById('pageTitle').textContent = 'Gerenciamento de Pedidos';
-    document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
-
-    try {
-        const res = await fetch('/api/orders');
-        cachedOrders = await res.json();
-
-        renderOrdersView(false); // false = Modo Ativos
-
-    } catch (e) {
-        document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar pedidos</p>';
-        console.error(e);
-    }
-}
-
-let currentViewMode = 'active'; // 'active' or 'finished'
-
-async function loadFinishedOrders() {
-    document.getElementById('pageTitle').textContent = 'Arquivo de Pedidos Finalizados';
-    document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
-    currentViewMode = 'finished';
-
-    try {
-        const res = await fetch('/api/orders'); // Fetch all, filtered client side for now
-        cachedOrders = await res.json();
-        renderOrdersView(true);
-    } catch (e) {
-        document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar pedidos</p>';
-        console.error(e);
-    }
-}
-
-function renderOrdersView(isFinishedMode = false) {
-    currentViewMode = isFinishedMode ? 'finished' : 'active';
-
-    // Toolbar diferent para cada modo
-    let toolbarHtml = '';
-
-    if (isFinishedMode) {
-        // MODO FINALIZADOS: Apenas Pesquisa
-        toolbarHtml = `
-             <div class="card" style="padding: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: #f0fdf4; border: 1px solid #bbf7d0;">
-                <div class="form-group" style="margin-bottom:0; flex: 1; min-width: 250px;">
-                    <label style="font-size: 0.8rem; color: #15803d;"><strong>Arquivo de Finalizados</strong> - Pesquisa</label>
-                    <input type="text" id="searchInput" class="form-control" placeholder="Pesquisar pedido finalizado por nº ou cliente..." oninput="debouncedApplyOrderFilters()">
-                </div>
-                
-                 <button class="btn" style="width: auto; height: 42px; align-self: flex-end;" onclick="resetOrderFilters()">Limpar</button>
-
-                 <div style="flex:1; text-align:right; font-size:0.9rem; color:var(--text-secondary); align-self: flex-end; padding-bottom: 0.5rem;" id="orderCount">
-                    ...
-                 </div>
-            </div>
-        `;
-    } else {
-        // MODO ATIVOS: Completo
-        toolbarHtml = `
-             <div class="card" style="padding: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                <div class="form-group" style="margin-bottom:0; flex: 1; min-width: 250px;">
-                    <label style="font-size: 0.8rem;">Pesquisa Rápida</label>
-                    <input type="text" id="searchInput" class="form-control" placeholder="Buscar por pedido, cliente, produto ou referência..." oninput="debouncedApplyOrderFilters()">
-                </div>
-
-                <div class="form-group" style="margin-bottom:0; min-width: 200px;">
-                    <label style="font-size: 0.8rem;">Status do Pedido</label>
-                    <select id="filterStatus" class="form-control" onchange="applyOrderFilters()">
-                        <option value="">Todos</option>
-                        <option value="NOVO">Financeiro / Conferência</option>
-                        <option value="ARTE">Arte Final</option>
-                        <option value="SEPARACAO">Separação</option>
-                        <option value="DESEMBALE">Desembale</option>
-                        <option value="IMPRESSAO">Impressão</option>
-                        <option value="EMBALE">Embale</option>
-                        <option value="LOGISTICA">Logística</option>
-                        <option value="CONCLUIDO">Finalizado</option>
-                    </select>
-                </div>
-
-                <div class="form-group" style="margin-bottom:0; min-width: 200px;">
-                    <label style="font-size: 0.8rem;">Status do Item (Avançado)</label>
-                    <select id="filterItemStatus" class="form-control" onchange="applyOrderFilters()">
-                        <option value="">Qualquer</option>
-                        <option value="ARTE_NAO_FEITA">Arte não feita</option>
-                        <option value="AGUARDANDO_APROVACAO">Aguardando aprovação</option>
-                        <option value="APROVADO">Arte aprovada</option>
-                        <option value="AGUARDANDO_SEPARACAO">Em separação</option>
-                        <option value="AGUARDANDO_DESEMBALE">Separado / Aguardando Desembale</option>
-                        <option value="EM_DESEMBALE">Em desembale</option>
-                        <option value="AGUARDANDO_PRODUCAO">Desembalado / Aguardando Produção</option>
-                        <option value="EM_PRODUCAO">Em impressão/produção</option>
-                        <option value="AGUARDANDO_ESTAMPARIA">Aguardando Estamparia</option>
-                        <option value="AGUARDANDO_EMBALE">Impressão finalizada / Aguardando Embale</option>
-                        <option value="EMBALE_EM_ANDAMENTO">Em embale</option>
-                        <option value="AGUARDANDO_ENVIO">Embalado / Em logística</option>
-                        <option value="ENVIADO">Enviado / Retirada</option>
-                        <option value="CONCLUIDO">Finalizado (Item)</option>
-                    </select>
-                </div>
-                
-                 <button class="btn" style="width: auto; height: 42px; align-self: flex-end;" onclick="resetOrderFilters()">Limpar</button>
-
-                 <div style="flex:1; text-align:right; font-size:0.9rem; color:var(--text-secondary); align-self: flex-end; padding-bottom: 0.5rem;" id="orderCount">
-                    ...
-                 </div>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <p>Lista de pedidos ordenada por prazo de entrega.</p>
-                <button class="btn" style="width: auto;" onclick="openNewOrderModal()"> <i class="ph-plus-circle"></i> Novo Pedido</button>
-            </div>
-        `;
-    }
-
-    const html = `
-        <div style="margin-bottom: 1rem; display: flex; flex-direction: column; gap: 1rem;">
-             ${toolbarHtml}
-        </div>
-
-        <div class="card">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Nº Pedido</th>
-                        ${isFinishedMode ? '<th>Layout</th>' : ''}
-                        <th>Cliente</th>
-                        <th>Prazo</th>
-                        <th>Status Oficial</th>
-                        <th style="min-width: 140px;">Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="ordersTableBody">
-                    <!-- Será preenchido por applyOrderFilters -->
-                </tbody>
-            </table>
-        </div>
-    `;
-    document.getElementById('contentArea').innerHTML = html;
-
-    // Trigger initial filter application
-    applyOrderFilters();
-}
-
-function renderOrderRows(orders, isFinishedMode = false) {
-    if (orders.length === 0) return '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Nenhum pedido encontrado.</td></tr>';
-
-    const canEdit = currentUser && (currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro');
-
-    return orders.map(o => `
-        <tr>
-            <td><strong>${o.numero_pedido}</strong></td>
-            ${isFinishedMode ? `<td>${renderLayoutThumbnail(o)}</td>` : ''}
-            <td>${o.cliente}</td>
-            <td>${renderDeadline(o.prazo_entrega)}</td>
-            <td>
-                ${renderOrderStatusBadge(o.status_oficial, o.setor_detalhe)}
-                <div style="margin-top:0.25rem">${renderShippingBadge(o.tipo_envio)}</div>
-            </td>
-            <td>
-                <div style="display:flex; gap:0.5rem; white-space: nowrap;">
-                    <button class="btn" style="padding: 0.25rem 0.5rem; width: auto;" onclick="viewOrderDetails(${o.id})">Ver</button>
-                    ${canEdit && !isFinishedMode ? `<button class="btn" style="padding: 0.25rem 0.5rem; width: auto; background: var(--warning); color: #78350f" onclick="openEditOrderModal(${o.id})" title="Editar"><i class="ph-pencil-simple"></i> Editar</button>` : ''}
-                </div>
-            </td>
-        </tr>
-    `).join('');
-}
-
-let filterTimeout;
-function debouncedApplyOrderFilters() {
-    clearTimeout(filterTimeout);
-    filterTimeout = setTimeout(applyOrderFilters, 300);
-}
-
-function applyOrderFilters() {
-    // Get values safely (elements might not exist in Finished View)
-    const statusEl = document.getElementById('filterStatus');
-    const itemEl = document.getElementById('filterItemStatus');
-
-    const statusFilter = statusEl ? statusEl.value : '';
-    const itemFilter = itemEl ? itemEl.value : '';
-    const searchText = document.getElementById('searchInput').value.trim().toLowerCase();
-
-    const filtered = cachedOrders.filter(o => {
-        // 0. Search Text (Text match is primary)
-        const num = String(o.numero_pedido).toLowerCase();
-        const cli = String(o.cliente).toLowerCase();
-        const matchText = num.includes(searchText) || cli.includes(searchText);
-
-        if (!matchText) return false;
-
-        // 0.1 STRICT MODE SEPARATION (Active vs Finished)
-        // Respecting View Mode context unless user filters specifically for 'CONCLUIDO' in dropdown (which maps to FINISHED)
-        // But per request, 'CONCLUIDO' in dropdown shows finished orders.
-        // If View Mode is 'active' AND statusFilter is 'CONCLUIDO', we should probably allow it or switch views.
-        // For simplicity, we keep strict separation: Active view only shows Active. Finished shows Finished.
-        // However, user put "Finalizado" in the main dropdown. If they select it in Active view, they expect to see Finalized.
-        // Let's relax strictness IF statusFilter is set.
-
-        if (!statusFilter) {
-            // Default behavior: Strict view separation
-            if (currentViewMode === 'finished' && o.status_oficial !== 'FINALIZADO') return false;
-            if (currentViewMode === 'active' && o.status_oficial === 'FINALIZADO') return false;
-        }
-
-        // Helper to infer Effective Order Stage (replaces generic status_oficial)
-        const getOrderStage = (order) => {
-            if (order.status_oficial === 'CONCLUIDO' || order.status_oficial === 'FINALIZADO') return 'CONCLUIDO';
-            if (!order.itens || order.itens.length === 0) return 'NOVO'; // Financeiro
-
-            // Hierarquia de prioridade (Bottom-up bottlebeck)
-            // Se tem itens na arte -> ARTE
-            if (order.itens.some(i => i.arte_status === 'ARTE_NAO_FEITA' || i.arte_status === 'AGUARDANDO_APROVACAO' || i.arte_status === 'REPROVADO')) return 'ARTE';
-            if (order.itens.some(i => i.status_atual === 'AGUARDANDO_SEPARACAO')) return 'SEPARACAO';
-            if (order.itens.some(i => i.status_atual === 'AGUARDANDO_DESEMBALE' || i.status_atual === 'EM_DESEMBALE')) return 'DESEMBALE';
-            if (order.itens.some(i => i.status_atual === 'AGUARDANDO_PRODUCAO' || i.status_atual === 'EM_PRODUCAO' || i.status_atual === 'AGUARDANDO_ESTAMPARIA')) return 'IMPRESSAO';
-            if (order.itens.some(i => i.status_atual === 'AGUARDANDO_EMBALE' || i.status_atual === 'EMBALE_EM_ANDAMENTO')) return 'EMBALE';
-            if (order.itens.some(i => i.status_atual === 'AGUARDANDO_ENVIO')) return 'LOGISTICA';
-
-            return 'CONCLUIDO';
-        };
-
-        const effectiveStage = getOrderStage(o);
-
-        // 1. Status do Pedido Filter
-        if (statusFilter) {
-            // Mapping special cases if needed, but we aligned dropdown values to effectiveStage returns
-            if (statusFilter !== effectiveStage) return false;
-        }
-
-        // 2. Status do Item Filter
-        if (itemFilter) {
-            const hasItem = o.itens && o.itens.some(i => {
-                if (itemFilter === 'ARTE_NAO_FEITA') return i.arte_status === 'ARTE_NAO_FEITA';
-                if (itemFilter === 'AGUARDANDO_APROVACAO') return i.arte_status === 'AGUARDANDO_APROVACAO';
-                if (itemFilter === 'APROVADO') return i.arte_status === 'APROVADO';
-
-                // Exact match for others
-                return i.status_atual === itemFilter;
-            });
-            if (!hasItem) return false;
-        }
-
-        return true;
-    });
-
-
-
-    // Sort Logic
-    if (searchText && !isNaN(searchText)) {
-        // Search Priority
-        filtered.sort((a, b) => {
-            const aNum = String(a.numero_pedido).toLowerCase();
-            const bNum = String(b.numero_pedido).toLowerCase();
-            // Exact match comes first
-            if (aNum === searchText && bNum !== searchText) return -1;
-            if (bNum === searchText && aNum !== searchText) return 1;
-            // Starts with comes second
-            if (aNum.startsWith(searchText) && !bNum.startsWith(searchText)) return -1;
-            if (bNum.startsWith(searchText) && !aNum.startsWith(searchText)) return 1;
-            return 0;
-        });
-    } else {
-        // Default Sorts
-        if (currentViewMode === 'finished') {
-            // Finalized: Newest First (by ID as proxy for now)
-            filtered.sort((a, b) => b.id - a.id);
-        }
-        // Active: Preserve server order (deadline)
-    }
-
-    document.getElementById('ordersTableBody').innerHTML = renderOrderRows(filtered, currentViewMode === 'finished');
-    document.getElementById('orderCount').textContent = `${filtered.length} pedidos encontrados`;
-}
-
-function resetOrderFilters() {
-    if (document.getElementById('filterStatus')) document.getElementById('filterStatus').value = '';
-    if (document.getElementById('filterItemStatus')) document.getElementById('filterItemStatus').value = '';
-    document.getElementById('searchInput').value = '';
-    applyOrderFilters();
-}
-
-
-
-// 2. Fila de Arte
-async function loadArteQueue() {
+const newLoadArteQueue = `async function loadArteQueue() {
     document.getElementById('pageTitle').textContent = 'Fila de Arte';
     try {
         const res = await fetch('/api/production/itens/ARTE');
         const itens = await res.json();
 
         // --- BUSCAR COLABORADORES DA ARTE ---
-        let sectorUsers = [];
-        try {
-            const resUsers = await fetch('/api/collaborators/sector/ARTE_FINAL');
-            sectorUsers = await resUsers.json();
-        } catch (e) {
-            console.error("Erro carregando colaboradores de arte:", e);
-        }
+        let sectorUsers = await getSectorUsersCached('ARTE_FINAL');
 
-        let html = `
-            <div style="margin-bottom: 1rem;">
-                <input type="text" class="form-control" placeholder="Pesquisar na fila de Arte..." oninput="filterTable(this.value)">
-            </div>
-            <div class="card"><table><thead><tr><th>Pedido</th><th>Produto</th><th>Prazo</th><th>Status Arte</th><th>Responsável</th><th>Ação</th></tr></thead><tbody>`;
+        // Segregate items by status
+        const colEntrada = [];
+        const colInfo = [];
+        const colPronto = [];
+        const colWip = [];
+        const colAprovacao = [];
 
         itens.forEach(item => {
-            // --- DROPDOWN RESPONSÁVEL ---
-            const currentResp = item.responsavel_arte || '';
-            let options = `<option value="">-- Selecione --</option>`;
-            sectorUsers.forEach(u => {
-                const sel = u.nome === currentResp ? 'selected' : '';
-                options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
-            });
-
-            const respBlock = `
-                <select class="form-control" style="padding: 0.25rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1;" 
-                        onchange="assignItem(${item.id}, 'arte', this.value)">
-                    ${options}
-                </select>
-            `;
-
-            const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
-
-            const colorInfo = item.cor_impressao
-                ? `<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);"><i class="ph-drop"></i> Cor de Impressão: <strong>${item.cor_impressao}</strong></div>`
-                : '';
-
-            html += `
-                <tr>
-                    <td>${item.numero_pedido}<br><small>${item.cliente}</small></td>
-                    <td>
-                        ${item.produto} (x${item.quantidade})
-                        <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
-                        ${colorInfo}
-                    </td>
-                     <td>${new Date(item.prazo_entrega).toLocaleDateString()}</td>
-                     <td>
-                        <span class="badge ${item.arte_status === 'ARTE_NAO_FEITA' ? 'badge-danger' : (item.arte_status === 'AGUARDANDO_APROVACAO' ? 'badge-warning' : 'badge-success')}">
-                            ${item.arte_status}
-                        </span>
-                        <div style="margin-top:0.25rem">${layoutIndicator}</div>
-                     </td>
-                     <td>${respBlock}</td>
-                     <td>
-                        <button class="btn" style="width: auto; font-size: 0.8rem;" onclick="openArteAction(${item.id})">Definir / Upload</button>
-                     </td>
-                </tr>
-             `;
-        });
-
-        html += '</tbody></table></div>';
-        document.getElementById('contentArea').innerHTML = html;
-        console.log("Fila de Arte carregada. Usuários:", sectorUsers.length);
-    } catch (e) {
-        console.error(e);
-        document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar fila de arte.</p>';
-    }
-}
-
-// --- FUNÇÃO GLOBAL DE ATRIBUIÇÃO ---
-async function assignItem(itemId, sectorCode, paramsOrName) {
-    // sectorCode: 'arte', 'separacao', 'impressao', etc.
-    // paramsOrName: O valor do dropdown (nome do responsavel).
-
-    const responsavel = paramsOrName;
-    // Mapear coluna: 'responsavel_arte', 'responsavel_separacao'
-    const column = `responsavel_${sectorCode}`;
-
-    if (!responsavel) {
-        // Se vazio, talvez queira limpar? Por enquanto ignorar ou limpar.
-        // Vamos permitir limpar se vier string vazia
-    }
-
-    try {
-        const res = await fetch(`/api/production/item/${itemId}/assign`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sector: sectorCode, responsavel })
-        });
-
-        if (res.ok) {
-            // Sucesso silencioso (MVP) ou Toast?
-            // Toast simples
-            const toast = document.createElement('div');
-            toast.textContent = `Atribuído a ${responsavel}`;
-            toast.style.cssText = `position:fixed; bottom:20px; right:20px; background:#22c55e; color:white; padding:10px 20px; border-radius:4px; z-index:1000`;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        } else {
-            alert('Erro ao atribuir responsável.');
-        }
-    } catch (e) {
-        console.error('Erro assignItem', e);
-    }
-}
-
-// 3. Filas Genéricas (Separação, Desembale, Embale, Logística)
-// 3. Filas Genéricas (Separação, Desembale, Embale, Logística)
-async function loadGenericQueue(statusFiltro, titulo) {
-    document.getElementById('pageTitle').textContent = `Fila de ${titulo}`;
-
-    try {
-        const res = await fetch(`/api/production/itens/${statusFiltro}`);
-        let itens = await res.json();
-
-        document.getElementById('headerActions').innerHTML = `<span class="badge badge-blue">Total: <span id="queueCount">${itens.length}</span></span>`;
-
-        if (itens.length === 0) {
-            document.getElementById('contentArea').innerHTML = `
-                <div style="text-align: center; color: var(--text-secondary); margin-top: 3rem;">
-                    <i class="ph-tray" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                    <p>Nenhum item nesta fila.</p>
-                </div>
-            `;
-            return;
-        }
-
-        // --- BUSCAR COLABORADORES DO SETOR (MVP) ---
-        let targetSectorCode = getSectorFromStatus(statusFiltro);
-        let sectorUsers = [];
-
-        if (targetSectorCode) {
-
-            // MAPPING: statusFiltro -> Canonical Sector ID for Collaborators
-            let searchID = '';
-            if (targetSectorCode === 'separacao') searchID = 'SEPARACAO';
-            else if (targetSectorCode === 'desembale') searchID = 'DESEMBALE';
-            else if (targetSectorCode === 'embale') searchID = 'EMBALE';
-            else if (targetSectorCode === 'logistica') searchID = 'LOGISTICA';
-            else if (targetSectorCode === 'impressao') searchID = 'IMPRESSAO'; // Generic?
-
-            // Se for impressao, precisamos ser mais amplos na busca OU buscar todos
-            if (targetSectorCode === 'impressao') {
-                // MVP Simplificado: Vamos carregar lista COMPLETA de colaboradores para mapear direito.
-                const resAll = await fetch('/api/collaborators');
-                sectorUsers = await resAll.json();
-            } else if (searchID) {
-                const resUsers = await fetch(`/api/collaborators/sector/${searchID}`);
-                sectorUsers = await resUsers.json();
+            const status = item.arte_status || 'ENTRADA';
+            if (status === 'ENTRADA' || status === 'ARTE_NAO_FEITA') {
+                colEntrada.push(item);
+            } else if (status === 'AGUARDANDO_INFO') {
+                colInfo.push(item);
+            } else if (status === 'PRONTO_PARA_CRIAR') {
+                colPronto.push(item);
+            } else if (status === 'EM_DESENVOLVIMENTO') {
+                colWip.push(item);
+            } else if (status === 'AGUARDANDO_APROVACAO') {
+                colAprovacao.push(item);
+            } else {
+                colEntrada.push(item);
             }
-        }
-
-        let html = `
-            <div style="margin-bottom: 1rem;">
-                <input type="text" class="form-control" placeholder="Pesquisar na fila..." oninput="filterTable(this.value)">
-            </div>
-            <div class="card"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Ação</th></tr></thead><tbody>`;
-
-        itens.forEach(item => {
-            let actionBtn = '';
-
-            // Lógica de próximo status (Mantida)
-            let nextStatus = '';
-            let btnLabel = '';
-
-            if (statusFiltro === 'AGUARDANDO_SEPARACAO') {
-                nextStatus = 'AGUARDANDO_DESEMBALE';
-                btnLabel = 'Separado OK';
-            } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
-                nextStatus = 'AGUARDANDO_PRODUCAO';
-                btnLabel = 'Liberar Produção';
-            } else if (statusFiltro === 'AGUARDANDO_EMBALE') {
-                nextStatus = 'AGUARDANDO_ENVIO';
-                btnLabel = 'Embalado OK';
-            } else if (statusFiltro === 'AGUARDANDO_ENVIO') {
-                nextStatus = 'CONCLUIDO';
-                btnLabel = 'Despachar';
-            }
-
-            if (nextStatus) {
-                // Botões de Ação (Mantidos)
-                if (statusFiltro === 'AGUARDANDO_EMBALE') {
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}')">Conferir Embale</button>`;
-                } else if (statusFiltro === 'AGUARDANDO_ENVIO') {
-                    const itemJson = JSON.stringify(item).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick='openLabelModal(${itemJson})'> <i class="ph-tag"></i> Etiqueta / Despachar</button>`;
-                } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
-                    // Intercept Desembale for Confirmation
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="confirmDesembale(${item.id})">Liberar p/ Produção</button>`;
-                } else {
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="mudarStatusItem(${item.id}, '${nextStatus}')">${btnLabel}</button>`;
-                }
-
-                // INJECT ROLLBACK BUTTON
-                actionBtn += `<button class="btn" style="background:transparent; color:#666; border:1px solid #ccc; width:auto; padding:0.25rem 0.5rem; margin-left:0.5rem;" onclick="openRollbackModal(${item.id}, '${item.status_atual}', '${item.setor_destino || ''}')" title="Voltar Etapa"><i class="ph-arrow-u-up-left"></i> Voltar</button>`;
-
-            }
-
-            // --- DROPDOWN DE RESPONSÁVEL (MVP) ---
-            let respBlock = '';
-            if (targetSectorCode) {
-                const currentResp = item[`responsavel_${targetSectorCode}`] || '';
-
-                // Filtrar lista para item especifico (especialmente para Impressão)
-                let validUsers = sectorUsers;
-
-                if (targetSectorCode === 'impressao' && item.setor_destino) {
-                    // Filtrar apenas quem é do setor de destino (ex: Silk Plano)
-                    // item.setor_destino vem como 'SILK_PLANO'. Converter para 'Silk Plano'
-                    const setorReal = item.setor_destino.replace('SILK_', 'Silk ').replace('_', ' ').replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))); // Title Case basico
-
-                    // Busca aproximada
-                    validUsers = sectorUsers.filter(u => u.setor.toUpperCase().includes(setorReal.toUpperCase()) || u.setor.includes('Impressão'));
-                }
-
-                let options = `<option value="">-- Selecione --</option>`;
-                validUsers.forEach(u => {
-                    const sel = u.nome === currentResp ? 'selected' : '';
-                    options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
-                });
-
-                respBlock = `
-                    <div style="margin-bottom: 0.5rem;">
-                        <label style="font-size:0.7rem; color:#64748b; display:block">Responsável:</label>
-                        <select class="form-control" style="padding: 0.25rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1;" 
-                                onchange="assignItem(${item.id}, '${targetSectorCode}', this.value)">
-                            ${options}
-                        </select>
-                    </div>
-                `;
-            }
-
-            const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
-
-            const colorInfo = item.cor_impressao
-                ? `<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);"><i class="ph-drop"></i> Cor de Impressão: <strong>${item.cor_impressao}</strong></div>`
-                : '';
-
-            // Lógica de Setor de Impressão
-            let printSectorInfo = '';
-            if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
-                // ... Lógica mantida ...
-                if (item.setor_destino) {
-                    printSectorInfo = `<div style="margin-bottom: 0.5rem; display:inline-block;">
-                        <span class="badge badge-blue" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
-                            <i class="ph-printer"></i> IMPRESSÃO: ${item.setor_destino.replace('SILK_', 'SILK ').replace('_', ' ')}
-                        </span>
-                     </div>`;
-                } else {
-                    printSectorInfo = `<div style="margin-bottom: 0.5rem; display:inline-block;">
-                        <span class="badge badge-danger" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
-                            <i class="ph-warning"></i> IMPRESSÃO: NÃO DEFINIDA
-                        </span>
-                     </div>`;
-                    if (nextStatus) {
-                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem; background: var(--text-secondary); cursor: not-allowed;" onclick="alert('Defina a forma de impressão na Arte Final antes de concluir o Desembale.')">Liberar Produção</button>`;
-                    }
-                }
-            }
-
-            // --- NOVO: Observação da Arte Final (Global) ---
-            const obsArteContent = item.observacao_arte
-                ? `<span style="color: var(--text-primary); font-weight: 600;">${item.observacao_arte.toUpperCase()}</span>`
-                : `<span style="color: var(--text-secondary); font-style: italic;">SEM OBSERVAÇÕES DA ARTE FINAL</span>`;
-
-            const obsArteBlock = `
-                <div style="margin-top: 0.75rem; padding: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.85rem;">
-                    <div style="font-weight: 700; color: var(--accent); margin-bottom: 0.25rem; font-size: 0.75rem; text-transform: uppercase;">
-                        Observação da Arte Final
-                    </div>
-                    ${obsArteContent}
-                </div>
-            `;
-
-            html += `
-                <tr>
-                    <td>${item.numero_pedido}<br><small>${item.cliente}</small></td>
-                    <td>
-                        ${item.produto}
-                        ${item.referencia ? `<div style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">REF: ${item.referencia}</div>` : ''}
-                        <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
-                    </td>
-                    <td>${renderDeadline(item.prazo_entrega)}</td>
-                    <td>${item.quantidade}</td>
-                    <td>${respBlock}</td>
-                    <td>
-                        <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
-                            ${layoutIndicator}
-                            <div style="display:flex; flex-direction:column; align-items: flex-start; max-width: 400px;">
-                                ${printSectorInfo}
-                                ${colorInfo}
-                                ${obsArteBlock}
-                                <div style="margin-top: 0.5rem;">${actionBtn}</div>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
         });
 
-        html += '</tbody></table></div>';
-        document.getElementById('contentArea').innerHTML = html;
+        // Dynamic badge colors/styles for WIP limit
+        const wipLimitClass = colWip.length >= 10 ? 'background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;' : '';
 
-    } catch (e) {
-        console.error(e);
-        document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar fila.</p>';
-    }
-}
-
-// 4. Produção (Impressão)
-async function loadProductionQueue(setor) {
-    document.getElementById('pageTitle').textContent = `Produção: ${setor.replace('_', ' ')}`;
-
-    // --- BUSCAR COLABORADORES DO SUB-SETOR ---
-    // setor vem como 'SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'ESTAMPARIA'
-    // Como padronizamos o DB para usar os MESMOS IDs, podemos buscar direto pelo 'setor'
-
-    let sectorUsers = [];
-    try {
-        const resUsers = await fetch(`/api/collaborators/sector/${setor}`);
-        sectorUsers = await resUsers.json();
-    } catch (e) {
-        console.error("Erro users impressao", e);
-    }
-
-    const res = await fetch(`/api/production/itens/${setor}`);
-    const itens = await res.json();
-
-    let html = `
-        <div style="margin-bottom: 1rem;">
-             <input type="text" class="form-control" placeholder="Pesquisar na produção..." oninput="filterTable(this.value)">
-        </div>
-        <div class="card"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Status</th><th>Responsável</th><th>Ação</th></tr></thead><tbody>`;
-
-    itens.forEach(item => {
-        // --- DROPDOWN RESPONSÁVEL ---
-        // Para impressão, salvamos em 'responsavel_impressao' genérico? Ou específico?
-        // Prompt diz: "responsavel_impressao" (único para a etapa de impressão).
-        const currentResp = item.responsavel_impressao || '';
-        let options = `<option value="">-- Selecione --</option>`;
-        sectorUsers.forEach(u => {
-            const sel = u.nome === currentResp ? 'selected' : '';
-            options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
-        });
-
-        const respBlock = `
-            <select class="form-control" style="padding: 0.25rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1;" 
-                    onchange="assignItem(${item.id}, 'impressao', this.value)">
-                ${options}
-            </select>
-        `;
-
-        const isRunning = item.status_atual === 'EM_PRODUCAO';
-        const actionBtn = isRunning
-            ? `<button class="btn" style="background: var(--danger)" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar</button>`
-            : `<button class="btn" style="background: var(--success)" onclick="confirmStartPrinting(${item.id}, '${setor}')">Iniciar</button>`;
-
-        const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
-
-        const colorInfo = item.cor_impressao
-            ? `<div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: #e0f2fe; border-radius: 4px; color: #0369a1; font-weight: bold; border: 1px solid #bae6fd;">
-                 <i class="ph-drop"></i> Cor de Impressão: ${item.cor_impressao}
-               </div>`
-            : `<div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: #fee2e2; border-radius: 4px; color: #b91c1c; font-weight: bold; border: 1px solid #fecaca;">
-                 <i class="ph-warning"></i> COR NÃO INFORMADA
-               </div>`;
-
-        // --- OBSERVAÇÃO DA ARTE FINAL (DESTAQUE) ---
-        const obsArteTexto = item.observacao_arte ? item.observacao_arte.toUpperCase() : 'SEM OBSERVAÇÕES DA ARTE FINAL';
-        const obsArteStyle = item.observacao_arte
-            ? 'background: #fef9c3; border: 1px solid #facc15; color: #854d0e;'
-            : 'background: #f1f5f9; border: 1px solid #e2e8f0; color: #94a3b8;';
-
-        const obsArteBlock = `
-            <div style="margin-top: 0.75rem; padding: 0.75rem; border-radius: 6px; ${obsArteStyle} font-size: 0.85rem; display: block;">
-                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom: 0.25rem; font-weight:bold; font-size: 0.75rem;">
-                    <i class="ph-warning-circle" style="font-size: 1rem;"></i> OBSERVAÇÃO DA ARTE FINAL
-                </div>
-                <div style="font-weight: 600; line-height: 1.4; word-break: break-word;">${obsArteTexto}</div>
-            </div>
-        `;
-
-        html += `
-            <tr>
-                 <td>${item.numero_pedido}</td>
-                 <td>
-                    ${item.produto}
-                    ${item.referencia ? `<div style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">REF: ${item.referencia}</div>` : ''}
-                    <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
-                    ${obsArteBlock}
-                    ${colorInfo}
-                 </td>
-                 <td>${renderDeadline(item.prazo_entrega)}</td>
-                 <td>${item.quantidade}</td>
-                 <td>${item.status_atual}</td>
-                 <td>${respBlock}</td>
-                 <td>
-                    <div style="display:flex; gap: 0.5rem; align-items: center;">
-                        ${layoutIndicator}
-                        <div style="display:flex; flex-direction:column; align-items: flex-start;">
-                            ${actionBtn}
-                            <button class="btn" style="background:transparent; color:#666; border:1px solid #ccc; width:auto; padding:0.25rem 0.5rem; margin-top:0.25rem;" onclick="openRollbackModal(${item.id}, '${item.status_atual}', '${item.setor_destino || ''}')" title="Voltar Etapa">
-                                <i class="ph-arrow-u-up-left"></i> Voltar
-                            </button>
-                        </div>
-                    </div>
-                 </td>
-            </tr>
-        `;
-    });
-    html += '</tbody></table></div>';
-    document.getElementById('contentArea').innerHTML = html;
-}
-
-// 5. Relatórios
-function loadReports() {
-    document.getElementById('pageTitle').textContent = 'Relatórios de Produtividade';
-
-    const today = new Date().toISOString().split('T')[0];
-
-    const html = `
-        <div class="card">
-            <div class="flex-row" style="gap: 1rem; align-items: flex-end; margin-bottom: 1rem;">
-                <div class="form-group">
-                    <label>Data Início</label>
-                    <input type="date" id="reportStart" class="form-control" value="${today}">
-                </div>
-                <div class="form-group">
-                    <label>Data Fim</label>
-                    <input type="date" id="reportEnd" class="form-control" value="${today}">
-                </div>
-                <button class="btn" onclick="fetchReports()" style="height: 42px; margin-bottom: 0;">Gerar Relatório</button>
-            </div>
-            <div id="reportResults">
-                <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Selecione o período e clique em Gerar.</p>
-            </div>
-        </div>
-    `;
-    document.getElementById('contentArea').innerHTML = html;
-}
-
-async function fetchReports() {
-    const start = document.getElementById('reportStart').value;
-    const end = document.getElementById('reportEnd').value;
-
-    document.getElementById('reportResults').innerHTML = '<p>Carregando...</p>';
-
-    try {
-        const res = await fetch(`/api/reports/productivity?start=${start}&end=${end}`);
-        const data = await res.json();
-
-        if (data.length === 0) {
-            document.getElementById('reportResults').innerHTML = '<p>Nenhum dado encontrado para o período.</p>';
-            return;
-        }
-
-        let table = `
-            <table>
-                <thead>
-                    <tr>
-                        <th>Operador</th>
-                        <th>Setor</th>
-                        <th>Total Produzido</th>
-                        <th>Eventos (Lotes)</th>
-                        <th>Tempo Total</th>
-                        <th>Peças/Hora</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-
-        data.forEach(row => {
-            table += `
-                <tr>
-                    <td>${row.operador}</td>
-                    <td>${row.setor}</td>
-                    <td><span class="badge badge-blue">${row.total_produzido}</span></td>
-                    <td>${row.total_eventos}</td>
-                    <td>${row.tempo_formatado}</td>
-                    <td><strong>${row.media_pecas_hora}</strong></td>
-                </tr>
-            `;
-        });
-
-        table += '</tbody></table>';
-        document.getElementById('reportResults').innerHTML = table;
-
-    } catch (e) {
-        document.getElementById('reportResults').innerHTML = '<p style="color:red">Erro ao gerar relatório.</p>';
-        console.error(e);
-    }
-}
-
-// --- AÇÕES ---
-
-function injectNewOrderModal() {
-    if (document.getElementById('newOrderModal')) return; // Já injetado
-
-    const modalHtml = `
-    <div id="newOrderModal" class="modal">
-        <div class="modal-content">
-            <h2 style="margin-bottom: 1rem;">Novo Pedido</h2>
-            <form id="newOrderForm">
-                <div class="flex-row">
-                    <div class="form-group" style="flex: 2">
-                        <label>Cliente</label>
-                        <input type="text" name="cliente" class="form-control" required>
-                    </div>
-                </div>
-                <div class="flex-row">
-                    <div class="form-group" style="flex: 1">
-                        <label>Nº Pedido</label>
-                        <input type="text" name="numero_pedido" class="form-control" required>
-                    </div>
-                    <div class="form-group" style="flex: 1">
-                        <label>Prazo de Entrega</label>
-                        <input type="date" name="prazo_entrega" class="form-control" required>
-                    </div>
-                </div>
-                <div class="flex-row">
-                    <div class="form-group" style="flex: 1">
-                        <label>Envio</label>
-                        <select name="tipo_envio" class="form-control">
-                            <option value="TRANSPORTADORA">Transportadora</option>
-                            <option value="CORREIOS">Correios</option>
-                            <option value="RETIRADA">Retirada</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex: 1">
-                         <label>Transportadora</label>
-                        <input type="text" name="transportadora" class="form-control" placeholder="Opcional">
-                    </div>
-                </div>
-
-                 <div class="form-group">
-                    <label>Observação</label>
-                    <textarea name="observacao" class="form-control" rows="3" placeholder="Detalhes adicionais, instruções..."></textarea>
-                </div>
-
-                <h3 style="margin-bottom: 0.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">Itens do Pedido</h3>
-                <div id="itemsContainer"></div>
-                
-                <button type="button" id="addItemBtn" class="btn" style="background: var(--bg-primary); border: 1px solid var(--accent); color: var(--accent); margin-bottom: 1rem;">
-                    <i class="ph-plus"></i> Adicionar Item
-                </button>
-
-                <div class="flex-row" style="justify-content: flex-end;">
-                    <button type="button" class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('newOrderModal').classList.remove('show')">Cancelar</button>
-                    <button type="submit" class="btn" style="width: auto; margin-left: 0.5rem;">Salvar Pedido</button>
-                </div>
-            </form>
-        </div>
-    </div>`;
-
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-    // Setup Event Listeners
-    const container = document.getElementById('itemsContainer');
-
-    document.getElementById('addItemBtn').onclick = () => {
-        const div = document.createElement('div');
-        div.className = 'flex-row';
-        div.style.marginBottom = '0.5rem';
-        div.innerHTML = `
-            <input type="text" placeholder="Nome do Produto" class="form-control" style="flex: 3" required>
-            <input type="text" placeholder="Referência (Opcional)" class="form-control" style="flex: 2; text-transform: uppercase;">
-            <input type="number" placeholder="Qtd" class="form-control" style="flex: 1" required>
-            <button type="button" class="btn" style="background: var(--danger); width: auto; padding: 0.5rem;" onclick="this.parentElement.remove()">
-                <i class="ph-trash"></i>
-            </button>
-        `;
-        container.appendChild(div);
-    };
-
-    document.getElementById('newOrderForm').onsubmit = handleNewOrderSubmit;
-}
-
-async function handleNewOrderSubmit(e) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const itens = [];
-    const rows = document.getElementById('itemsContainer').children;
-
-    for (let row of rows) {
-        itens.push({
-            produto: row.children[0].value,
-            produto: row.children[0].value,
-            referencia: row.children[1].value ? row.children[1].value.toUpperCase() : '',
-            quantidade: row.children[2].value
-        });
-    }
-
-    if (itens.length === 0) {
-        alert('Adicione pelo menos um item ao pedido.');
-        return;
-    }
-
-    const payload = {
-        cliente: formData.get('cliente'),
-        numero_pedido: formData.get('numero_pedido'),
-        prazo_entrega: formData.get('prazo_entrega'),
-        tipo_envio: formData.get('tipo_envio'),
-        transportadora: formData.get('transportadora'),
-        observacao: formData.get('observacao'),
-        itens: itens
-    };
-
-    try {
-        const res = await fetch('/api/orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const resData = await res.json();
-
-        if (res.ok) {
-            alert('Pedido criado com sucesso!');
-            document.getElementById('newOrderModal').classList.remove('show');
-            e.target.reset();
-            document.getElementById('itemsContainer').innerHTML = '';
-            viewOrderDetails(resData.id);
-        } else {
-            alert('Erro: ' + resData.error);
-        }
-    } catch (err) {
-        alert('Erro ao salvar pedido.');
-    }
-}
-
-function openNewOrderModal() {
-    // Garantir que existe
-    injectNewOrderModal();
-    document.getElementById('newOrderModal').classList.add('show');
-}
-
-async function viewOrderDetails(id) {
-    const res = await fetch(`/api/orders/${id}`);
-    const order = await res.json();
-
-    const canEdit = currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro';
-    const isAdmin = currentUser.perfil === 'admin';
-
-    const isFinalized = order.status_oficial === 'FINALIZADO';
-
-    if (isFinalized) {
-        renderFinishedOrderDossier(order);
-        return;
-    }
-
-    let html = `
-        <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <h3>Pedido ${order.numero_pedido} - ${order.cliente}</h3>
-                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.5rem">
-                    ${renderOrderStatusBadge(order.status_oficial, order.setor_detalhe)}
-                    <div style="display:flex; gap:0.5rem">
-                        ${canEdit && !isFinalized ? `<button class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.8rem; background: var(--warning); color: #78350f" onclick="openEditOrderModal(${order.id})"><i class="ph-pencil"></i> Editar</button>` : ''}
-                        ${isAdmin ? `<button class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.8rem; background: var(--text-secondary);" onclick="viewOrderHistory(${order.id})"><i class="ph-clock-counter-clockwise"></i> Histórico</button>` : ''}
-                    </div>
-                </div>
+        let html = \`
+            <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
+                <input type="text" id="kanbanSearchInput" class="form-control" placeholder="🔍 Pesquisar na arte..." oninput="filterKanbanCards(this.value)">
             </div>
             
-            <div style="margin-bottom:1rem; margin-top:0.5rem;">${renderShippingBadge(order.tipo_envio)}</div>
-            <p><strong>Envio Detalhes:</strong> ${order.transportadora ? order.transportadora : 'Padrão'}</p>
-            <p><strong>Observação:</strong> ${order.observacao || '<em>Nenhuma</em>'}</p>
-            <hr style="border:0; border-top:1px solid var(--border); margin: 1rem 0;">
-            <h4>Itens e Progresso</h4>
-            <table>
-                <thead><tr><th>Produto</th><th>Qtd</th><th>Setor Destino</th><th>Status Item</th><th>Ações</th></tr></thead>
-                <tbody>
-    `;
-
-    order.itens.forEach(item => {
-        let action = '';
-
-        // Ações contextuais baseadas no perfil e estado do item
-        // Se finalizado, não mostra ações de transição
-        if (!isFinalized) {
-            if (currentUser.perfil === 'separacao' && item.status_atual === 'AGUARDANDO_SEPARACAO') {
-                action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_DESEMBALE')">Separado OK</button>`;
-            }
-            else if (currentUser.perfil === 'desembale' && item.status_atual === 'AGUARDANDO_DESEMBALE') {
-                action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_PRODUCAO')">Liberar p/ Produção</button>`;
-            }
-            else if (currentUser.perfil === 'embale' && item.status_atual === 'AGUARDANDO_EMBALE') {
-                action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_ENVIO')">Embalado OK</button>`;
-            }
-        }
-
-        html += `
-            <tr>
-                <td>
-                    <div>${item.produto}</div>
-                    ${item.referencia ? `<div style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">REF: ${item.referencia}</div>` : ''}
-                </td>
-                <td>${item.quantidade}</td>
-                <td>${item.setor_destino || '-'}</td>
-                <td>${item.status_atual}</td>
-                <td>
-                     <div style="display:flex; gap: 1rem; align-items: center;">
-                          ${renderLayoutIndicator(item.layout_path, item.layout_type)}
-                          ${item.cor_impressao ? `<span title="Cor de Impressão: ${item.cor_impressao}"><i class="ph-drop"></i> Cor de Impressão: ${item.cor_impressao}</span>` : ''}
-                          ${item.observacao_arte ? `<span title="Obs Arte: ${item.observacao_arte}" style="margin-left:0.5rem; cursor:help; color:var(--accent);"><i class="ph-info"></i> Obs Art</span>` : ''}
-                          ${action}
-                     </div>
-                </td>
-            </tr>
-        `;
-    });
-
-    let deleteBtn = '';
-    if (currentUser.perfil === 'admin' && !isFinalized) {
-        // Botão de deletar (perigoso) - Bloqueado se finalizado
-        deleteBtn = `<button class="btn" style="width: auto; background: var(--danger); margin-left: 1rem;" onclick="deleteOrder(${order.id})"> <i class="ph-trash"></i> Excluir Pedido</button>`;
-    }
-
-    html += '</tbody></table>' + `<div style="margin-top:1rem; display:flex;">
-        <button class="btn" style="width: auto; background: var(--text-secondary)" onclick="loadDashboard()">Voltar</button>
-        ${deleteBtn}
-    </div></div>`;
-
-    document.getElementById('contentArea').innerHTML = html;
-}
-
-async function loadArteQueue() {
-    // alert('DEBUG: loadArteQueue called!'); // Verify entry
-    document.getElementById('pageTitle').textContent = 'Fila de Arte Final';
-    try {
-        // Fetch items waiting for Art/Approval
-        // Use the dedicated 'ARTE' context which filters WHERE arte_status != 'APROVADO'
-
-        const res = await fetch('/api/production/itens/ARTE');
-        const itens = await res.json();
-
-        document.getElementById('headerActions').innerHTML = `<span class="badge badge-blue">Total: <span id="queueCount">${itens.length}</span></span>`;
-
-        if (itens.length === 0) {
-            document.getElementById('contentArea').innerHTML = `
-                <div style="text-align: center; color: var(--text-secondary); margin-top: 3rem;">
-                    <i class="ph-paint-brush" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                    <p>Nenhum item na fila de arte.</p>
+            <div class="kanban-board">
+                <!-- COLUNA 1: ENTRADA -->
+                <div class="kanban-column" id="col-entrada">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-tray" style="color:var(--text-secondary)"></i> Entrada</div>
+                        <span class="kanban-column-count">\${colEntrada.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        \${colEntrada.map(item => renderKanbanCard(item, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum item</div>'}
+                    </div>
                 </div>
-            `;
-            return;
-        }
 
-        let html = `<div class="card"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Responsável</th><th>Status</th><th>Ação</th></tr></thead><tbody>`;
+                <!-- COLUNA 2: AGUARDANDO INFO -->
+                <div class="kanban-column" id="col-info">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-chat-circle-dots" style="color:var(--warning)"></i> Aguardando Info</div>
+                        <span class="kanban-column-count">\${colInfo.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        \${colInfo.map(item => renderKanbanCard(item, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum item</div>'}
+                    </div>
+                </div>
 
-        itens.forEach(item => {
-            html += `
-                <tr>
-                    <td>${item.numero_pedido} - ${item.cliente}</td>
-                    <td>${item.produto} (x${item.quantidade})</td>
-                    <td>${renderDeadline(item.prazo_entrega)}</td>
-                    <td>${item.responsavel_arte || '-'}</td>
-                    <td>${renderOrderStatusBadge(item.arte_status || item.status_atual)}</td>
-                    <td>
-                        <button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="openArteAction(${item.id})">
-                            <i class="ph-pencil-simple"></i> Abrir
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
+                <!-- COLUNA 3: PRONTO PARA CRIAR -->
+                <div class="kanban-column" id="col-pronto">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-check-circle" style="color:var(--accent)"></i> Pronto p/ Criar</div>
+                        <span class="kanban-column-count">\${colPronto.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        \${colPronto.map(item => renderKanbanCard(item, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum item</div>'}
+                    </div>
+                </div>
 
-        html += '</tbody></table></div>';
+                <!-- COLUNA 4: EM DESENVOLVIMENTO -->
+                <div class="kanban-column" id="col-wip">
+                    <div class="kanban-column-header" style="border-bottom: 2px solid var(--info);">
+                        <div class="kanban-column-title"><i class="ph-paint-brush-broad" style="color:var(--info)"></i> Em Desenvolvimento</div>
+                        <span class="kanban-column-count" style="\${wipLimitClass}">\${colWip.length} / 10</span>
+                    </div>
+                    <div class="kanban-cards">
+                        \${colWip.map(item => renderKanbanCard(item, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum item</div>'}
+                    </div>
+                </div>
+
+                <!-- COLUNA 5: AGUARDANDO APROVACAO -->
+                <div class="kanban-column" id="col-aprovacao">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-paper-plane-right" style="color:var(--success)"></i> Aguardando Aprovação</div>
+                        <span class="kanban-column-count">\${colAprovacao.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        \${colAprovacao.map(item => renderKanbanCard(item, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum item</div>'}
+                    </div>
+                </div>
+            </div>
+        \`;
+
         document.getElementById('contentArea').innerHTML = html;
+
+        // START TIMERS
+        window.activeTimersCache = [];
+        if (window.productionTimerInterval) clearInterval(window.productionTimerInterval);
+        updateLiveTimers(); // Immediate run
+        window.productionTimerInterval = setInterval(updateLiveTimers, 1000);
 
     } catch (e) {
         console.error(e);
@@ -1364,1649 +133,266 @@ async function loadArteQueue() {
     }
 }
 
-async function updateArteStatus(itemId, status) {
-    if (!confirm(`Confirmar alteração para status: ${status}?`)) return;
+// Helpers/Globais adicionados para suporte ao fluxo de Arte Final
+function parseSqliteDate(str) {
+    if (!str) return null;
+    return new Date(str.replace(' ', 'T'));
+}
+
+function filterKanbanCards(query) {
+    const cards = document.querySelectorAll('.kanban-card');
+    const lowerQuery = query.toLowerCase();
+    cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(lowerQuery)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+async function updateArteStatusDirect(itemId, status) {
+    if (!confirm(\`Confirmar alteração para o status: \${status}?\`)) return;
+
+    const cardEl = document.getElementById(\`kanban-card-\${itemId}\`);
+    const selectEl = cardEl ? cardEl.querySelector('select') : null;
+    const responsavel = selectEl ? selectEl.value : null;
+
     try {
-        await fetch(`/api/production/item/${itemId}/arte`, {
+        const res = await fetch(\`/api/production/item/\${itemId}/arte\`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 arte_status: status,
-                responsavel: currentUser.nome // Keep valid for history
+                responsavel: responsavel
             })
         });
-        // RELOAD IN PLACE instead of going back to queue
-        openArteAction(itemId);
-    } catch (e) {
-        alert('Erro ao atualizar status');
-    }
-}
 
-async function openArteAction(itemId) {
-    const setores = ['SILK_CILINDRICA', 'SILK_PLANO', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL']; // REMOVIDO: ESTAMPARIA
-    const setorOpcoes = setores.map(s => `<option value="${s}">${s}</option>`).join('');
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao atualizar status');
+        }
 
-    // FETCH FRESH ITEM DATA (Fixes Persistence Issue)
-    let item = {};
-    let activeResponsible = '';
-    try {
-        const res = await fetch(`/api/production/item/${itemId}`);
-        if (!res.ok) throw new Error("Erro ao buscar item");
-        item = await res.json();
-        activeResponsible = item.responsavel_arte || '';
+        loadArteQueue();
     } catch (e) {
         console.error(e);
-        return alert('Erro ao carregar dados do item.');
-    }
-
-    // Fetch users for 'arte' sector to populate dropdown
-    let arteUsers = [];
-    try {
-        const resUsers = await fetch(`/api/collaborators/sector/Arte Final`); // Assuming canonical name
-        arteUsers = await resUsers.json();
-    } catch (e) { console.error("Error fetching arte users", e); }
-
-    const status = item.arte_status || 'ARTE_NAO_FEITA';
-
-    // Step States
-    const step1Done = status === 'AGUARDANDO_APROVACAO' || status === 'APROVADO';
-    const step2Done = !!item.layout_path; // Simple check
-
-    // ... (Visual helpers same as before)
-    const s1Class = step1Done ? 'step-done' : 'step-active';
-    const s2Class = step2Done ? 'step-done' : (step1Done ? 'step-active' : 'step-locked');
-    const s3Class = status === 'APROVADO' ? 'step-done' : (step2Done && step1Done ? 'step-active' : 'step-locked');
-
-    // Build Responsible Dropdown
-    let respOptions = `<option value="">-- Selecione --</option>`;
-    arteUsers.forEach(u => {
-        const sel = u.nome === activeResponsible ? 'selected' : '';
-        respOptions += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
-    });
-
-    const html = `
-        <style>
-            .step-card { border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; position: relative; opacity: 1; transition: all 0.3s; }
-            .step-locked { opacity: 0.5; pointer-events: none; background: #f9f9f9; }
-            .step-done { border-color: var(--success); background: #f0fdf4; }
-            .step-active { border-color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-            .step-badge { position: absolute; top: -10px; left: 20px; background: #fff; padding: 0 10px; font-weight: bold; font-size: 0.9rem; color: #555; }
-            .step-active .step-badge { color: var(--primary); }
-            .step-done .step-badge { color: var(--success); }
-        </style>
-
-        <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                <h3>Gestão de Arte (Item #${itemId})</h3>
-                <div style="width: 250px;">
-                    <label style="font-size:0.8rem; font-weight:bold;">Responsável Arte Final</label>
-                    <select class="form-control" onchange="assignItem(${itemId}, 'arte', this.value)">
-                        ${respOptions}
-                    </select>
-                </div>
-            </div>
-
-            <p style="color:red; font-size:0.9rem;">Status Atual: <strong>${status}</strong></p>
-            
-            <!-- PASSO 1 -->
-            <div class="step-card ${s1Class}">
-                <span class="step-badge">PASSO 1: Solicitar Aprovação</span>
-                <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Envie a arte para aprovação do cliente ou interno.</p>
-                ${step1Done
-            ? `<div style="color:var(--success); font-weight:bold;"><i class="ph-check"></i> Enviado para Aprovação</div>`
-            : `<button class="btn" style="background: var(--warning); color: #92400e;" onclick="updateArteStatus(${itemId}, 'AGUARDANDO_APROVACAO')"> <i class="ph-paper-plane-right"></i> Enviar para Aprovação</button>`
-        }
-            </div>
-
-            <!-- PASSO 2 -->
-            <div class="step-card ${s2Class}">
-                 <span class="step-badge">PASSO 2: Upload do Layout Aprovado</span>
-                 <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Faça o upload do arquivo final que foi aprovado (Obrigatório para prosseguir).</p>
-                 
-                 <div style="display:flex; gap: 1rem; align-items: center;">
-                    ${item.layout_path
-            ? `<div style="color:var(--success);"><i class="ph-file-pdf"></i> Arquivo Presente <br> <small>Enviado por: ${item.layout_uploaded_by || '?'}</small></div>`
-            : ``
-        }
-                    <div class="upload-zone" style="margin:0; flex-grow:1;">
-                        <input type="file" id="layoutFile" accept="image/*,application/pdf" style="display: block; margin-bottom: 0.5rem; width: 100%;">
-                        <button class="btn" style="width: auto; font-size: 0.9rem;" onclick="uploadLayout(${itemId})"> <i class="ph-upload-simple"></i> ${item.layout_path ? 'Reenviar Arquivo' : 'Enviar Arquivo'}</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- PASSO 3 -->
-            <div class="step-card ${s3Class}">
-                <span class="step-badge">PASSO 3: Aprovação Final & Produção</span>
-                <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Defina as especificações finais e envie para o próximo setor.</p>
-                
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div class="form-group">
-                        <label>Cor de Impressão <span style="color:var(--danger)">*</span></label>
-                        <input type="text" id="corImpressao" class="form-control" placeholder="Ex: Pantone 186 C" value="${item.cor_impressao || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label>Setor Destino</label>
-                        <select id="setorDestino" class="form-control">${setorOpcoes}</select>
-                    </div>
-                    <div class="form-group" style="grid-column: span 2;">
-                        <label>Observação (Opcional)</label>
-                        <textarea id="obsArte" class="form-control" rows="2" placeholder="Detalhes técnicos, cuidados na impressão, etc.">${item.observacao_arte || ''}</textarea>
-                    </div>
-                </div>
-                ${status === 'APROVADO'
-            ? `<div style="color:var(--success); font-weight:bold; margin-top:1rem;"><i class="ph-check-circle"></i> APROVADO E ENVIADO PARA ${item.setor_destino}</div>`
-            : `<button class="btn" style="background: var(--success); margin-top: 1rem;" onclick="aprovarArte(${itemId})"> <i class="ph-check-circle"></i> Aprovar & Enviar para Produção</button>`
-        }
-            </div>
-            
-            <div style="margin-top: 1rem; text-align: right;">
-                 <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="loadArteQueue()">Voltar para Fila</button>
-            </div>
-        </div>
-    `;
-    document.getElementById('contentArea').innerHTML = html;
-
-    // Pre-select sector if exists
-    if (item.setor_destino) {
-        const setSel = document.getElementById('setorDestino');
-        if (setSel) setSel.value = item.setor_destino;
+        alert('Erro ao atualizar status: ' + e.message);
     }
 }
 
-
-
-async function uploadLayout(itemId) {
-    const fileInput = document.getElementById('layoutFile');
-    const btn = event.target; // Captura o botão clicado
-
-    if (fileInput.files.length === 0) {
-        return alert('Selecione um arquivo!');
-    }
-
-    const file = fileInput.files[0];
-
-    // 1. Validação Client-Side
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-        return alert('Arquivo muito grande! Limite é 10MB.');
-    }
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-        return alert('Formato inválido! Use JPG, PNG ou PDF.');
-    }
-
-    // 2. Preparar Upload
-    const formData = new FormData();
-    formData.append('layout', file);
-    formData.append('operador_id', currentUser.id); // Fundamental para permissão
-
-    // UI State: Loading
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="ph-spinner ph-spin"></i> Enviando...';
-    btn.disabled = true;
-
-    try {
-        const res = await fetch(`/api/production/item/${itemId}/layout`, {
-            method: 'POST',
-            body: formData
-        });
-
-        // Check if response is JSON
-        const contentType = res.headers.get('content-type');
-        let data;
-        if (contentType && contentType.includes('application/json')) {
-            data = await res.json();
-        } else {
-            // Probably HTML error (404, 500)
-            const text = await res.text();
-            throw new Error(`Erro ${res.status}: ${res.statusText}`);
-        }
-
-        if (res.ok) {
-            alert('Layout enviado com sucesso!');
-            openArteAction(itemId); // Refresh in place
-        } else {
-            // Mostrar erro detalhado do backend
-            alert('Erro: ' + (data.error || 'Falha desconhecida no upload.'));
-        }
-    } catch (e) {
-        alert('Falha no envio: ' + e.message);
-        console.error(e);
-    } finally {
-        // Reset UI State
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-}
-
-function injectLightbox() {
-    if (document.getElementById('lightbox')) return;
-    const html = `
-        <div id="lightbox" class="lightbox" onclick="if(event.target === this) this.classList.remove('show')">
-            <span class="lightbox-close" onclick="this.parentElement.classList.remove('show')">&times;</span>
-            <div id="lightboxContent"></div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', html);
-    document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function renderLayoutIndicator(path, type) {
-    if (!path) return '<span style="color: #cbd5e1; font-size: 0.8rem;">-</span>';
-
-    let thumb = '';
-    // Check if type is 'image' or 'image/png' etc (backend saves 'image' or 'pdf' short string in some places, 
-    // but code says 'image' or 'pdf'. Let's handle safe check.
-    // Migration said 'image' or 'pdf'. File upload route saves: file.mimetype.startsWith('image/') ? 'image' : 'pdf';
-
-    if (type === 'image') {
-        thumb = `<img src="${path}" class="layout-thumb" onclick="viewLayout('${path}', '${type}')" title="Ver layout">`;
-    } else {
-        thumb = `<div class="layout-thumb pdf-thumb" onclick="viewLayout('${path}', '${type}')" title="Ver PDF"><i class="ph-file-pdf"></i></div>`;
-    }
-
-    return `
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            ${thumb}
-            <button class="layout-btn" onclick="viewLayout('${path}', '${type}')">Ver</button>
-        </div>
-    `;
-}
-
-function viewLayout(path, type) {
-    injectLightbox();
-    const box = document.getElementById('lightbox');
-    const content = document.getElementById('lightboxContent');
-
-    // Path comes from DB, usually relative or absolute URL. 
-    // Since we serve /uploads, we might need to fix path if it's stored as local path
-    // DB stores '/uploads/filename.ext' based on my backend code, so it is correct for src.
-
-    if (type && type.startsWith('image')) {
-        content.innerHTML = `<img src="${path}" class="lightbox-content">`;
-    } else if (type && type === 'application/pdf') {
-        content.innerHTML = `<iframe src="${path}" style="width: 80vw; height: 80vh; border: none; background: white;"></iframe>`;
-    } else {
-        content.innerHTML = `<p>Tipo de arquivo não suportado para visualização direta.</p><a href="${path}" target="_blank" class="btn">Abrir em nova aba</a>`;
-    }
-
-    box.classList.add('show');
-}
-
-async function aprovarArte(itemId) {
-    const cor = document.getElementById('corImpressao').value;
-    const setor = document.getElementById('setorDestino').value;
-    const obs = document.getElementById('obsArte').value;
-    const responsavel = document.querySelector('select[onchange^="assignItem"]').value; // Gambiarra para pegar o resp selecionado no dropdown acima
-
-    if (!cor) return alert('Cor de impressão é obrigatória!');
-    if (!setor) return alert('Setor de destino é obrigatório!');
-
-    // --- VALIDAÇÃO DE SEGURANÇA ---
-    if (setor === 'ESTAMPARIA') {
-        return alert("Estamparia não pode ser selecionada como destino direto. Utilize Impressão Digital.");
-    }
-
-    const payload = {
-        arte_status: 'APROVADO',
-        cor_impressao: cor,
-        setor_destino: setor,
-        observacao_arte: obs,
-        responsavel: responsavel
-    };
-
-    try {
-        // CORRECTION: Use the dedicated Art Approval route which handles Logic & Status Transition
-        const res = await fetch(`/api/production/item/${itemId}/arte`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-            alert('Item aprovado! Enviado para SEPARAÇÃO.'); // User feedback
-
-            // REDIRECT TO SEPARATION QUEUE
-            // Next step in flow is Separation.
-            loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação');
-
-        } else {
-            const err = await res.json();
-            alert('Erro: ' + (err.error || 'Falha ao aprovar.'));
-        }
-    } catch (e) {
-        console.error(e);
-        alert('Erro de conexão.');
-    }
-}
-
-async function mudarStatusItem(itemId, novoStatus) {
-    await fetch(`/api/production/item/${itemId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ novo_status_item: novoStatus, operador_id: currentUser.id })
-    });
-    alert('Status atualizado!');
-    loadDashboard();
-}
-
-// --- EMBALE (PACKING) ---
-
-function openEmbaleAction(itemId, pedidoId, tipoEnvio) {
-    const isRetirada = tipoEnvio === 'RETIRADA';
-
-    // Base HTML structure
-    let baseHtml = '';
-
-    if (isRetirada) {
-        baseHtml = `
-            <div class="alert alert-info" style="background: #e0f2fe; color: #0369a1; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                <i class="ph-info"></i> <strong>Retirada pelo Cliente:</strong> Informe apenas a quantidade de volumes.
-            </div>
-            <div class="form-group">
-                <label>Quantidade de Volumes <span style="color:var(--danger)">*</span></label>
-                <input type="number" id="qtdVolumes" class="form-control" min="1" placeholder="Ex: 2" value="1">
-            </div>
-            <div id="volumesContainer"></div> <!-- Empty for Retirada -->
-        `;
-    } else {
-        baseHtml = `
-            <div class="alert alert-warning" style="background: #fffbeb; color: #b45309; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                <i class="ph-truck"></i> <strong>Envio por Transportadora/Correios</strong><br>
-                Informe peso e medidas de <strong>todos</strong> os volumes.
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>Quantidade de Volumes <span style="color:var(--danger)">*</span></label>
-                <input type="number" id="qtdVolumes" class="form-control" min="1" value="1" oninput="renderVolumeInputs()">
-            </div>
-            
-            <div id="volumesContainer" style="max-height: 400px; overflow-y: auto; padding-right: 0.5rem;">
-                <!-- Preenchido dinamicamente -->
-            </div>
-        `;
-    }
-
-    const html = `
-        <div id="embaleModal" class="modal show">
-            <div class="modal-content" style="min-width: 600px;">
-                <h3>Conferência de Embalagem</h3>
-                <p>Pedido #${pedidoId} - Envio: <strong>${tipoEnvio}</strong></p>
-                <hr style="margin: 1rem 0; border: 0; border-top: 1px solid var(--border)">
-                
-                ${baseHtml}
-
-                <div style="text-align: right; margin-top: 1rem;">
-                    <button class="btn" style="background: var(--text-secondary); width: auto; margin-right: 0.5rem;" onclick="document.getElementById('embaleModal').remove()">Cancelar</button>
-                    <button class="btn" style="width: auto;" onclick="checkAndConfirmEmbale(${itemId}, ${pedidoId}, '${tipoEnvio}')">Confirmar e Liberar</button>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', html);
-
-    // Initial Render for Non-Retirada
-    if (!isRetirada) {
-        renderVolumeInputs();
-    }
-}
-
-function renderVolumeInputs() {
-    const qtyInput = document.getElementById('qtdVolumes');
-    const container = document.getElementById('volumesContainer');
-    if (!qtyInput || !container) return;
-
-    const qty = parseInt(qtyInput.value) || 0;
-
-    // Clear current inputs? 
-    // Optimization: Try to preserve values if increasing count, but for simplicity reset or rebuild.
-    // Better UX: Save values if we can, but simpler approaches first.
-
-    // Let's just rebuild for now to be robust. 
-    // To preserve values, we would need to read current DOM, store in array, render, restore.
-
-    // Capture existing values if any
-    const existingValues = [];
-    const blocks = container.querySelectorAll('.volume-block');
-    blocks.forEach((block, index) => {
-        existingValues[index] = {
-            peso: block.querySelector('.vol-peso').value,
-            altura: block.querySelector('.vol-altura').value,
-            largura: block.querySelector('.vol-largura').value,
-            comprimento: block.querySelector('.vol-comprimento').value
-        };
-    });
-
-    let html = '';
-
-    for (let i = 0; i < qty; i++) {
-        const vals = existingValues[i] || { peso: '', altura: '', largura: '', comprimento: '' };
-
-        html += `
-            <div class="volume-block" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem;">
-                <h5 style="margin-bottom: 0.5rem; color: var(--primary);">Volume ${i + 1}</h5>
-                <div class="flex-row">
-                    <div class="form-group" style="flex:1">
-                        <label>Peso (kg) *</label>
-                        <input type="number" class="form-control vol-peso" step="0.1" value="${vals.peso}">
-                    </div>
-                </div>
-                <div class="flex-row">
-                     <div class="form-group" style="flex:1">
-                        <label>Altura (cm) *</label>
-                        <input type="number" class="form-control vol-altura" value="${vals.altura}">
-                    </div>
-                    <div class="form-group" style="flex:1">
-                        <label>Largura (cm) *</label>
-                        <input type="number" class="form-control vol-largura" value="${vals.largura}">
-                    </div>
-                    <div class="form-group" style="flex:1">
-                        <label>Comp. (cm) *</label>
-                        <input type="number" class="form-control vol-comprimento" value="${vals.comprimento}">
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    container.innerHTML = html;
-}
-
-async function confirmarEmbale(itemId, pedidoId, tipoEnvio) {
-    // Debug
-    console.log("confirmarEmbale called for item", itemId, "Envio:", tipoEnvio);
-
-    const volumesQtd = document.getElementById('qtdVolumes').value;
-    const isRetirada = tipoEnvio === 'RETIRADA';
-
-    if (!volumesQtd || parseInt(volumesQtd) <= 0) {
-        return alert('Informe a quantidade de volumes.');
-    }
-
-    let payload = {
-        quantidade_volumes: parseInt(volumesQtd) || 1,
-        peso: 0,
-        altura: 0,
-        largura: 0,
-        comprimento: 0,
-        dados_volumes: []
-    };
-
-    if (!isRetirada) {
-        // Collect Volume Data
-        const container = document.getElementById('volumesContainer');
-        const blocks = container.querySelectorAll('.volume-block');
-        const volumesData = [];
-        let missingData = false;
-
-        blocks.forEach((block, index) => {
-            const pesoVal = block.querySelector('.vol-peso').value;
-            const altVal = block.querySelector('.vol-altura').value;
-            const largVal = block.querySelector('.vol-largura').value;
-            const compVal = block.querySelector('.vol-comprimento').value;
-
-            if (!pesoVal || !altVal || !largVal || !compVal) {
-                missingData = true;
-            }
-
-            volumesData.push({
-                numero_volume: index + 1,
-                peso_kg: parseFloat(pesoVal) || 0,
-                altura_cm: parseFloat(altVal) || 0,
-                largura_cm: parseFloat(largVal) || 0,
-                comprimento_cm: parseFloat(compVal) || 0
-            });
-        });
-
-        if (missingData) {
-            return alert('Informe peso e dimensões para TODOS os volumes antes de confirmar.');
-        }
-
-        payload.dados_volumes = JSON.stringify(volumesData);
-
-        if (volumesData.length > 0) {
-            payload.peso = volumesData.reduce((acc, v) => acc + v.peso_kg, 0);
-            payload.altura = volumesData[0].altura_cm;
-            payload.largura = volumesData[0].largura_cm;
-            payload.comprimento = volumesData[0].comprimento_cm;
-        }
-    }
-
-    console.log("Sending Payload:", payload);
-
-    try {
-        const res = await fetch(`/api/production/item/${itemId}/embale`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        console.log("Server Response:", data);
-
-        if (res.ok) {
-            document.getElementById('embaleModal').remove();
-            alert('Embalagem confirmada! Item movido para Logística.');
-            loadDashboard(); // Force full dashboard reload to ensure proper state
-        } else {
-            alert('Erro ao confirmar: ' + (data.error || 'Erro desconhecido'));
-        }
-
-    } catch (e) {
-        console.error(e);
-        alert('Erro de conexão: ' + e.message);
-    }
-}
-
-async function registrarEvento(itemId, setor, acao, qtd) {
-    await fetch(`/api/production/evento`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId, operador_id: currentUser.id, setor, acao, quantidade_produzida: qtd })
-    });
-    loadProductionQueue(setor);
-}
-
-// --- EDITAR PEDIDO ---
-
-async function openEditOrderModal(id) {
-    if (currentUser.perfil !== 'admin' && currentUser.perfil !== 'financeiro') {
-        return alert('Sem permissão para editar.');
+async function iniciarDesenvolvimentoDirect(itemId) {
+    const cardEl = document.getElementById(\`kanban-card-\${itemId}\`);
+    const selectEl = cardEl ? cardEl.querySelector('select') : null;
+    const responsavel = selectEl ? selectEl.value : null;
+
+    if (!responsavel) {
+        alert('Selecione o responsável antes de iniciar o desenvolvimento.');
+        if (selectEl) selectEl.focus();
+        return;
     }
 
     try {
-        const res = await fetch(`/api/orders/${id}`);
-        const order = await res.json();
-
-        // Checar restrição (Frontend check for UX)
-        // Se algum item >= DESEMBALE, restrito.
-        const isRestricted = order.itens.some(i =>
-            ['AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO', 'AGUARDANDO_EMBALE', 'AGUARDANDO_ENVIO', 'CONCLUIDO'].includes(i.status_atual)
-        );
-
-        const disabledAttr = isRestricted ? 'disabled style="opacity: 0.6; cursor: not-allowed;"' : '';
-        const lockIcon = isRestricted ? '<i class="ph-lock-key"></i>' : '';
-
-        // Renderizar Itens Inputs
-        let itemsHtml = '';
-        order.itens.forEach((item, idx) => {
-            itemsHtml += `
-                <div class="flex-row item-row" data-id="${item.id}">
-                    <input type="text" value="${item.produto}" class="form-control item-prod" ${disabledAttr}>
-                    <input type="number" value="${item.quantidade}" class="form-control item-qtd" ${disabledAttr} style="flex: 0.3">
-                    ${!isRestricted ? `<button type="button" class="btn" style="background:var(--danger); width:auto; padding:0.5rem" onclick="this.parentElement.remove()"><i class="ph-trash"></i></button>` : ''}
-                </div>
-            `;
-        });
-
-        const html = `
-        <div id="editOrderModal" class="modal show">
-            <div class="modal-content" style="max-width: 600px;">
-                <h2 style="margin-bottom: 1rem;">Editar Pedido #${order.numero_pedido}</h2>
-                ${isRestricted ? `<div class="alert alert-warning"><i class="ph-warning"></i> Pedido em Produção. Edição restrita.</div>` : ''}
-
-                <form id="editOrderForm">
-                    <div class="flex-row">
-                        <div class="form-group" style="flex: 2">
-                            <label>Cliente ${lockIcon}</label>
-                            <input type="text" name="cliente" class="form-control" value="${order.cliente}" ${disabledAttr} required>
-                        </div>
-                         <div class="form-group" style="flex: 1">
-                            <label>Nº Pedido ${lockIcon}</label>
-                            <input type="text" name="numero_pedido" class="form-control" value="${order.numero_pedido}" ${disabledAttr} required>
-                        </div>
-                    </div>
-                    
-                    <div class="flex-row">
-                        <div class="form-group" style="flex: 1">
-                            <label>Prazo de Entrega</label>
-                            <input type="date" name="prazo_entrega" class="form-control" value="${order.prazo_entrega ? order.prazo_entrega.split('T')[0] : ''}" required>
-                        </div>
-                         <div class="form-group" style="flex: 1">
-                            <label>Envio</label>
-                            <select name="tipo_envio" class="form-control">
-                                <option value="TRANSPORTADORA" ${order.tipo_envio === 'TRANSPORTADORA' ? 'selected' : ''}>Transportadora</option>
-                                <option value="CORREIOS" ${order.tipo_envio === 'CORREIOS' ? 'selected' : ''}>Correios</option>
-                                <option value="RETIRADA" ${order.tipo_envio === 'RETIRADA' ? 'selected' : ''}>Retirada</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Transportadora</label>
-                        <input type="text" name="transportadora" class="form-control" value="${order.transportadora || ''}">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Observação</label>
-                        <textarea name="observacao" class="form-control" rows="2">${order.observacao || ''}</textarea>
-                    </div>
-
-                    <h4 style="margin-top:1rem">Itens ${lockIcon}</h4>
-                    <div id="editItemsContainer">${itemsHtml}</div>
-                    
-                    ${!isRestricted ? `
-                    <button type="button" class="btn" style="background: var(--bg-primary); border: 1px solid var(--accent); color: var(--accent); margin-bottom: 1rem;" onclick="addEditItemRow()">
-                        <i class="ph-plus"></i> Adicionar Item
-                    </button>` : ''}
-
-                    <div class="flex-row" style="justify-content: flex-end; margin-top: 1rem;">
-                        <button type="button" class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('editOrderModal').remove()">Cancelar</button>
-                        <button type="submit" class="btn" style="width: auto; margin-left: 0.5rem;">Salvar Alterações</button>
-                    </div>
-                </form>
-            </div>
-        </div>`;
-
-        document.body.insertAdjacentHTML('beforeend', html);
-
-        document.getElementById('editOrderForm').onsubmit = (e) => handleEditSubmit(e, id, isRestricted);
-
-    } catch (e) {
-        alert('Erro ao carregar dados do pedido.');
-        console.error(e);
-    }
-}
-
-function addEditItemRow() {
-    const div = document.createElement('div');
-    div.className = 'flex-row item-row';
-    div.innerHTML = `
-        <input type="text" placeholder="Novo Produto" class="form-control item-prod">
-        <input type="number" placeholder="1" class="form-control item-qtd" style="flex: 0.3">
-        <button type="button" class="btn" style="background:var(--danger); width:auto; padding:0.5rem" onclick="this.parentElement.remove()"><i class="ph-trash"></i></button>
-    `;
-    document.getElementById('editItemsContainer').appendChild(div);
-}
-
-async function handleEditSubmit(e, id, isRestricted) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-
-    // Coletar Itens
-    const itens = [];
-    if (!isRestricted) {
-        document.querySelectorAll('#editItemsContainer .item-row').forEach(row => {
-            const prod = row.querySelector('.item-prod').value;
-            const qtd = row.querySelector('.item-qtd').value;
-            const itemId = row.getAttribute('data-id'); // ID se existir
-            if (prod && qtd) {
-                itens.push({ id: itemId, produto: prod, quantidade: qtd });
-            }
-        });
-    }
-
-    const payload = {
-        usuario_id: currentUser.id,
-        // motivo removido
-        prazo_entrega: formData.get('prazo_entrega'),
-        tipo_envio: formData.get('tipo_envio'),
-        transportadora: formData.get('transportadora'),
-        observacao: formData.get('observacao'),
-        // Campos restritos só enviam se !isRestricted (mas backend valida igual)
-        cliente: formData.get('cliente'),
-        numero_pedido: formData.get('numero_pedido'),
-        itens: isRestricted ? null : itens
-    };
-
-    try {
-        const res = await fetch(`/api/orders/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-
-        if (res.ok) {
-            alert('Pedido atualizado com sucesso!');
-            document.getElementById('editOrderModal').remove();
-            loadOrders(); // Refresh
-        } else {
-            console.error('Erro Backend:', data);
-            alert('Erro: ' + (data.error || 'Erro desconhecido no servidor'));
-        }
-    } catch (e) {
-        console.error('Erro Frontend/Fetch:', e);
-        alert('Erro ao salvar: ' + e.message);
-    }
-}
-
-async function viewOrderHistory(id) {
-    // Busca historico
-    try {
-        const res = await fetch(`/api/orders/${id}/history`);
-        const rows = await res.json();
-
-        if (rows.length === 0) return alert('Nenhum histórico encontrado.');
-
-        let list = rows.map(r => `
-            <li style="margin-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
-                <strong>${new Date(r.data_alteracao).toLocaleString()}</strong> - ${r.usuario_nome || 'Sistema'}<br>
-                Alterou <em>${r.campo_alterado}</em> de "<b>${r.valor_antigo}</b>" para "<b>${r.valor_novo}</b>"<br>
-                <small>Motivo: ${r.motivo}</small>
-            </li>
-        `).join('');
-
-        const html = `
-        <div id="histModal" class="modal show">
-            <div class="modal-content">
-                <h3>Histórico de Alterações</h3>
-                <ul style="list-style: none; padding: 0; max-height: 400px; overflow-y: auto;">${list}</ul>
-                <button class="btn" onclick="document.getElementById('histModal').remove()">Fechar</button>
-            </div>
-        </div>`;
-        document.body.insertAdjacentHTML('beforeend', html);
-    } catch (e) {
-        alert('Erro ao buscar histórico.');
-    }
-}
-
-// --- LOGÍSTICA (LABEL / DISPATCH) ---
-
-function openLabelModal(item) {
-    const isRetirada = item.tipo_envio === 'RETIRADA';
-    let volumesInfo = '';
-    let hasAlert = false;
-
-    // 1. Processar Volumes
-    if (isRetirada) {
-        // Retirada: Apenas Quantidade
-        volumesInfo = `
-            <div style="background: #e0f2fe; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #bae6fd; color: #0369a1;">
-                <strong>Retirada pelo Cliente</strong><br>
-                Quantidade de Volumes: <strong>${item.quantidade_volumes || 1}</strong><br>
-                <small>(Peso e Dimensões não aplicáveis)</small>
-            </div>
-            <div style="margin-top: 1rem; padding: 0.5rem; border: 2px dashed #ccc; text-align: center; font-weight: bold; background: #fff;">
-                ETIQUETA INTERNA<br>
-                ${item.cliente}<br>
-                Pedido: ${item.numero_pedido}<br>
-                ${item.quantidade_volumes || 1} Volume(s)
-            </div>
-        `;
-    } else {
-        // Transportadora / Correios
-        if (item.dados_volumes) {
-            try {
-                const vols = JSON.parse(item.dados_volumes);
-                console.log(`[LOGISTICA-DEBUG] Item ${item.id} QtdVols: ${item.quantidade_volumes}, JSON Vols: ${vols.length}`, vols);
-
-                // VALIDATION: Must show exactly N volumes as defined in header
-                if (Array.isArray(vols) && vols.length > 0) {
-
-                    // Validate Count
-                    if (vols.length !== item.quantidade_volumes) {
-                        console.warn(`[LOGISTICA-WARN] Mismatch count. Header: ${item.quantidade_volumes}, Array: ${vols.length}`);
-                        hasAlert = true;
-                    }
-
-                    volumesInfo = '<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.5rem;">';
-                    vols.forEach((v, i) => {
-                        // Normalize keys (Handle snake_case and UPPERCASE)
-                        const volNum = v.numero_volume || v.volume || v.NUMERO_VOLUME || (i + 1);
-                        const peso = v.peso_kg || v.peso || v.p || v.PESO_KG || v.PESO || 0;
-                        const alt = v.altura_cm || v.altura || v.a || v.ALTURA_CM || v.ALTURA || 0;
-                        const larg = v.largura_cm || v.largura || v.l || v.LARGURA_CM || v.LARGURA || 0;
-                        const comp = v.comprimento_cm || v.comprimento || v.c || v.COMPRIMENTO_CM || v.COMPRIMENTO || 0;
-
-                        if (peso <= 0 || alt <= 0 || larg <= 0 || comp <= 0) {
-                            hasAlert = true; // Mark as incomplete if any dimension is zero
-                            console.warn(`[LOGISTICA-WARN] Vol ${volNum} incomplete:`, v);
-                        }
-
-                        volumesInfo += `
-                            <div style="padding: 0.25rem 0; border-bottom: 1px dashed #cbd5e1; font-size: 0.9rem;">
-                                <strong>Volume ${volNum}:</strong> ${peso} kg <br>
-                                <span style="color: #64748b;">L: ${larg} cm x A: ${alt} cm x C: ${comp} cm</span>
-                            </div>
-                        `;
-                    });
-                    volumesInfo += '</div>';
-                } else {
-                    hasAlert = true;
-                    console.warn("[LOGISTICA-WARN] JSON empty or not array");
-                }
-            } catch (e) {
-                console.error("Erro parsing dados_volumes", e);
-                hasAlert = true;
-            }
-        } else {
-            console.warn("[LOGISTICA-WARN] No dados_volumes found");
-            hasAlert = true;
-        }
-
-        if (hasAlert) {
-            volumesInfo = `
-                <div class="alert alert-danger">
-                    <i class="ph-warning"></i> <strong>Dados incompletos!</strong><br>
-                    Não foram encontrados pesos/dimensões para todos os ${item.quantidade_volumes} volumes.<br>
-                    <small>Verifique se todos os campos foram preenchidos no Embale.</small>
-                    <button class="btn" style="margin-top:0.5rem; width:100%" onclick="document.getElementById('labelModal').remove(); openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}')">Voltar para Embale</button>
-                </div>
-            `;
-        }
-    }
-
-    const html = `
-        <div id="labelModal" class="modal show">
-            <div class="modal-content" style="max-width: 500px;">
-                <h3 style="margin-bottom: 1rem;">Dados para Etiqueta / Expedição</h3>
-                
-                <div style="margin-bottom: 1rem; font-size: 0.95rem;">
-                    <p><strong>Cliente:</strong> ${item.cliente}</p>
-                    <p><strong>Pedido:</strong> ${item.numero_pedido}</p>
-                    <p><strong>Prazo:</strong> ${new Date(item.prazo_entrega).toLocaleDateString()}</p>
-                    <p><strong>Envio:</strong> ${renderShippingBadge(item.tipo_envio)}</p>
-                    ${item.transportadora ? `<p><strong>Transportadora:</strong> ${item.transportadora}</p>` : ''}
-                    ${item.observacao ? `<div style="margin-top:0.5rem; background:#fff7ed; padding:0.5rem; border-radius:4px; font-size:0.9rem"><strong>Obs:</strong> ${item.observacao}</div>` : ''}
-                </div>
-                
-                <h4 style="margin-top: 1rem; font-size: 1rem; border-bottom: 1px solid #eee; padding-bottom: 0.25rem;">Volumes</h4>
-                ${volumesInfo}
-                
-                <div style="text-align: right; margin-top: 1.5rem; border-top: 1px solid #eee; padding-top: 1rem;">
-                    <button class="btn" style="background: var(--text-secondary); width: auto; margin-right: 0.5rem;" onclick="document.getElementById('labelModal').remove()">Fechar</button>
-                    ${!hasAlert ? `<button class="btn" style="width: auto;" onclick="dispatchItem(${item.id})"> <i class="ph-paper-plane-right"></i> Gerar Etiqueta & Despachar</button>` : ''}
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', html);
-}
-
-async function dispatchItem(itemId) {
-    if (!confirm('Confirmar despacho deste item? Ele será marcado como CONCLUÍDO.')) return;
-
-    document.getElementById('labelModal').remove();
-    await mudarStatusItem(itemId, 'CONCLUIDO');
-}
-
-// --- Helper Functions for Sectors ---
-
-function getSectorFromStatus(status) {
-    switch (status) {
-        case 'ARTE': // Fila de Arte específica
-        case 'AGUARDANDO_ARTE': return 'arte';
-        case 'AGUARDANDO_SEPARACAO': return 'separacao';
-        case 'AGUARDANDO_DESEMBALE': return 'desembale';
-        case 'AGUARDANDO_IMPRESSAO': return 'impressao';
-        case 'AGUARDANDO_EMBALE': return 'embale';
-        case 'AGUARDANDO_ENVIO': return 'logistica'; // Logística cuida do envio
-        default: return null;
-    }
-}
-
-// Mapeia códigos internos (arte, separacao) para os Nomes Reais do banco (Arte Final, Separação)
-function getSectorDbName(internalCode) {
-    const map = {
-        'arte': 'Arte Final',
-        'separacao': 'Separação',
-        'desembale': 'Desembale',
-        'impressao': 'Impressão', // Genérico, ou precisa tratar sub-setores?
-        'embale': 'Embale',
-        'logistica': 'Logística'
-    };
-    return map[internalCode] || internalCode;
-}
-
-function getResponsavelColumn(status) {
-    const sector = getSectorFromStatus(status);
-    return sector ? `responsavel_${sector}` : null;
-}
-
-// --- DOSSIÊ DE PEDIDO FINALIZADO ---
-function renderFinishedOrderDossier(order) {
-    document.getElementById('pageTitle').textContent = `Dossiê do Pedido ${order.numero_pedido}`;
-
-    // 1. Header Info
-    const headerInfo = `
-        <div class="card" style="border-left: 5px solid #22c55e;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <div>
-                    <h2 style="margin:0; font-size:1.5rem;">${order.cliente}</h2>
-                    <div style="color:var(--text-secondary); margin-top:0.25rem;">Pedido: <strong>${order.numero_pedido}</strong></div>
-                </div>
-                 <div style="text-align:right">
-                    <span class="badge badge-success" style="font-size:1rem; padding:0.5rem 1rem;">FINALIZADO</span>
-                    <div style="margin-top:0.5rem; font-size:0.9rem; color:var(--text-secondary);">
-                        <i class="ph-check-circle"></i> Concluído em: ${formatDateTime(order.itens?.[0]?.finalizado_em || order.itens?.[0]?.data_envio)}
-                    </div>
-                </div>
-            </div>
-             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-top:1.5rem; padding-top:1rem; border-top:1px solid #eee;">
-                <div><strong>Tipo Envio:</strong> ${order.tipo_envio}</div>
-                <div><strong>Transp:</strong> ${order.transportadora || '-'}</div>
-                <div><strong>Prazo Original:</strong> ${new Date(order.prazo_entrega).toLocaleDateString()}</div>
-                <div><strong>Expedição:</strong> ${formatDateTime(order.itens?.[0]?.data_envio)}</div>
-            </div>
-             ${order.observacao ? `<div style="margin-top:1rem; background:#f8fafc; padding:0.5rem; border-radius:4px;"><strong>Obs:</strong> ${order.observacao}</div>` : ''}
-        </div>
-    `;
-
-    // 2. Visual Layouts & Items
-    let itemsHtml = '';
-    order.itens.forEach(item => {
-        // Timeline Logic per Item
-        itemsHtml += renderItemTimeline(item);
-    });
-
-    document.getElementById('contentArea').innerHTML = `
-        <button class="btn" style="width:auto; margin-bottom:1rem; background:var(--text-secondary)" onclick="loadFinishedOrders()">
-            <i class="ph-arrow-left"></i> Voltar para Arquivo
-        </button>
-        ${headerInfo}
-        <h3 style="margin-top:2rem;">Histórico de Produção do Item</h3>
-        ${itemsHtml}
-    `;
-
-    injectLightbox();
-}
-
-function renderItemTimeline(item) {
-    // Determine Layout Thumbnail
-    let layoutThumb = '<div style="background:#eee; width:80px; height:80px; display:flex; align-items:center; justify-content:center; border-radius:4px; color:#999; font-size:0.8rem;">S/ Layout</div>';
-    if (item.layout_path) {
-        if (item.layout_type === 'image') {
-            layoutThumb = `<img src="${item.layout_path}" style="width:100px; height:100px; object-fit:cover; border-radius:4px; border:1px solid #ddd; cursor:pointer;" onclick="viewLayout('${item.layout_path}', 'image')">`;
-        } else {
-            layoutThumb = `<div style="width:100px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f1f5f9; border-radius:4px; cursor:pointer;" onclick="viewLayout('${item.layout_path}', 'pdf')"><i class="ph-file-pdf" style="font-size:2rem; color:#ef4444"></i><span style="font-size:0.7rem;">PDF</span></div>`;
-        }
-    }
-
-    // Timeline Events
-    // Arte
-    const arteSection = renderTimelineStep('Arte Final', item.responsavel_arte, item.data_arte_aprovacao || item.layout_uploaded_at, 'ph-paint-brush', '#eab308',
-        item.cor_impressao ? `Cor: <strong>${item.cor_impressao}</strong>` : null);
-
-    // Separação
-    const sepSection = renderTimelineStep('Separação', item.responsavel_separacao, item.data_separacao, 'ph-package', '#f97316');
-
-    // Desembale
-    const desSection = renderTimelineStep('Desembale', item.responsavel_desembale, item.data_desembale, 'ph-box-open', '#8b5cf6',
-        item.setor_destino ? `Destino: ${item.setor_destino}` : null);
-
-    // Produção
-    // Calculate Prod Time from events
-    let prodStart = null, prodEnd = null, prodDuration = '';
-    if (item.eventos && item.eventos.length > 0) {
-        const startEvt = item.eventos.find(e => e.acao === 'INICIO');
-        const endEvt = item.eventos.find(e => e.acao === 'FIM');
-        if (startEvt) prodStart = startEvt.timestamp;
-        if (endEvt) prodEnd = endEvt.timestamp;
-
-        if (prodStart && prodEnd) {
-            const diff = new Date(prodEnd) - new Date(prodStart);
-            const mins = Math.floor(diff / 60000);
-            prodDuration = `${mins} min`;
-        }
-    }
-    const prodDetails = `
-        ${prodStart ? `<div>Início: ${formatDateTime(prodStart)}</div>` : ''}
-        ${prodEnd ? `<div>Fim: ${formatDateTime(prodEnd)}</div>` : ''}
-        ${prodDuration ? `<div style="font-weight:bold; color:#059669">Duração: ${prodDuration}</div>` : ''}
-    `;
-    const prodSection = renderTimelineStep('Impressão', item.responsavel_impressao, prodEnd, 'ph-printer', '#ec4899', prodDetails);
-
-    // Embale
-    let embaleDetails = null;
-    if (item.quantidade_volumes > 0) {
-        embaleDetails = `<div><strong>${item.quantidade_volumes} Vols</strong>, ${item.peso}kg Total</div>`;
-
-        // Show details if available (Dossier Mode)
-        if (item.dados_volumes) {
-            try {
-                const vols = JSON.parse(item.dados_volumes);
-                if (Array.isArray(vols) && vols.length > 0) {
-                    embaleDetails += `<div style="margin-top:0.5rem; font-size:0.8rem; background:#fff; padding:0.5rem; border-radius:4px; border:1px solid #eee;">`;
-                    vols.forEach((v, i) => {
-                        const vn = v.numero_volume || (i + 1);
-                        // Normalize keys
-                        const p = v.peso_kg || v.peso || v.p || v.PESO_KG || 0;
-                        const a = v.altura_cm || v.altura || v.a || v.ALTURA_CM || 0;
-                        const l = v.largura_cm || v.largura || v.l || v.LARGURA_CM || 0;
-                        const c = v.comprimento_cm || v.comprimento || v.c || v.COMPRIMENTO_CM || 0;
-
-                        embaleDetails += `<div style="border-bottom:1px dashed #eee; padding-bottom:2px; margin-bottom:2px;">
-                            <strong>Vol ${vn}:</strong> ${p}kg - L: ${l}cm x A: ${a}cm x C: ${c}cm
-                        </div>`;
-                    });
-                    embaleDetails += `</div>`;
-                }
-            } catch (e) { }
-        }
-    }
-    const embSection = renderTimelineStep('Embale', item.responsavel_embale, item.data_embale, 'ph-gift', '#06b6d4', embaleDetails);
-
-    // Logística
-    const logSection = renderTimelineStep('Logística', item.responsavel_logistica, item.data_envio, 'ph-truck', '#3b82f6',
-        item.status_atual === 'CONCLUIDO' ? 'Despachado / Entregue' : item.status_atual);
-
-
-    return `
-        <div class="card" style="margin-top:1rem; padding:0; overflow:hidden;">
-            <div style="background:#f8fafc; padding:1rem; border-bottom:1px solid #eee; display:flex; align-items:center; gap:1rem;">
-                <div style="font-weight:bold; font-size:1.1rem; flex:1;">${item.produto} <span style="font-weight:normal; color:var(--text-secondary)">(x${item.quantidade})</span></div>
-                 ${layoutThumb}
-            </div>
-            
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:0; padding:1rem; position:relative;">
-                  ${arteSection}
-                  ${sepSection}
-                  ${desSection}
-                  ${prodSection}
-                  ${embSection}
-                  ${logSection}
-            </div>
-        </div>
-    `;
-}
-
-function renderDeadline(dateStr) {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diff = d - now;
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-
-    let color = 'green';
-    if (days < 0) color = 'red';
-    else if (days <= 2) color = 'orange';
-
-    return `<span style="color:${color}; font-weight:bold">${d.toLocaleDateString()} (${days > 0 ? days + ' dias' : 'Atrasado'})</span>`;
-}
-
-function renderTimelineStep(title, user, date, icon, color, extraHtml) {
-    const isDone = !!date || !!user;
-    const opacity = isDone ? '1' : '0.4';
-    const dateStr = formatDateTime(date);
-
-    return `
-        <div style="position:relative; padding:0.5rem; text-align:center; opacity:${opacity}">
-            <div style="width:40px; height:40px; background:${isDone ? color : '#e2e8f0'}; color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto;">
-                <i class="${icon}" style="font-size:1.2rem"></i>
-            </div>
-            <div style="font-weight:bold; font-size:0.9rem; color:${color}">${title}</div>
-            <div style="font-size:0.8rem; margin-top:0.25rem;">${user || '-'}</div>
-            <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.25rem;">${dateStr || '-'}</div>
-            ${extraHtml ? `<div style="font-size:0.75rem; color:#475569; margin-top:0.25rem; background:#f1f5f9; padding:2px 4px; border-radius:4px; display:inline-block;">${extraHtml}</div>` : ''}
-        </div>
-    `;
-}
-
-function renderLayoutThumbnail(order) {
-    const itemWithLayout = order.itens?.find(i => i.layout_path);
-    if (!itemWithLayout) return '<span style="color:#ccc; font-size:0.8rem">S/ Layout</span>';
-
-    if (itemWithLayout.layout_type === 'image') {
-        return `<img src="${itemWithLayout.layout_path}" style="width:40px; height:40px; object-fit:cover; border-radius:4px;">`;
-    } else {
-        return `<i class="ph-file-pdf" style="font-size:1.5rem; color:#ef4444"></i>`;
-    }
-}
-
-function formatDateTime(isoString) {
-    if (!isoString) return '';
-    const d = new Date(isoString);
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// --- ROLLBACK / VOLTAR ETAPA ---
-
-function openRollbackModal(itemId, currentStatus, setorDestino) {
-    // DEBUG
-    // alert(`DEBUG: Open Rollback. Status: ${currentStatus}, Setor: ${setorDestino}`);
-
-    // 1. Define Valid Rollback Targets based on Current Status
-    // Flow: NOVO -> AGUARDANDO_ARTE -> AGUARDANDO_SEPARACAO -> AGUARDANDO_DESEMBALE -> AGUARDANDO_PRODUCAO -> AGUARDANDO_EMBALE -> AGUARDANDO_ENVIO -> FINALIZADO
-
-    let options = [];
-
-    /* 
-       Simplificando a lógica: Permitir voltar para qualquer etapa ANTERIOR lógica.
-       Mas para evitar complexidade, vamos definir hardcoded targets comuns.
-    */
-
-    const flow = [
-        { status: 'NOVO', label: 'Novo / Aguardando Arte' }, // ou AGUARDANDO_ARTE se arte for obrigatória
-        { status: 'AGUARDANDO_SEPARACAO', label: 'Separação' },
-        { status: 'AGUARDANDO_DESEMBALE', label: 'Desembale' }, // Apenas se tiver produto que precisa desembalar
-        { status: 'AGUARDANDO_PRODUCAO', label: 'Produção (Impressão)' },
-        { status: 'AGUARDANDO_EMBALE', label: 'Embale' },
-        { status: 'AGUARDANDO_ENVIO', label: 'Logística' }
-    ];
-
-    // Find current index
-    // Note: 'currentStatus' might be 'EM_PRODUCAO' or 'PAUSADO', treat as 'AGUARDANDO_PRODUCAO' level
-
-    // Helper to map current status to flow level
-    let currentLevel = -1;
-    if (currentStatus === 'FINALIZADO') currentLevel = 99;
-    else if (currentStatus === 'AGUARDANDO_ENVIO' || currentStatus === 'CONCLUIDO') currentLevel = 5;
-    else if (currentStatus === 'AGUARDANDO_EMBALE' || currentStatus === 'EM_EMBALE') currentLevel = 4;
-    else if (currentStatus === 'AGUARDANDO_PRODUCAO' || currentStatus === 'EM_PRODUCAO') currentLevel = 3;
-    else if (currentStatus === 'AGUARDANDO_DESEMBALE' || currentStatus === 'EM_DESEMBALE') currentLevel = 2;
-    else if (currentStatus === 'AGUARDANDO_SEPARACAO' || currentStatus === 'EM_SEPARACAO') currentLevel = 1;
-    else if (currentStatus.includes('ARTE') || currentStatus === 'NOVO') currentLevel = 0;
-
-    // Filter options where index < currentLevel
-    // Also, restrict 'NOVO' usually implies 'AGUARDANDO_ARTE' logic if we want to reset flow
-
-    const validTargets = flow.filter((step, index) => index < currentLevel);
-
-    if (validTargets.length === 0) {
-        return alert("Não há etapas anteriores para retornar (ou status desconhecido).");
-    }
-
-    const optionsHtml = validTargets.map(t => `<option value="${t.status}">${t.label}</option>`).join('');
-
-    const modalHtml = `
-    <div id="rollbackModal" class="modal show">
-        <div class="modal-content" style="max-width: 400px;">
-            <span class="close" onclick="closeRollbackModal()">&times;</span>
-            <h3 style="color: var(--warning); display:flex; align-items:center; gap:0.5rem;"><i class="ph-arrow-u-up-left"></i> Voltar Etapa</h3>
-            <p style="color:#666; font-size:0.9rem; margin-bottom:1rem;">O item será movido para a fila selecionada e sairá da fila atual.</p>
-            
-            <!-- Hidden context for redirection -->
-            <input type="hidden" id="rollbackSetorDestino" value="${setorDestino || ''}">
-            <input type="hidden" id="rollbackOriginStatus" value="${currentStatus}">
-
-            <div class="form-group">
-                <label>Destino (Etapa Anterior)</label>
-                <select id="rollbackTarget" class="form-control">
-                    ${optionsHtml}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Motivo do Retorno (Observação)</label>
-                <textarea id="rollbackObs" class="form-control" rows="3" placeholder="Ex: Erro na separação, cor incorreta..."></textarea>
-            </div>
-
-            <div style="text-align: right; margin-top: 1rem;">
-                 <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="closeRollbackModal()">Cancelar</button>
-                 <button class="btn" style="background: var(--warning); width: auto; color: #78350f;" onclick="submitRollback(${itemId})">Confirmar Retorno</button>
-            </div>
-        </div>
-    </div>`;
-
-    // Remove existing if any
-    const existing = document.getElementById('rollbackModal');
-    if (existing) existing.remove();
-
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-}
-
-function closeRollbackModal() {
-    const m = document.getElementById('rollbackModal');
-    if (m) m.remove();
-}
-
-async function submitRollback(itemId) {
-    const targetStatus = document.getElementById('rollbackTarget').value;
-    const obs = document.getElementById('rollbackObs').value;
-    const setorDestino = document.getElementById('rollbackSetorDestino').value;
-    const originStatus = document.getElementById('rollbackOriginStatus').value;
-
-    if (!targetStatus) return alert("Selecione o destino.");
-
-    try {
-        const res = await fetch(`/api/production/item/${itemId}/return`, {
+        const res = await fetch(\`/api/production/item/\${itemId}/arte\`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                target_status: targetStatus,
-                observation: obs,
+                arte_status: 'EM_DESENVOLVIMENTO',
+                responsavel: responsavel,
                 operador_id: currentUser.id
             })
         });
 
-        if (res.ok) {
-            alert("Item retornado com sucesso!");
-            // alert("Item retornado com sucesso!");
-            closeRollbackModal();
-
-            // --- REDIRECTION LOGIC (Based on Target) ---
-
-            // Prioritize the DESTINATION status, not the item properties.
-            // alert(`DEBUG: Target Status is: ${targetStatus}`);
-
-            if (targetStatus === 'NOVO' || targetStatus === 'AGUARDANDO_ARTE' || targetStatus === 'ARTE_FINAL' || targetStatus.includes('ARTE')) {
-                loadArteQueue();
-            } else if (targetStatus === 'AGUARDANDO_SEPARACAO') {
-                loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação');
-            } else if (targetStatus === 'AGUARDANDO_DESEMBALE') {
-                loadGenericQueue('AGUARDANDO_DESEMBALE', 'Desembale');
-            } else if (targetStatus === 'AGUARDANDO_PRODUCAO') {
-                // Here we need Sector
-                if (setorDestino && setorDestino.trim() !== '') {
-                    loadProductionQueue(setorDestino);
-                    updateMenuCounts();
-                } else {
-                    alert("Aviso: Setor de impressão não definido. Redirecionando para Dashboard.");
-                    loadDashboard();
-                    updateMenuCounts();
-                }
-            } else if (targetStatus === 'AGUARDANDO_EMBALE') {
-                loadGenericQueue('AGUARDANDO_EMBALE', 'Embale');
-                updateMenuCounts();
-            } else if (targetStatus === 'AGUARDANDO_ENVIO') {
-                loadGenericQueue('AGUARDANDO_ENVIO', 'Logística');
-                updateMenuCounts();
-            } else {
-                loadDashboard();
-                updateMenuCounts();
-            }
-
-        } else {
-            const err = await res.json();
-            alert("Erro: " + err.error);
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao iniciar desenvolvimento');
         }
+
+        loadArteQueue();
     } catch (e) {
         console.error(e);
-        alert("Erro de conexão.");
+        alert('Erro: ' + e.message);
     }
 }
 
-// --- CONFIRMATION MODALS HELPER ---
+async function reprovarArteDirect(itemId) {
+    const reason = prompt("Digite o motivo da reprovação (será anexado à observação do item):");
+    if (reason === null) return; 
+    if (reason.trim() === '') return alert("Motivo da reprovação é obrigatório!");
 
-function openCheckModal(title, items, onConfirm) {
-    const itemsHtml = items.map(t => `<li style="margin-bottom:0.5rem; color:var(--text-primary); font-size: 0.9rem;">${t}</li>`).join('');
+    try {
+        const res = await fetch(\`/api/production/item/\${itemId}/arte\`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                arte_status: 'PRONTO_PARA_CRIAR',
+                is_alteracao: 1,
+                motivo_reprovacao: reason.trim(),
+                operador_id: currentUser.id
+            })
+        });
 
-    // Remove if exists
-    const existing = document.getElementById('checkModal');
-    if (existing) existing.remove();
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao reprovar arte');
+        }
 
-    const modalHtml = `
-    <div id="checkModal" class="modal show" style="z-index: 10000; display: flex !important;">
-        <div class="modal-content" style="max-width: 500px; border-top: 5px solid var(--accent);">
-            <p style="text-align:center; margin-bottom:1rem; margin-top:0.5rem;">
-                <i class="ph-warning-circle" style="font-size: 3rem; color: var(--warning);"></i>
-            </p>
-            <h3 style="text-align:center; color: var(--text-primary); margin-bottom:1.5rem; text-transform:uppercase; font-size: 1.1rem; line-height:1.4;">${title}</h3>
-            
-            <div style="background:#f8fafc; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:1.5rem;">
-                <p style="font-weight:bold; margin-bottom:1rem; color: #334155;">ANTES DE PROSSEGUIR, CONFIRME:</p>
-                <ul style="padding-left: 1.5rem; text-align: left; list-style-type: disc;">
-                    ${itemsHtml}
-                </ul>
-                <p style="margin-top:1rem; font-weight:bold; color:var(--text-secondary); text-align:center; font-size: 0.85rem;">
-                    Se estiver tudo certo, confirme.
-                </p>
+        loadArteQueue();
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao reprovar arte: ' + e.message);
+    }
+}
+
+function renderKanbanCard(item, sectorUsers) {
+    const isAlteracao = item.is_alteracao === 1;
+    const isWip = item.arte_status === 'EM_DESENVOLVIMENTO';
+    
+    let priorityClass = '';
+    let priorityBadge = '';
+    if (isAlteracao) {
+        priorityClass = 'card-priority';
+        priorityBadge = \`<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:0.7rem; padding: 2px 6px; display:inline-flex; align-items:center; gap:0.25rem;"><i class="ph-warning"></i> ALTERAÇÃO</span>\`;
+    } else if (isWip) {
+        priorityClass = 'card-wip';
+    }
+
+    const shipBadge = renderShippingBadge(item.tipo_envio);
+    const tercBadge = item.is_terceirizado 
+        ? \`<span class="badge" style="background:#fef08a; color:#854d0e; border:1px solid #fce71c; font-size:0.7rem; padding: 2px 6px;"><i class="ph-truck"></i> TERCEIRIZADO</span>\` 
+        : '';
+
+    const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
+    const prazoStr = item.prazo_entrega ? new Date(item.prazo_entrega).toLocaleDateString('pt-BR') : 'N/A';
+
+    const currentResp = item.responsavel_arte || '';
+    let respSelect = '';
+    if (item.arte_status === 'PRONTO_PARA_CRIAR' || item.arte_status === 'EM_DESENVOLVIMENTO') {
+        let options = \`<option value="">-- Selecione --</option>\`;
+        sectorUsers.forEach(u => {
+            const sel = u.nome === currentResp ? 'selected' : '';
+            options += \`<option value="\${u.nome}" \${sel}>\${u.nome}</option>\`;
+        });
+        respSelect = \`
+            <div style="margin-top: 0.5rem;">
+                <label style="font-size:0.7rem; font-weight:bold; color:var(--text-secondary); display:block; margin-bottom:0.15rem;">Responsável:</label>
+                <select class="form-control" style="font-size:0.75rem; padding:0.25rem; height:auto; margin-bottom:0;" onchange="assignItem(\${item.id}, 'arte', this.value)">
+                    \${options}
+                </select>
             </div>
+        \`;
+    } else {
+        respSelect = currentResp 
+            ? \`<div style="font-size:0.75rem; margin-top:0.5rem; color:var(--text-secondary);">Resp: <strong>\${currentResp}</strong></div>\` 
+            : '';
+    }
 
-            <div class="flex-row" style="justify-content: center; gap: 1rem;">
-                <button class="btn" style="background: var(--text-secondary); width: auto;" onclick="document.getElementById('checkModal').remove()">Cancelar</button>
-                <button id="btnCheckConfirm" class="btn" style="width: auto; background: var(--success);">Confirmar e Prosseguir</button>
+    let timerHtml = '';
+    if (item.arte_status === 'ENTRADA' || item.arte_status === 'ARTE_NAO_FEITA' || !item.arte_status) {
+        const entryDate = parseSqliteDate(item.data_entrada_arte);
+        if (entryDate) {
+            const now = new Date();
+            const limitDate = new Date(entryDate.getTime() + 48 * 60 * 60 * 1000);
+            const diffMs = limitDate.getTime() - now.getTime();
+            if (diffMs < 0) {
+                const overdueHours = Math.floor(Math.abs(diffMs) / (60 * 60 * 1000));
+                timerHtml = \`<div class="kanban-card-timer overdue" title="SLA de 48h estourado!"><i class="ph-warning"></i> SLA Estourado (+\${overdueHours}h)</div>\`;
+            } else {
+                const remainingHours = Math.floor(diffMs / (60 * 60 * 1000));
+                const remainingMins = Math.floor((diffMs % (60 * 60 * 1000)) / (60 * 1000));
+                const timerClass = remainingHours < 12 ? 'warning' : 'ok';
+                timerHtml = \`<div class="kanban-card-timer \${timerClass}" title="Tempo limite de 48h"><i class="ph-clock"></i> SLA: \${remainingHours}h \${remainingMins}m</div>\`;
+            }
+        } else {
+            timerHtml = \`<div class="kanban-card-timer ok"><i class="ph-clock"></i> SLA: 48h</div>\`;
+        }
+    } else if (item.arte_status === 'EM_DESENVOLVIMENTO' && item.data_inicio_arte) {
+        const start = parseSqliteDate(item.data_inicio_arte);
+        if (start) {
+            const elapsed = Math.floor((new Date().getTime() - start.getTime()) / 1000);
+            timerHtml = \`
+                <div class="production-timer kanban-card-timer ok" data-elapsed-initial="\${elapsed}" data-client-start="\${Date.now()}" style="font-family: monospace;">
+                    <i class="ph-play-circle"></i> <span class="timer-display">00:00:00</span>
+                </div>
+            \`;
+        }
+    }
+
+    let actionButtons = '';
+    const st = item.arte_status || 'ENTRADA';
+    if (st === 'ENTRADA' || st === 'ARTE_NAO_FEITA') {
+        actionButtons = \`
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusDirect(\${item.id}, 'AGUARDANDO_INFO')">Aguardando Info</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusDirect(\${item.id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+            </div>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(\${item.id})">Definir / Upload</button>
+        \`;
+    } else if (st === 'AGUARDANDO_INFO') {
+        actionButtons = \`
+            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusDirect(\${item.id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(\${item.id})">Definir / Upload</button>
+        \`;
+    } else if (st === 'PRONTO_PARA_CRIAR') {
+        actionButtons = \`
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusDirect(\${item.id}, 'AGUARDANDO_INFO')">Devolver Info</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="iniciarDesenvolvimentoDirect(\${item.id})">Iniciar Arte</button>
+            </div>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(\${item.id})">Definir / Upload</button>
+        \`;
+    } else if (st === 'EM_DESENVOLVIMENTO') {
+        actionButtons = \`
+            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--warning-bg); color:var(--warning);" onclick="updateArteStatusDirect(\${item.id}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(\${item.id})">Definir / Upload</button>
+        \`;
+    } else if (st === 'AGUARDANDO_APROVACAO') {
+        actionButtons = \`
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--danger-bg); color:var(--danger);" onclick="reprovarArteDirect(\${item.id})">Reprovar</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="openArteAction(\${item.id})">Aprovar</button>
+            </div>
+        \`;
+    }
+
+    return \`
+        <div class="kanban-card \${priorityClass}" id="kanban-card-\${item.id}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom:0.25rem;">
+                <div class="kanban-card-title">Pedido: \${item.numero_pedido}</div>
+                \${layoutIndicator}
+            </div>
+            <div class="kanban-card-subtitle">\${item.cliente || 'Sem cliente'}</div>
+            <div class="kanban-card-body">
+                <strong>\${item.produto}</strong> (x\${item.quantidade})
+                \${item.referencia ? \`<div style="font-size:0.75rem; color:#475569; margin-top:0.15rem;">Ref: <b>\${item.referencia}</b></div>\` : ''}
+                \${item.cor_impressao ? \`<div style="font-size:0.75rem; color:#475569; margin-top:0.15rem;">Cor: <b>\${item.cor_impressao}</b></div>\` : ''}
+                <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem;">
+                    \${priorityBadge}
+                    \${tercBadge}
+                    \${shipBadge}
+                </div>
+            </div>
+            
+            \${respSelect}
+
+            <div class="kanban-card-footer">
+                <div style="font-size:0.7rem; color:var(--text-tertiary);">Prazo: <b>\${prazoStr}</b></div>
+                \${timerHtml}
+            </div>
+            
+            <div style="margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.5rem;">
+                \${actionButtons}
             </div>
         </div>
-    </div>`;
-
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    document.getElementById('btnCheckConfirm').onclick = () => {
-        document.getElementById('checkModal').remove();
-        onConfirm();
-    };
+    \`;
 }
 
-// 1. DESEMBALE CONFIRMATION
-function confirmDesembale(itemId) {
-    openCheckModal(
-        "Confirmação de Desembale",
-        [
-            "Fez a conferência dos itens 1 a 1",
-            "Realizou a contagem corretamente",
-            "Fez o desembale e separou os itens",
-            "Encaminhou o pedido para a etapa correta"
-        ],
-        () => mudarStatusItem(itemId, 'AGUARDANDO_PRODUCAO')
-    );
-}
+`;
 
-// 2. PRINTING START CONFIRMATION
-function confirmStartPrinting(itemId, setor) {
-    let title = "Confirmação antes de iniciar a impressão";
-    let textConf = [
-        "Produto correto e quantidade",
-        "Layout aprovado (visual)",
-        "Cor de impressão / Pantone (se aplicável)",
-        "Tamanho e posicionamento da arte",
-        "Escritas, ortografia e detalhes do layout"
-    ];
+content = content.slice(0, startIdx) + newLoadArteQueue + content.slice(endIdx);
 
-    if (setor === 'ESTAMPARIA') {
-        title = "Confirmação antes de iniciar a Estamparia";
-        textConf = [
-            "Produto conferido",
-            "Estampa/Matriz correta",
-            "Posicionamento verificado",
-            "Temperatura e tempo regulados"
-        ];
-    }
+// Convert back to CRLF
+content = content.replace(/\n/g, '\r\n');
 
-    openCheckModal(
-        title,
-        textConf,
-        () => registrarEvento(itemId, setor, 'INICIO', 0)
-    );
-}
-
-// 3. EMBALE FINISH CONFIRMATION
-function checkAndConfirmEmbale(itemId, pedidoId, tipoEnvio) {
-    openCheckModal(
-        "Confirmação de Embale",
-        [
-            "Conferiu o material impresso 1 a 1",
-            "Verificou se não há erro de gravação/posição/cor",
-            "Embalou corretamente e protegeu o produto",
-            "Preencheu corretamente os volumes",
-            "(Se Correios/Transportadora) informou peso e dimensões"
-        ],
-        () => confirmarEmbale(itemId, pedidoId, tipoEnvio)
-    );
-}
-
-// --- GLOBAL TABLE FILTER ---
-function filterTable(term, tableSelector = 'table tbody') {
-    term = term.toLowerCase();
-    const tables = document.querySelectorAll(tableSelector);
-    tables.forEach(tbody => {
-        const rows = tbody.querySelectorAll('tr');
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(term) ? '' : 'none';
-        });
-    });
-}
- 
- / /   R e p o r t s   V i e w   M o d u l e  
- / /   H a n d l e s   r e n d e r i n g   o f   t h e   " R e l a t � � r i o   p o r   C o l a b o r a d o r "   p a g e  
-  
- f u n c t i o n   l o a d R e p o r t s ( )   {  
-         / /   U p d a t e   a c t i v e   l o g i c  
-         d o c u m e n t . q u e r y S e l e c t o r A l l ( ' . n a v - l i n k ' ) . f o r E a c h ( l   = >   l . c l a s s L i s t . r e m o v e ( ' a c t i v e ' ) ) ;  
-         / /   F i n d   m e n u   i t e m   ( w e   w i l l   a d d   I D   l a t e r )  
-         / /   d o c u m e n t . g e t E l e m e n t B y I d ( ' m e n u _ R E P O R T S ' ) ? . c l a s s L i s t . a d d ( ' a c t i v e ' ) ;  
-  
-         c o n s t   c o n t e n t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' c o n t e n t A r e a ' ) ;  
-         c o n s t   t o d a y   =   n e w   D a t e ( ) . t o I S O S t r i n g ( ) . s p l i t ( ' T ' ) [ 0 ] ;  
-  
-         c o n t e n t . i n n e r H T M L   =   `  
-                 < d i v   c l a s s = " c a r d   f a d e - i n - u p " >  
-                         < d i v   c l a s s = " h e a d e r "   s t y l e = " m a r g i n - b o t t o m :   1 . 5 r e m ;   j u s t i f y - c o n t e n t :   f l e x - s t a r t ;   g a p :   1 r e m ;   f l e x - w r a p :   w r a p ; " >  
-                                 < h 2 > < i   c l a s s = " p h - c h a r t - l i n e - u p "   s t y l e = " m a r g i n - r i g h t : 0 . 5 r e m " > < / i >   R e l a t � � r i o s < / h 2 >  
-                         < / d i v >  
-                          
-                         < d i v   s t y l e = " b a c k g r o u n d :   # f 8 f a f c ;   p a d d i n g :   1 . 5 r e m ;   b o r d e r - r a d i u s :   1 r e m ;   b o r d e r :   1 p x   s o l i d   # e 2 e 8 f 0 ;   m a r g i n - b o t t o m :   2 r e m ; " >  
-                                 < h 3   s t y l e = " m a r g i n - b o t t o m :   1 r e m ;   f o n t - s i z e :   1 r e m ;   c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;   t e x t - t r a n s f o r m :   u p p e r c a s e ;   l e t t e r - s p a c i n g :   0 . 0 5 e m ; " > F i l t r o s < / h 3 >  
-                                  
-                                 < d i v   s t y l e = " d i s p l a y :   g r i d ;   g r i d - t e m p l a t e - c o l u m n s :   r e p e a t ( a u t o - f i t ,   m i n m a x ( 2 0 0 p x ,   1 f r ) ) ;   g a p :   1 r e m ;   a l i g n - i t e m s :   e n d ; " >  
-                                         < d i v   c l a s s = " f o r m - g r o u p "   s t y l e = " m a r g i n - b o t t o m :   0 ; " >  
-                                                 < l a b e l > S e t o r < / l a b e l >  
-                                                 < s e l e c t   i d = " r e p o r t S e c t o r "   c l a s s = " f o r m - c o n t r o l "   o n c h a n g e = " u p d a t e C o l l a b o r a t o r L i s t ( ) " >  
-                                                         < o p t i o n   v a l u e = " " > S e l e c i o n e   u m   S e t o r . . . < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " A r t e   F i n a l " > A r t e   F i n a l < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " S e p a r a � � � � o " > S e p a r a � � � � o < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " D e s e m b a l e " > D e s e m b a l e < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " S I L K _ C I L I N D R I C A " > S i l k   C i l � � n d r i c a < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " S I L K _ P L A N O " > S i l k   P l a n o < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " T A M P O G R A F I A " > T a m p o g r a f i a < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " I M P R E S S A O _ L A S E R " > I m p r e s s � � o   L a s e r < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " I M P R E S S A O _ D I G I T A L " > I m p r e s s � � o   D i g i t a l < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " E S T A M P A R I A " > E s t a m p a r i a < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " E m b a l e " > E m b a l e < / o p t i o n >  
-                                                         < o p t i o n   v a l u e = " L o g � � s t i c a " > L o g � � s t i c a < / o p t i o n >  
-                                                 < / s e l e c t >  
-                                         < / d i v >  
-  
-                                         < d i v   c l a s s = " f o r m - g r o u p "   s t y l e = " m a r g i n - b o t t o m :   0 ; " >  
-                                                 < l a b e l > C o l a b o r a d o r < / l a b e l >  
-                                                 < s e l e c t   i d = " r e p o r t U s e r "   c l a s s = " f o r m - c o n t r o l " >  
-                                                         < o p t i o n   v a l u e = " " > S e l e c i o n e . . . < / o p t i o n >  
-                                                 < / s e l e c t >  
-                                         < / d i v >  
-  
-                                         < d i v   c l a s s = " f o r m - g r o u p "   s t y l e = " m a r g i n - b o t t o m :   0 ; " >  
-                                                 < l a b e l > D a t a   I n � � c i o < / l a b e l >  
-                                                 < i n p u t   t y p e = " d a t e "   i d = " r e p o r t S t a r t "   c l a s s = " f o r m - c o n t r o l "   v a l u e = " $ { t o d a y } " >  
-                                         < / d i v >  
-  
-                                         < d i v   c l a s s = " f o r m - g r o u p "   s t y l e = " m a r g i n - b o t t o m :   0 ; " >  
-                                                 < l a b e l > D a t a   F i m < / l a b e l >  
-                                                 < i n p u t   t y p e = " d a t e "   i d = " r e p o r t E n d "   c l a s s = " f o r m - c o n t r o l "   v a l u e = " $ { t o d a y } " >  
-                                         < / d i v >  
-  
-                                         < b u t t o n   c l a s s = " b t n "   o n c l i c k = " g e n e r a t e R e p o r t ( ) "   s t y l e = " h e i g h t :   4 6 p x ;   m a r g i n - b o t t o m :   1 p x ; " >  
-                                                 < i   c l a s s = " p h - m a g n i f y i n g - g l a s s " > < / i >   G e r a r   R e l a t � � r i o  
-                                         < / b u t t o n >  
-                                 < / d i v >  
-                         < / d i v >  
-  
-                         < d i v   i d = " r e p o r t R e s u l t s "   s t y l e = " d i s p l a y :   n o n e ; " >  
-                                 < ! - -   C a r d s   d e   R e s u m o   - - >  
-                                 < d i v   s t y l e = " d i s p l a y :   g r i d ;   g r i d - t e m p l a t e - c o l u m n s :   r e p e a t ( a u t o - f i t ,   m i n m a x ( 2 0 0 p x ,   1 f r ) ) ;   g a p :   1 . 5 r e m ;   m a r g i n - b o t t o m :   2 r e m ; " >  
-                                         < d i v   c l a s s = " c a r d "   s t y l e = " m a r g i n - b o t t o m :   0 ;   t e x t - a l i g n :   c e n t e r ;   p a d d i n g :   1 . 5 r e m ; " >  
-                                                 < d i v   s t y l e = " f o n t - s i z e :   2 . 5 r e m ;   f o n t - w e i g h t :   8 0 0 ;   c o l o r :   v a r ( - - a c c e n t ) ; "   i d = " r e s T o t a l I t e m s " > 0 < / d i v >  
-                                                 < d i v   s t y l e = " c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;   f o n t - s i z e :   0 . 9 r e m ;   f o n t - w e i g h t :   6 0 0 ; " > I t e n s   P r o d u z i d o s < / d i v >  
-                                         < / d i v >  
-                                         < d i v   c l a s s = " c a r d "   s t y l e = " m a r g i n - b o t t o m :   0 ;   t e x t - a l i g n :   c e n t e r ;   p a d d i n g :   1 . 5 r e m ; " >  
-                                                 < d i v   s t y l e = " f o n t - s i z e :   2 . 5 r e m ;   f o n t - w e i g h t :   8 0 0 ;   c o l o r :   v a r ( - - a c c e n t ) ; "   i d = " r e s T o t a l O r d e r s " > 0 < / d i v >  
-                                                 < d i v   s t y l e = " c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;   f o n t - s i z e :   0 . 9 r e m ;   f o n t - w e i g h t :   6 0 0 ; " > P e d i d o s   A t e n d i d o s < / d i v >  
-                                         < / d i v >  
-                                         < d i v   c l a s s = " c a r d "   s t y l e = " m a r g i n - b o t t o m :   0 ;   t e x t - a l i g n :   c e n t e r ;   p a d d i n g :   1 . 5 r e m ; " >  
-                                                 < d i v   s t y l e = " f o n t - s i z e :   2 . 5 r e m ;   f o n t - w e i g h t :   8 0 0 ;   c o l o r :   v a r ( - - a c c e n t ) ; "   i d = " r e s A v g D u r a t i o n " > 0 < / d i v >  
-                                                 < d i v   s t y l e = " c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;   f o n t - s i z e :   0 . 9 r e m ;   f o n t - w e i g h t :   6 0 0 ; " > T e m p o   M � � d i o   ( m i n ) < / d i v >  
-                                         < / d i v >  
-                                         < d i v   c l a s s = " c a r d "   s t y l e = " m a r g i n - b o t t o m :   0 ;   t e x t - a l i g n :   c e n t e r ;   p a d d i n g :   1 . 5 r e m ; " >  
-                                                 < d i v   s t y l e = " f o n t - s i z e :   2 . 5 r e m ;   f o n t - w e i g h t :   8 0 0 ;   c o l o r :   v a r ( - - a c c e n t ) ; "   i d = " r e s T o t a l D u r a t i o n " > 0 < / d i v >  
-                                                 < d i v   s t y l e = " c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;   f o n t - s i z e :   0 . 9 r e m ;   f o n t - w e i g h t :   6 0 0 ; " > T e m p o   T o t a l   ( m i n ) < / d i v >  
-                                         < / d i v >  
-                                 < / d i v >  
-  
-                                 < ! - -   T a b e l a   D e t a l h a d a   - - >  
-                                 < h 3   s t y l e = " m a r g i n - b o t t o m :   1 r e m ;   f o n t - s i z e :   1 . 2 5 r e m ; " > D e t a l h a m e n t o < / h 3 >  
-                                 < d i v   s t y l e = " o v e r f l o w - x :   a u t o ; " >  
-                                         < t a b l e >  
-                                                 < t h e a d >  
-                                                         < t r >  
-                                                                 < t h > D a t a < / t h >  
-                                                                 < t h > C r i a � � � � o   P e d i d o < / t h >  
-                                                                 < t h > P e d i d o < / t h >  
-                                                                 < t h > C l i e n t e < / t h >  
-                                                                 < t h > P r o d u t o < / t h >  
-                                                                 < t h > R e f e r � � n c i a < / t h >  
-                                                                 < t h > Q t d < / t h >  
-                                                                 < t h > S e t o r < / t h >  
-                                                                 < t h > D u r a � � � � o < / t h >  
-                                                         < / t r >  
-                                                 < / t h e a d >  
-                                                 < t b o d y   i d = " r e p o r t T a b l e B o d y " >  
-                                                 < / t b o d y >  
-                                         < / t a b l e >  
-                                 < / d i v >  
-                         < / d i v >  
-                 < / d i v >  
-         ` ;  
-  
-         / /   I n i t i a l i z e   l o g i c  
-         l o a d C o l l a b o r a t o r s F o r R e p o r t ( ) ;  
- }  
-  
- / /   F e t c h   u s e r s   f o r   d r o p d o w n  
- a s y n c   f u n c t i o n   l o a d C o l l a b o r a t o r s F o r R e p o r t ( )   {  
-         t r y   {  
-                 c o n s t   r e s   =   a w a i t   f e t c h ( ' / a p i / u s e r s ' ) ;  
-                 c o n s t   u s e r s   =   a w a i t   r e s . j s o n ( ) ;  
-  
-                 / /   S t o r e   f o r   f i l t e r i n g  
-                 w i n d o w . a l l U s e r s   =   u s e r s ;  
-  
-                 / /   A p p l y   P e r m i s s i o n s   L o g i c  
-                 c o n s t   s e c t o r S e l e c t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t S e c t o r ' ) ;  
-                 c o n s t   u s e r S e l e c t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t U s e r ' ) ;  
-  
-                 i f   ( c u r r e n t U s e r . p e r f i l   ! = =   ' a d m i n '   & &   c u r r e n t U s e r . p e r f i l   ! = =   ' f i n a n c e i r o ' )   {  
-                         / /   L o c k   S e c t o r  
-                         l e t   u s e r S e c t o r   =   m a p P r o f i l e T o S e c t o r ( c u r r e n t U s e r . p e r f i l ) ;  
-                         i f   ( c u r r e n t U s e r . p e r f i l   = = =   ' i m p r e s s a o '   & &   c u r r e n t U s e r . s e t o r _ i m p r e s s a o )   {  
-                                 u s e r S e c t o r   =   c u r r e n t U s e r . s e t o r _ i m p r e s s a o ;  
-                         }  
-  
-                         / /   S e t   a n d   D i s a b l e   S e c t o r  
-                         i f   ( u s e r S e c t o r )   {  
-                                 s e c t o r S e l e c t . v a l u e   =   u s e r S e c t o r ;  
-                                 s e c t o r S e l e c t . d i s a b l e d   =   t r u e ;  
-                         }  
-  
-                         / /   L o c k   U s e r   ( O n l y   s e l f )  
-                         u s e r S e l e c t . i n n e r H T M L   =   ` < o p t i o n   v a l u e = " $ { c u r r e n t U s e r . i d } " > $ { c u r r e n t U s e r . n o m e } < / o p t i o n > ` ;  
-                         u s e r S e l e c t . d i s a b l e d   =   t r u e ;  
-                 }   e l s e   {  
-                         / /   A d m i n :   S h o w   ' T o d o s '   o p t i o n ?  
-                         / /   U s e r   r e q u e s t e d   " P o r   C o l a b o r a d o r " .   C a n   k e e p   d r o p d o w n   o p e n .  
-                 }  
-  
-                 / /   I n i t i a l   p o p u l a t e   i f   a d m i n   o r   i f   s e c t o r   s e t  
-                 u p d a t e C o l l a b o r a t o r L i s t ( ) ;  
-  
-         }   c a t c h   ( e )   {  
-                 c o n s o l e . e r r o r ( " E r r o r   l o a d i n g   u s e r s : " ,   e ) ;  
-         }  
- }  
-  
- f u n c t i o n   m a p P r o f i l e T o S e c t o r ( p r o f i l e )   {  
-         c o n s t   m a p   =   {  
-                 ' a r t e ' :   ' A r t e   F i n a l ' ,  
-                 ' s e p a r a c a o ' :   ' S e p a r a � � � � o ' ,  
-                 ' d e s e m b a l e ' :   ' D e s e m b a l e ' ,  
-                 ' e m b a l e ' :   ' E m b a l e ' ,  
-                 ' l o g i s t i c a ' :   ' L o g � � s t i c a '  
-         } ;  
-         r e t u r n   m a p [ p r o f i l e ]   | |   n u l l ;  
- }  
-  
- f u n c t i o n   u p d a t e C o l l a b o r a t o r L i s t ( )   {  
-         c o n s t   s e c t o r   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t S e c t o r ' ) . v a l u e ;  
-         c o n s t   u s e r S e l e c t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t U s e r ' ) ;  
-  
-         / /   I f   l o c k e d   ( n o n - a d m i n ) ,   d o n ' t   t o u c h  
-         i f   ( u s e r S e l e c t . d i s a b l e d )   r e t u r n ;  
-  
-         u s e r S e l e c t . i n n e r H T M L   =   ' < o p t i o n   v a l u e = " " > S e l e c i o n e . . . < / o p t i o n > ' ;  
-  
-         i f   ( ! w i n d o w . a l l U s e r s )   r e t u r n ;  
-  
-         / /   F i l t e r   u s e r s   b y   s e c t o r  
-         / /   N o t e :   U s e r s   t a b l e   h a s   ' p e r f i l '   a n d   ' s e t o r _ i m p r e s s a o ' .  
-         / /   W e   n e e d   t o   m a t c h   t h e   s e c t o r   v a l u e   t o   t h e s e   f i e l d s .  
-  
-         / /   M a p p i n g   S e c t o r   V a l u e   - >   P r o f i l e / S e t o r I m p r e s s a o  
-         c o n s t   t a r g e t U s e r s   =   w i n d o w . a l l U s e r s . f i l t e r ( u   = >   {  
-                 i f   ( u . p e r f i l   = = =   ' a d m i n ' )   r e t u r n   t r u e ;   / /   A d m i n s   c a n   b e   s e l e c t e d ?   u s u a l l y   r e p o r t   i s   o n   o p e r a t o r s .  
-  
-                 i f   ( [ ' S I L K _ C I L I N D R I C A ' ,   ' S I L K _ P L A N O ' ,   ' T A M P O G R A F I A ' ,   ' I M P R E S S A O _ L A S E R ' ,   ' I M P R E S S A O _ D I G I T A L ' ,   ' E S T A M P A R I A ' ] . i n c l u d e s ( s e c t o r ) )   {  
-                         r e t u r n   u . p e r f i l   = = =   ' i m p r e s s a o '   & &   u . s e t o r _ i m p r e s s a o   = = =   s e c t o r ;  
-                 }  
-  
-                 / /   N o n - p r i n t i n g   s e c t o r s  
-                 c o n s t   p r o f i l e M a p   =   {  
-                         ' A r t e   F i n a l ' :   ' a r t e ' ,  
-                         ' S e p a r a � � � � o ' :   ' s e p a r a c a o ' ,  
-                         ' D e s e m b a l e ' :   ' d e s e m b a l e ' ,  
-                         ' E m b a l e ' :   ' e m b a l e ' ,  
-                         ' L o g � � s t i c a ' :   ' l o g i s t i c a '  
-                 } ;  
-  
-                 r e t u r n   u . p e r f i l   = = =   p r o f i l e M a p [ s e c t o r ] ;  
-         } ) ;  
-  
-         t a r g e t U s e r s . f o r E a c h ( u   = >   {  
-                 c o n s t   o p t   =   d o c u m e n t . c r e a t e E l e m e n t ( ' o p t i o n ' ) ;  
-                 o p t . v a l u e   =   u . i d ;  
-                 o p t . t e x t C o n t e n t   =   u . n o m e ;  
-                 u s e r S e l e c t . a p p e n d C h i l d ( o p t ) ;  
-         } ) ;  
- }  
-  
- a s y n c   f u n c t i o n   g e n e r a t e R e p o r t ( )   {  
-         c o n s t   s e c t o r   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t S e c t o r ' ) . v a l u e ;  
-         c o n s t   u s e r I d   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t U s e r ' ) . v a l u e ;  
-         c o n s t   s t a r t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t S t a r t ' ) . v a l u e ;  
-         c o n s t   e n d   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t E n d ' ) . v a l u e ;  
-  
-         i f   ( ! s e c t o r   | |   ! u s e r I d   | |   ! s t a r t   | |   ! e n d )   {  
-                 a l e r t ( " P o r   f a v o r ,   p r e e n c h a   t o d o s   o s   c a m p o s . " ) ;  
-                 r e t u r n ;  
-         }  
-  
-         / /   G e t   u s e r   n a m e   f o r   d i s p l a y / r e q u e s t   ( t h o u g h   I D   i s   p r e f e r r e d )  
-         c o n s t   u s e r S e l e c t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t U s e r ' ) ;  
-         c o n s t   u s e r N a m e   =   u s e r S e l e c t . o p t i o n s [ u s e r S e l e c t . s e l e c t e d I n d e x ] . t e x t ;  
-  
-         t r y   {  
-                 c o n s t   q u e r y   =   n e w   U R L S e a r c h P a r a m s ( {  
-                         s t a r t ,  
-                         e n d ,  
-                         u s e r I d ,  
-                         s e c t o r ,  
-                         u s e r N a m e  
-                 } ) ;  
-  
-                 c o n s t   r e s   =   a w a i t   f e t c h ( ` / a p i / r e p o r t s / c o l l a b o r a t o r - s t a t s ? $ { q u e r y } ` ) ;  
-                 c o n s t   d a t a   =   a w a i t   r e s . j s o n ( ) ;  
-  
-                 i f   ( d a t a . e r r o r )   {  
-                         a l e r t ( " E r r o :   "   +   d a t a . e r r o r ) ;  
-                         r e t u r n ;  
-                 }  
-  
-                 / /   R e n d e r   R e s u l t s  
-                 d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t R e s u l t s ' ) . s t y l e . d i s p l a y   =   ' b l o c k ' ;  
-  
-                 / /   C a r d s  
-                 d o c u m e n t . g e t E l e m e n t B y I d ( ' r e s T o t a l I t e m s ' ) . t e x t C o n t e n t   =   d a t a . s u m m a r y . t o t a l _ i t e m s ;  
-                 d o c u m e n t . g e t E l e m e n t B y I d ( ' r e s T o t a l O r d e r s ' ) . t e x t C o n t e n t   =   d a t a . s u m m a r y . t o t a l _ o r d e r s ;  
-  
-                 c o n s t   a v g   =   d a t a . s u m m a r y . a v g _ d u r a t i o n _ m i n u t e s ;  
-                 c o n s t   t o t a l D u r   =   d a t a . s u m m a r y . t o t a l _ d u r a t i o n _ m i n u t e s ;  
-  
-                 d o c u m e n t . g e t E l e m e n t B y I d ( ' r e s A v g D u r a t i o n ' ) . t e x t C o n t e n t   =   a v g   >   0   ?   a v g   :   ' N / A ' ;  
-                 d o c u m e n t . g e t E l e m e n t B y I d ( ' r e s T o t a l D u r a t i o n ' ) . t e x t C o n t e n t   =   t o t a l D u r   >   0   ?   t o t a l D u r   :   ' N / A ' ;  
-  
-                 / /   T a b l e  
-                 c o n s t   t b o d y   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' r e p o r t T a b l e B o d y ' ) ;  
-                 t b o d y . i n n e r H T M L   =   ' ' ;  
-  
-                 i f   ( d a t a . d e t a i l s . l e n g t h   = = =   0 )   {  
-                         t b o d y . i n n e r H T M L   =   ' < t r > < t d   c o l s p a n = " 9 "   s t y l e = " t e x t - a l i g n : c e n t e r ;   p a d d i n g :   2 r e m ; " > N e n h u m   r e g i s t r o   e n c o n t r a d o   n o   p e r � � o d o . < / t d > < / t r > ' ;  
-                 }   e l s e   {  
-                         d a t a . d e t a i l s . f o r E a c h ( r o w   = >   {  
-                                 c o n s t   t r   =   d o c u m e n t . c r e a t e E l e m e n t ( ' t r ' ) ;  
-                                 c o n s t   d a t e S t r   =   n e w   D a t e ( r o w . d a t a ) . t o L o c a l e S t r i n g ( ) ;  
-                                 / /   O p t i o n a l :   S h o w   c r e a t i o n   d a t e ?   A P I   r e t u r n s   ` d a t a _ c r i a c a o `   i n   s o m e   p a t h s ?  
-                                 / /   T h e   A P I   f o r   c h e c k   s e c t o r s   r e t u r n s   d a t a _ c r i a c a o .   T i m e r   s e c t o r s   n o t   e x p l i c i t l y   j o i n e d   p r o p e r l y   f o r   c r e a t i o n   d a t e   i n   m y   q u e r y   u p d a t e ?  
-                                 / /   L e t ' s   c h e c k   m y   q u e r y . . .   T i m e r   q u e r y   j o i n s   c r e a t e d   ` p `   t a b l e   b u t   d o e s n ' t   s e l e c t   ` p . d a t a _ c r i a c a o ` .  
-                                 / /   I   s h o u l d   a c c e p t   ` u n d e f i n e d `   f o r   c r e a t i o n   d a t e   i f   m i s s i n g .  
-  
-                                 t r . i n n e r H T M L   =   `  
-                                 < t d > $ { d a t e S t r } < / t d >  
-                                 < t d > - - < / t d >    
-                                 < t d > $ { r o w . p e d i d o } < / t d >  
-                                 < t d > $ { r o w . c l i e n t e } < / t d >  
-                                 < t d > $ { r o w . p r o d u t o } < / t d >  
-                                 < t d > $ { r o w . r e f e r e n c i a   | |   ' - ' } < / t d >  
-                                 < t d > $ { r o w . q u a n t i d a d e } < / t d >  
-                                 < t d > $ { r o w . s e t o r } < / t d >  
-                                 < t d > $ { r o w . d u r a c a o } < / t d >  
-                               ` ;  
-                                 t b o d y . a p p e n d C h i l d ( t r ) ;  
-                         } ) ;  
-                 }  
-  
-         }   c a t c h   ( e )   {  
-                 c o n s o l e . e r r o r ( " E r r o r   g e n e r a t i n g   r e p o r t : " ,   e ) ;  
-                 a l e r t ( " E r r o   a o   g e r a r   r e l a t � � r i o . " ) ;  
-         }  
- }  
- 
+fs.writeFileSync(filePath, content, 'utf8');
+console.log("update_app_js.js ran successfully!");

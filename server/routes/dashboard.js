@@ -57,6 +57,18 @@ router.get('/live', (req, res) => {
             COUNT(DISTINCT CASE WHEN (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as arte_final_count,
             COUNT(CASE WHEN (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' THEN i.id END) as arte_final_items,
 
+            COUNT(DISTINCT CASE WHEN (i.arte_status = 'ENTRADA' OR i.arte_status = 'ARTE_NAO_FEITA' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' AND (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) THEN i.pedido_id END) as arte_entrada_count,
+            COUNT(CASE WHEN (i.arte_status = 'ENTRADA' OR i.arte_status = 'ARTE_NAO_FEITA' OR i.arte_status IS NULL) AND i.status_atual != 'CANCELADO' AND (i.arte_status != 'APROVADO' OR i.arte_status IS NULL) THEN i.id END) as arte_entrada_items,
+
+            COUNT(DISTINCT CASE WHEN i.arte_status = 'AGUARDANDO_INFO' AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as arte_aguardando_info_count,
+            COUNT(CASE WHEN i.arte_status = 'AGUARDANDO_INFO' AND i.status_atual != 'CANCELADO' THEN i.id END) as arte_aguardando_info_items,
+
+            COUNT(DISTINCT CASE WHEN i.arte_status = 'PRONTO_PARA_CRIAR' AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as arte_pronto_count,
+            COUNT(CASE WHEN i.arte_status = 'PRONTO_PARA_CRIAR' AND i.status_atual != 'CANCELADO' THEN i.id END) as arte_pronto_items,
+
+            COUNT(DISTINCT CASE WHEN i.arte_status = 'EM_DESENVOLVIMENTO' AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as arte_wip_count,
+            COUNT(CASE WHEN i.arte_status = 'EM_DESENVOLVIMENTO' AND i.status_atual != 'CANCELADO' THEN i.id END) as arte_wip_items,
+
             COUNT(DISTINCT CASE WHEN i.arte_status = 'AGUARDANDO_APROVACAO' AND i.status_atual != 'CANCELADO' THEN i.pedido_id END) as aguardando_aprovacao_count,
             COUNT(CASE WHEN i.arte_status = 'AGUARDANDO_APROVACAO' AND i.status_atual != 'CANCELADO' THEN i.id END) as aguardando_aprovacao_items,
 
@@ -95,6 +107,10 @@ router.get('/live', (req, res) => {
             results.em_producao = { count: row.em_producao_count || 0, total_items: row.em_producao_items || 0 };
             results.aguardando_producao = { count: row.aguardando_producao_count || 0, total_items: row.aguardando_producao_items || 0 };
             results.arte_final = { count: row.arte_final_count || 0, total_items: row.arte_final_items || 0 };
+            results.arte_entrada = { count: row.arte_entrada_count || 0, total_items: row.arte_entrada_items || 0 };
+            results.arte_aguardando_info = { count: row.arte_aguardando_info_count || 0, total_items: row.arte_aguardando_info_items || 0 };
+            results.arte_pronto = { count: row.arte_pronto_count || 0, total_items: row.arte_pronto_items || 0 };
+            results.arte_wip = { count: row.arte_wip_count || 0, total_items: row.arte_wip_items || 0 };
             results.aguardando_aprovacao = { count: row.aguardando_aprovacao_count || 0, total_items: row.aguardando_aprovacao_items || 0 };
             results.separacao = { count: row.separacao_count || 0, total_items: row.separacao_items || 0 };
             results.desembale = { count: row.desembale_count || 0, total_items: row.desembale_items || 0 };

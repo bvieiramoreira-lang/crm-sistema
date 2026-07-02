@@ -204,9 +204,33 @@ async function fetchLiveStats() {
             }
 
             summaryDiv.innerHTML = `
-                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem;"><span>Desembale:</span> <div>${formatSummaryVal(data.desembale)}</div></div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem;"><span>Embale:</span> <div>${formatSummaryVal(data.embale)}</div></div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem;"><span>Logística:</span> <div>${formatSummaryVal(data.logistica)}</div></div>
+                <div style="font-size:0.8rem; text-transform:uppercase; color:#a78bfa; margin-bottom:0.5rem;">Fila de Arte (Kanban):</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;">
+                    <span style="color:#cbd5e1;">1. Entrada:</span> 
+                    <div>${formatSummaryVal(data.arte_entrada)}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;">
+                    <span style="color:#cbd5e1;">2. Aguardando Info:</span> 
+                    <div>${formatSummaryVal(data.arte_aguardando_info)}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;">
+                    <span style="color:#cbd5e1;">3. Pronto p/ Criar:</span> 
+                    <div>${formatSummaryVal(data.arte_pronto)}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;">
+                    <span style="color:#cbd5e1;">4. Em Desenv. (WIP):</span> 
+                    <div>${formatSummaryVal(data.arte_wip)}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.95rem;">
+                    <span style="color:#cbd5e1;">5. Aguard. Aprovação:</span> 
+                    <div>${formatSummaryVal(data.aguardando_aprovacao)}</div>
+                </div>
+                
+                <div style="margin-top:1rem; border-top:1px solid #6d28d9; padding-top:0.5rem; font-size:0.8rem; text-transform:uppercase; color:#a78bfa; margin-bottom:0.5rem;">Demais Setores:</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;"><span>Separação:</span> <div>${formatSummaryVal(data.separacao)}</div></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;"><span>Desembale:</span> <div>${formatSummaryVal(data.desembale)}</div></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;"><span>Embale:</span> <div>${formatSummaryVal(data.embale)}</div></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem; font-size:0.95rem;"><span>Logística:</span> <div>${formatSummaryVal(data.logistica)}</div></div>
                 ${sectorsHtml}
             `;
         }

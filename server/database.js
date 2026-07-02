@@ -124,6 +124,17 @@ db.serialize(() => {
     addColumn('itens_pedido', 'referencia', 'TEXT');
     addColumn('itens_pedido', 'is_terceirizado', 'INTEGER DEFAULT 0');
 
+    // MIGRATION: Colunas para o Fluxo de Arte Reestruturado
+    addColumn('itens_pedido', 'is_alteracao', 'INTEGER DEFAULT 0');
+    addColumn('itens_pedido', 'data_entrada_arte', 'DATETIME');
+    addColumn('itens_pedido', 'data_inicio_arte', 'DATETIME');
+
+    // Inicialização de itens antigos pendentes na arte
+    db.serialize(() => {
+        db.run("UPDATE itens_pedido SET arte_status = 'ENTRADA' WHERE status_atual = 'AGUARDANDO_ARTE' AND (arte_status = 'ARTE_NAO_FEITA' OR arte_status IS NULL)");
+        db.run("UPDATE itens_pedido SET data_entrada_arte = DATETIME('now', 'localtime') WHERE data_entrada_arte IS NULL");
+    });
+
     // MIGRATION: Colunas para o Sistema de Pausa
     addColumn('itens_pedido', 'is_pausado_producao', 'INTEGER DEFAULT 0');
     addColumn('itens_pedido', 'motivo_pausa_producao', 'TEXT');

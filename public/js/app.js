@@ -839,70 +839,448 @@ async function loadArteQueue() {
         // --- BUSCAR COLABORADORES DA ARTE ---
         let sectorUsers = await getSectorUsersCached('ARTE_FINAL');
 
-        let html = `
-            <div class="form-group" style="max-width: 400px; margin-bottom: 1rem;">
-                <input type="text" class="form-control" placeholder="🔍 Pesquisar na arte..." oninput="filterLocalTable(this.value)">
-            </div>
-            <div class="card"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Status Arte</th><th>Responsável</th><th>Ação</th></tr></thead><tbody>
-        `;
-
+        // Group items by pedido_id
+        const ordersMap = {};
         itens.forEach(item => {
-            // --- DROPDOWN RESPONSÁVEL ---
-            const currentResp = item.responsavel_arte || '';
-            let options = `<option value="">-- Selecione --</option>`;
-            sectorUsers.forEach(u => {
-                const sel = u.nome === currentResp ? 'selected' : '';
-                options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
-            });
+            if (!ordersMap[item.pedido_id]) {
+                ordersMap[item.pedido_id] = {
+                    pedido_id: item.pedido_id,
+                    numero_pedido: item.numero_pedido,
+                    cliente: item.cliente,
+                    prazo_entrega: item.prazo_entrega,
+                    tipo_envio: item.tipo_envio,
+                    transportadora: item.transportadora,
+                    observacao: item.observacao,
+                    items: []
+                };
+            }
+            ordersMap[item.pedido_id].items.push(item);
+        });
+        const orders = Object.values(ordersMap);
 
-            const respBlock = currentResp
-                ? `<span style="font-weight:600; color:var(--text-secondary);">${currentResp}</span>`
-                : '<span style="color:#cbd5e1;">-</span>';
+        // Segregate orders by status
+        const colEntrada = [];
+        const colInfo = [];
+        const colPronto = [];
+        const colWip = [];
+        const colAprovacao = [];
 
-            const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
-
-            const colorInfo = item.cor_impressao
-                ? `<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);"><i class="ph-drop"></i> Cor de Impressão: <strong>${item.cor_impressao}</strong></div>`
-                : '';
-
-            const tercBadge = item.is_terceirizado ? `<div style="margin-top:0.3rem;"><span class="badge badge-warning" style="font-size:0.75rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c;"><i class="ph-truck"></i> TERCEIRIZADO</span></div>` : '';
-
-            html += `
-                <tr>
-                    <td>${item.numero_pedido}<br><small>${item.cliente}</small></td>
-                    <td>
-                        <strong>${item.produto}</strong> (x${item.quantidade})
-                        ${tercBadge}
-                        ${item.referencia ? `<div style="font-size:0.85rem; color:#475569; margin-top:0.2rem;">Referência: <strong>${item.referencia}</strong></div>` : ''}
-                        <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
-                        ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
-                        ${colorInfo}
-                    </td>
-                     <td>${new Date(item.prazo_entrega).toLocaleDateString()}</td>
-                     <td>
-                        <span class="badge ${item.arte_status === 'ARTE_NAO_FEITA' ? 'badge-danger' : (item.arte_status === 'AGUARDANDO_APROVACAO' ? 'badge-warning' : 'badge-success')}">
-                            ${item.arte_status}
-                        </span>
-                        <div style="margin-top:0.25rem">${layoutIndicator}</div>
-                     </td>
-                     <td>${respBlock}</td>
-                     <td>
-                        <button class="btn" style="width: auto; font-size: 0.8rem;" onclick="openArteAction(${item.id})">Definir / Upload</button>
-                     </td>
-                </tr>
-             `;
+        orders.forEach(order => {
+            const status = getOrderArteStatus(order);
+            if (status === 'ENTRADA' || status === 'ARTE_NAO_FEITA') {
+                colEntrada.push(order);
+            } else if (status === 'AGUARDANDO_INFO') {
+                colInfo.push(order);
+            } else if (status === 'PRONTO_PARA_CRIAR') {
+                colPronto.push(order);
+            } else if (status === 'EM_DESENVOLVIMENTO') {
+                colWip.push(order);
+            } else if (status === 'AGUARDANDO_APROVACAO') {
+                colAprovacao.push(order);
+            } else {
+                colEntrada.push(order);
+            }
         });
 
-        html += '</tbody></table></div>';
+        // Dynamic badge colors/styles for WIP limit (based on orders)
+        const wipLimitClass = colWip.length >= 10 ? 'background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;' : '';
+
+        let html = `
+            <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
+                <input type="text" id="kanbanSearchInput" class="form-control" placeholder="🔍 Pesquisar na arte..." oninput="filterKanbanCards(this.value)">
+            </div>
+            
+            <div class="kanban-board">
+                <!-- COLUNA 1: ENTRADA -->
+                <div class="kanban-column" id="col-entrada">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-tray" style="color:var(--text-secondary)"></i> Entrada</div>
+                        <span class="kanban-column-count">${colEntrada.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        ${colEntrada.map(order => renderKanbanCard(order, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum pedido</div>'}
+                    </div>
+                </div>
+
+                <!-- COLUNA 2: AGUARDANDO INFO -->
+                <div class="kanban-column" id="col-info">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-chat-circle-dots" style="color:var(--warning)"></i> Aguardando Info</div>
+                        <span class="kanban-column-count">${colInfo.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        ${colInfo.map(order => renderKanbanCard(order, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum pedido</div>'}
+                    </div>
+                </div>
+
+                <!-- COLUNA 3: PRONTO PARA CRIAR -->
+                <div class="kanban-column" id="col-pronto">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-check-circle" style="color:var(--accent)"></i> Pronto p/ Criar</div>
+                        <span class="kanban-column-count">${colPronto.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        ${colPronto.map(order => renderKanbanCard(order, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum pedido</div>'}
+                    </div>
+                </div>
+
+                <!-- COLUNA 4: EM DESENVOLVIMENTO -->
+                <div class="kanban-column" id="col-wip">
+                    <div class="kanban-column-header" style="border-bottom: 2px solid var(--info);">
+                        <div class="kanban-column-title"><i class="ph-paint-brush-broad" style="color:var(--info)"></i> Em Desenvolvimento</div>
+                        <span class="kanban-column-count" style="${wipLimitClass}">${colWip.length} / 10</span>
+                    </div>
+                    <div class="kanban-cards">
+                        ${colWip.map(order => renderKanbanCard(order, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum pedido</div>'}
+                    </div>
+                </div>
+
+                <!-- COLUNA 5: AGUARDANDO APROVACAO -->
+                <div class="kanban-column" id="col-aprovacao">
+                    <div class="kanban-column-header">
+                        <div class="kanban-column-title"><i class="ph-paper-plane-right" style="color:var(--success)"></i> Aguardando Aprovação</div>
+                        <span class="kanban-column-count">${colAprovacao.length}</span>
+                    </div>
+                    <div class="kanban-cards">
+                        ${colAprovacao.map(order => renderKanbanCard(order, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum pedido</div>'}
+                    </div>
+                </div>
+            </div>
+        `;
+
         document.getElementById('contentArea').innerHTML = html;
-        console.log("Fila de Arte carregada. Usuários:", sectorUsers.length);
+
+        // START TIMERS
+        window.activeTimersCache = [];
+        if (window.productionTimerInterval) clearInterval(window.productionTimerInterval);
+        updateLiveTimers(); // Immediate run
+        window.productionTimerInterval = setInterval(updateLiveTimers, 1000);
+
     } catch (e) {
         console.error(e);
-        document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar fila de arte.</p>';
+        document.getElementById('contentArea').innerHTML = '<p style="color:red">Erro ao carregar fila de arte final.</p>';
     }
 }
 
-// --- FUNÇÃO GLOBAL DE ATRIBUIÇÃO ---
+// Auxiliar para determinar status de arte do pedido com base nos itens
+function getOrderArteStatus(order) {
+    const statuses = order.items.map(i => i.arte_status || 'ENTRADA');
+    if (statuses.includes('EM_DESENVOLVIMENTO')) return 'EM_DESENVOLVIMENTO';
+    if (statuses.includes('AGUARDANDO_APROVACAO')) return 'AGUARDANDO_APROVACAO';
+    if (statuses.includes('PRONTO_PARA_CRIAR')) return 'PRONTO_PARA_CRIAR';
+    if (statuses.includes('AGUARDANDO_INFO')) return 'AGUARDANDO_INFO';
+    return 'ENTRADA';
+}
+
+function parseSqliteDate(str) {
+    if (!str) return null;
+    return new Date(str.replace(' ', 'T'));
+}
+
+function filterKanbanCards(query) {
+    const cards = document.querySelectorAll('.kanban-card');
+    const lowerQuery = query.toLowerCase();
+    cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(lowerQuery)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+async function updateArteStatusOrderDirect(pedidoId, status) {
+    if (!confirm(`Confirmar alteração do pedido para o status: ${status}?`)) return;
+
+    const cardEl = document.getElementById(`kanban-card-${pedidoId}`);
+    const selectEl = cardEl ? cardEl.querySelector('select') : null;
+    let responsavel = selectEl ? selectEl.value : null;
+    if (!responsavel) {
+        const modalSelectEl = document.getElementById(`resp_select_${pedidoId}`);
+        if (modalSelectEl) responsavel = modalSelectEl.value;
+    }
+
+    try {
+        const res = await fetch(`/api/production/pedido/${pedidoId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                arte_status: status,
+                responsavel: responsavel,
+                operador_id: currentUser.id
+            })
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao atualizar status');
+        }
+
+        if (document.getElementById(`resp_select_${pedidoId}`)) {
+            openArteAction(pedidoId);
+        } else {
+            loadArteQueue();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao atualizar status: ' + e.message);
+    }
+}
+
+async function iniciarDesenvolvimentoOrderDirect(pedidoId) {
+    const cardEl = document.getElementById(`kanban-card-${pedidoId}`);
+    const selectEl = cardEl ? cardEl.querySelector('select') : null;
+    let responsavel = selectEl ? selectEl.value : null;
+    if (!responsavel) {
+        const modalSelectEl = document.getElementById(`resp_select_${pedidoId}`);
+        if (modalSelectEl) responsavel = modalSelectEl.value;
+    }
+
+    if (!responsavel) {
+        alert('Selecione o responsável antes de iniciar o desenvolvimento da arte.');
+        const target = selectEl || document.getElementById(`resp_select_${pedidoId}`);
+        if (target) target.focus();
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/production/pedido/${pedidoId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                arte_status: 'EM_DESENVOLVIMENTO',
+                responsavel: responsavel,
+                operador_id: currentUser.id
+            })
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao iniciar desenvolvimento');
+        }
+
+        if (document.getElementById(`resp_select_${pedidoId}`)) {
+            openArteAction(pedidoId);
+        } else {
+            loadArteQueue();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro: ' + e.message);
+    }
+}
+
+async function reprovarArteOrderDirect(pedidoId) {
+    const reason = prompt("Digite o motivo da reprovação (será anexado à observação de todos os itens do pedido):");
+    if (reason === null) return; 
+    if (reason.trim() === '') return alert("Motivo da reprovação é obrigatório!");
+
+    try {
+        const res = await fetch(`/api/production/pedido/${pedidoId}/reprovar`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                motivo_reprovacao: reason.trim(),
+                operador_id: currentUser.id
+            })
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Erro ao reprovar arte');
+        }
+
+        loadArteQueue();
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao reprovar arte: ' + e.message);
+    }
+}
+
+async function assignOrder(pedidoId, responsavel) {
+    try {
+        const res = await fetch(`/api/production/pedido/${pedidoId}/assign`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ responsavel })
+        });
+        if (res.ok) {
+            const toast = document.createElement('div');
+            toast.textContent = `Atribuído a ${responsavel}`;
+            toast.style.cssText = `position:fixed; bottom:20px; right:20px; background:#22c55e; color:white; padding:10px 20px; border-radius:4px; z-index:1000`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+            loadArteQueue();
+        } else {
+            alert('Erro ao atribuir responsável.');
+        }
+    } catch (e) {
+        console.error('Erro assignOrder', e);
+    }
+}
+
+function renderKanbanCard(order, sectorUsers) {
+    const st = getOrderArteStatus(order);
+    const hasAlteracao = order.items.some(i => i.is_alteracao === 1);
+    const isWip = st === 'EM_DESENVOLVIMENTO';
+    
+    let priorityClass = '';
+    let priorityBadge = '';
+    if (hasAlteracao) {
+        priorityClass = 'card-priority';
+        priorityBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:0.7rem; padding: 2px 6px; display:inline-flex; align-items:center; gap:0.25rem;"><i class="ph-warning"></i> ALTERAÇÃO</span>`;
+    } else if (isWip) {
+        priorityClass = 'card-wip';
+    }
+
+    const shipBadge = renderShippingBadge(order.tipo_envio);
+    const hasTerc = order.items.some(i => i.is_terceirizado);
+    const tercBadge = hasTerc 
+        ? `<span class="badge" style="background:#fef08a; color:#854d0e; border:1px solid #fce71c; font-size:0.7rem; padding: 2px 6px;"><i class="ph-truck"></i> TERCEIRIZADO</span>` 
+        : '';
+
+    const prazoStr = order.prazo_entrega ? new Date(order.prazo_entrega).toLocaleDateString('pt-BR') : 'N/A';
+
+    // Responsável a nível de Pedido (usa o primeiro item ativo da arte)
+    const currentResp = order.items[0].responsavel_arte || '';
+    let respSelect = '';
+    if (st === 'PRONTO_PARA_CRIAR' || st === 'EM_DESENVOLVIMENTO') {
+        let options = `<option value="">-- Selecione --</option>`;
+        sectorUsers.forEach(u => {
+            const sel = u.nome === currentResp ? 'selected' : '';
+            options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
+        });
+        respSelect = `
+            <div style="margin-top: 0.5rem;">
+                <label style="font-size:0.7rem; font-weight:bold; color:var(--text-secondary); display:block; margin-bottom:0.15rem;">Responsável:</label>
+                <select class="form-control" style="font-size:0.75rem; padding:0.25rem; height:auto; margin-bottom:0;" onchange="assignOrder(${order.pedido_id}, this.value)">
+                    ${options}
+                </select>
+            </div>
+        `;
+    } else {
+        respSelect = currentResp 
+            ? `<div style="font-size:0.75rem; margin-top:0.5rem; color:var(--text-secondary);">Resp: <strong>${currentResp}</strong></div>` 
+            : '';
+    }
+
+    let timerHtml = '';
+    if (st === 'ENTRADA' || st === 'ARTE_NAO_FEITA') {
+        const entryDates = order.items.map(i => parseSqliteDate(i.data_entrada_arte)).filter(d => d !== null);
+        const entryDate = entryDates.length > 0 ? new Date(Math.min(...entryDates)) : null;
+        if (entryDate) {
+            const now = new Date();
+            const limitDate = new Date(entryDate.getTime() + 48 * 60 * 60 * 1000);
+            const diffMs = limitDate.getTime() - now.getTime();
+            if (diffMs < 0) {
+                const overdueHours = Math.floor(Math.abs(diffMs) / (60 * 60 * 1000));
+                timerHtml = `<div class="kanban-card-timer overdue" title="SLA de 48h estourado!"><i class="ph-warning"></i> SLA Estourado (+ ${overdueHours}h)</div>`;
+            } else {
+                const remainingHours = Math.floor(diffMs / (60 * 60 * 1000));
+                const remainingMins = Math.floor((diffMs % (60 * 60 * 1000)) / (60 * 1000));
+                const timerClass = remainingHours < 12 ? 'warning' : 'ok';
+                timerHtml = `<div class="kanban-card-timer ${timerClass}" title="Tempo limite de 48h"><i class="ph-clock"></i> SLA: ${remainingHours}h ${remainingMins}m</div>`;
+            }
+        } else {
+            timerHtml = `<div class="kanban-card-timer ok"><i class="ph-clock"></i> SLA: 48h</div>`;
+        }
+    } else if (st === 'EM_DESENVOLVIMENTO') {
+        const startDates = order.items.map(i => parseSqliteDate(i.data_inicio_arte)).filter(d => d !== null);
+        const start = startDates.length > 0 ? new Date(Math.min(...startDates)) : null;
+        if (start) {
+            const elapsed = Math.floor((new Date().getTime() - start.getTime()) / 1000);
+            timerHtml = `
+                <div class="production-timer kanban-card-timer ok" data-elapsed-initial="${elapsed}" data-client-start="${Date.now()}" style="font-family: monospace;">
+                    <i class="ph-play-circle"></i> <span class="timer-display">00:00:00</span>
+                </div>
+            `;
+        }
+    }
+
+    let itemsHtml = `<div style="display:flex; flex-direction:column; gap:0.4rem; margin-top:0.5rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.5rem; border-radius:6px;">`;
+    order.items.forEach(item => {
+        const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
+        itemsHtml += `
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; border-bottom:1px dashed #e2e8f0; padding-bottom:0.25rem; margin-bottom:0.25rem;">
+                <div style="flex-grow:1; padding-right:0.5rem;">
+                    <strong>${item.produto}</strong> (x${item.quantidade})
+                    ${item.referencia ? `<div style="font-size:0.7rem; color:#64748b;">Ref: <b>${item.referencia}</b></div>` : ''}
+                    ${item.cor_impressao ? `<div style="font-size:0.7rem; color:#64748b;">Cor: <b>${item.cor_impressao}</b></div>` : ''}
+                </div>
+                <div>${layoutIndicator}</div>
+            </div>
+        `;
+    });
+    itemsHtml += `</div>`;
+
+    let actionButtons = '';
+    if (st === 'ENTRADA' || st === 'ARTE_NAO_FEITA') {
+        actionButtons = `
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_INFO')">Aguardando Info</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+            </div>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
+        `;
+    } else if (st === 'AGUARDANDO_INFO') {
+        actionButtons = `
+            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
+        `;
+    } else if (st === 'PRONTO_PARA_CRIAR') {
+        actionButtons = `
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_INFO')">Devolver Info</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="iniciarDesenvolvimentoOrderDirect(${order.pedido_id})">Iniciar Arte</button>
+            </div>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
+        `;
+    } else if (st === 'EM_DESENVOLVIMENTO') {
+        actionButtons = `
+            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--warning-bg); color:var(--warning);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
+            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
+        `;
+    } else if (st === 'AGUARDANDO_APROVACAO') {
+        actionButtons = `
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--danger-bg); color:var(--danger);" onclick="reprovarArteOrderDirect(${order.pedido_id})">Reprovar</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="openArteAction(${order.pedido_id})">Aprovar</button>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="kanban-card ${priorityClass}" id="kanban-card-${order.pedido_id}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom:0.25rem;">
+                <div class="kanban-card-title">Pedido: ${order.numero_pedido}</div>
+            </div>
+            <div class="kanban-card-subtitle">${order.cliente || 'Sem cliente'}</div>
+            
+            ${itemsHtml}
+
+            <div class="kanban-card-body" style="padding:0; margin-top:0.5rem;">
+                <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem;">
+                    ${priorityBadge}
+                    ${tercBadge}
+                    ${shipBadge}
+                </div>
+            </div>
+            
+            ${respSelect}
+
+            <div class="kanban-card-footer">
+                <div style="font-size:0.7rem; color:var(--text-tertiary);">Prazo: <b>${prazoStr}</b></div>
+                ${timerHtml}
+            </div>
+            
+            <div style="margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.5rem;">
+                ${actionButtons}
+            </div>
+        </div>
+    `;
+}
+
 async function assignItem(itemId, sectorCode, paramsOrName) {
     // sectorCode: 'arte', 'separacao', 'impressao', etc.
     // paramsOrName: O valor do dropdown (nome do responsavel).
@@ -1939,233 +2317,295 @@ async function viewOrderDetails(id) {
         deleteBtn = `<button class="btn" style="width: auto; background: var(--danger); margin-left: 1rem;" onclick="deleteOrder(${order.id})"> <i class="ph-trash"></i> Excluir Pedido</button>`;
     }
 
+    let reverterArteBtn = '';
+    const canRevertToArt = !isFinalized && (currentUser.perfil === 'admin' || currentUser.perfil === 'arte');
+    if (canRevertToArt) {
+        reverterArteBtn = `<button class="btn" style="width: auto; background: var(--warning); color: #78350f; margin-left: 1rem;" onclick="reverterPedidoParaArte(${order.id})"><i class="ph-arrow-u-up-left"></i> Reverter para Fila de Arte</button>`;
+    }
+
     html += '</tbody></table>' + `<div style="margin-top:1rem; display:flex;">
         <button class="btn" style="width: auto; background: var(--text-secondary)" onclick="loadDashboard()">Voltar</button>
+        ${reverterArteBtn}
         ${deleteBtn}
     </div></div>`;
 
     document.getElementById('contentArea').innerHTML = html;
 }
 
-
-
-async function updateArteStatus(itemId, status) {
-    if (!confirm(`Confirmar alteração para status: ${status}?`)) return;
-
-    // Capture current responsible to preserve state and persist
-    const responsavel = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
-
+async function openArteAction(pedidoId) {
+    let items = [];
+    let arteUsers = [];
     try {
-        const res = await fetch(`/api/production/item/${itemId}/arte`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                arte_status: status,
-                responsavel: responsavel // Persist to DB
-            })
-        });
-
-        if (!res.ok) {
-            const data = await res.json();
-            throw new Error(data.error || 'Erro ao atualizar status');
-        }
-
-        // RELOAD IN PLACE preserving resp
-        openArteAction(itemId, null, responsavel);
+        const res = await fetch(`/api/production/pedido/${pedidoId}/itens?t=${Date.now()}`);
+        if (!res.ok) throw new Error("Erro ao buscar itens do pedido");
+        items = await res.json();
+        
+        arteUsers = await getSectorUsersCached('ARTE_FINAL');
     } catch (e) {
         console.error(e);
-        alert('Erro ao atualizar status: ' + e.message);
-    }
-}
-
-async function openArteAction(itemId, preservedSector = null, preservedResp = null) {
-    const setores = ['SILK_CILINDRICA', 'SILK_PLANO', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'];
-    const setorOpcoes = setores.map(s => `<option value="${s}">${s}</option>`).join('');
-
-    // FETCH FRESH ITEM DATA (Fixes Persistence Issue)
-    let item = {};
-    let activeResponsible = '';
-    try {
-        // Cache buster added
-        const res = await fetch(`/api/production/item/${itemId}?t=${new Date().getTime()}`);
-        if (!res.ok) throw new Error("Erro ao buscar item");
-        item = await res.json();
-        // Use preserved if passed (UI state), otherwise DB
-        activeResponsible = preservedResp || item.responsavel_arte || '';
-    } catch (e) {
-        console.error(e);
-        return alert('Erro ao carregar dados do item.');
+        return alert('Erro ao carregar dados do pedido.');
     }
 
-    // Fetch users for 'arte' sector to populate dropdown
-    let arteUsers = await getSectorUsersCached('ARTE_FINAL');
+    if (items.length === 0) {
+        document.getElementById('contentArea').innerHTML = `
+            <div class="card" style="text-align: center; padding: 3rem;">
+                <i class="ph-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 1rem;"></i>
+                <h3>Nenhum item pendente</h3>
+                <p>Todos os itens deste pedido já foram aprovados e enviados para a produção.</p>
+                <button class="btn" style="margin-top: 1rem; background: var(--border); color: var(--text-primary);" onclick="loadArteQueue()"><i class="ph-arrow-left"></i> Voltar ao Kanban</button>
+            </div>
+        `;
+        return;
+    }
 
-    const status = item.arte_status || 'ARTE_NAO_FEITA';
+    const order = items[0];
+    const orderNo = order.numero_pedido;
+    const cliente = order.cliente;
+    const prazoStr = order.prazo_entrega ? new Date(order.prazo_entrega).toLocaleDateString() : 'Não informado';
+    const tipoEnvio = order.tipo_envio;
+    const transportadora = order.transportadora;
+    const obsPedido = order.obs_pedido;
+    const status = order.arte_status || 'ARTE_NAO_FEITA';
 
-    // Step States
-    const step1Done = status === 'AGUARDANDO_APROVACAO' || status === 'APROVADO';
-    const step2Done = !!item.layout_path; // Simple check
-
-    // ... (Visual helpers same as before)
-    // Build Responsible Dropdown
-    const s1Class = step1Done ? 'step-done' : 'step-active';
-    const s2Class = step2Done ? 'step-done' : 'step-active';
-    const s3Class = status === 'APROVADO' ? 'step-done' : (step1Done ? 'step-active' : 'step-locked');
-
-    // Build Responsible Dropdown
+    const activeResponsible = order.responsavel_arte || '';
     let respOptions = `<option value="">-- Selecione --</option>`;
     arteUsers.forEach(u => {
         const sel = u.nome === activeResponsible ? 'selected' : '';
         respOptions += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
     });
 
-    // DETERMINE SECTOR: Preserved (UI state) > DB > Empty
-    const activeSector = preservedSector || item.setor_destino || '';
+    const statusLabels = {
+        'ENTRADA': 'Entrada (Nova)',
+        'ARTE_NAO_FEITA': 'Arte Não Iniciada',
+        'AGUARDANDO_INFO': 'Aguardando Informações do Cliente',
+        'PRONTO_PARA_CRIAR': 'Pronto para Criar Arte',
+        'EM_DESENVOLVIMENTO': 'Em Desenvolvimento',
+        'AGUARDANDO_APROVACAO': 'Aguardando Aprovação'
+    };
+    const statusLabel = statusLabels[status] || status;
+
+    // Workflow status banner
+    let statusBanner = '';
+    if (status === 'ENTRADA' || status === 'ARTE_NAO_FEITA') {
+        statusBanner = `
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div style="font-size: 0.9rem; color: #1e3a8a;">
+                    <i class="ph-info" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
+                    Este pedido acabou de entrar. Defina um responsável e altere o status para iniciar.
+                </div>
+                <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
+                    <button class="btn btn-sm" style="background:#e2e8f0; color:#475569;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_INFO')">Aguardando Info</button>
+                    <button class="btn btn-sm" style="background:var(--accent); color:white;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+                </div>
+            </div>
+        `;
+    } else if (status === 'AGUARDANDO_INFO') {
+        statusBanner = `
+            <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div style="font-size: 0.9rem; color: #78350f;">
+                    <i class="ph-clock" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
+                    Aguardando informações do cliente. O tempo de SLA está pausado.
+                </div>
+                <button class="btn btn-sm" style="background:var(--accent); color:white; flex-shrink: 0;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+            </div>
+        `;
+    } else if (status === 'PRONTO_PARA_CRIAR') {
+        statusBanner = `
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div style="font-size: 0.9rem; color: #166534;">
+                    <i class="ph-check-circle" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
+                    Todas as informações estão prontas. O arte-finalista pode iniciar o desenvolvimento da arte.
+                </div>
+                <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
+                    <button class="btn btn-sm" style="background:#e2e8f0; color:#475569;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_INFO')">Devolver Info</button>
+                    <button class="btn btn-sm" style="background:var(--success); color:white;" onclick="iniciarDesenvolvimentoOrderDirect(${pedidoId})">Iniciar Arte</button>
+                </div>
+            </div>
+        `;
+    } else if (status === 'EM_DESENVOLVIMENTO') {
+        statusBanner = `
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div style="font-size: 0.9rem; color: #991b1b;">
+                    <i class="ph-play-circle" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
+                    Arte em desenvolvimento. Quando concluir, envie para aprovação do cliente.
+                </div>
+                <button class="btn btn-sm" style="background:var(--warning); color:#92400e; flex-shrink: 0;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
+            </div>
+        `;
+    } else if (status === 'AGUARDANDO_APROVACAO') {
+        statusBanner = `
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div style="font-size: 0.9rem; color: #1e3a8a;">
+                    <i class="ph-paper-plane" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
+                    Aguardando aprovação do cliente. Caso seja reprovado, clique em Reprovar.
+                </div>
+                <button class="btn btn-sm" style="background:var(--danger); color:white; flex-shrink: 0;" onclick="reprovarArteOrderDirect(${pedidoId})">Reprovar Pedido</button>
+            </div>
+        `;
+    }
+
+    let itemsHtml = '';
+    items.forEach(item => {
+        const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
+        const isDigitalOrEstamparia = item.setor_destino === 'IMPRESSAO_DIGITAL' || item.setor_destino === 'ESTAMPARIA';
+        const isLaser = item.setor_destino === 'IMPRESSAO_LASER';
+
+        itemsHtml += `
+            <div class="step-card" id="item_card_${item.id}" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm); position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <span style="font-weight: bold; font-size: 1.1rem; color: var(--text-primary);">${item.produto}</span>
+                        ${item.referencia ? `<span style="margin-left: 0.5rem; background: #e2e8f0; color: #475569; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">Ref: ${item.referencia}</span>` : ''}
+                    </div>
+                    <span style="background: var(--primary-light); color: var(--primary); font-weight: bold; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.85rem;">Qtd: ${item.quantidade}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                    <!-- Coluna Esquerda: Arquivos -->
+                    <div>
+                        <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Layout & Arquivos</h4>
+                        
+                        <!-- Layout Section -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                            <div style="font-weight: bold; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="ph-image" style="color: var(--primary);"></i> Layout de Aprovação
+                            </div>
+                            <div id="layoutContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                ${item.layout_path 
+                                    ? `<div style="color:var(--success); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+                                           <i class="ph-check-circle" style="font-size: 1.2rem;"></i>
+                                           <div>
+                                               <strong>Layout Presente</strong> <br>
+                                               <small style="color: var(--text-tertiary);">Upload por: ${item.layout_uploaded_by || 'Sistema'}</small>
+                                           </div>
+                                           <div style="margin-left: auto;">${layoutIndicator}</div>
+                                       </div>`
+                                    : `<div style="color:var(--text-tertiary); font-size: 0.85rem;"><i class="ph-info"></i> Nenhum layout enviado</div>`
+                                }
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="file" id="layoutFile_${item.id}" accept="image/*,application/pdf" style="font-size: 0.8rem; flex-grow: 1;">
+                                <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'layout', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"><i class="ph-upload-simple"></i> Enviar</button>
+                            </div>
+                        </div>
+
+                        <!-- Digital File Section -->
+                        <div id="digitalFileSection_${item.id}" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${isDigitalOrEstamparia ? 'block' : 'none'};">
+                            <div style="font-weight: bold; font-size: 0.85rem; color: #166534; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="ph-printer"></i> Arquivo de Impressão (Digital/Estamparia)
+                            </div>
+                            <div id="digitalContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                ${item.arquivo_impressao_digital_url
+                                    ? `<div style="color:#166534; font-size: 0.85rem;">
+                                           <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                                           <strong>${item.arquivo_impressao_digital_nome}</strong> <br>
+                                           <small style="color: #15803d;">Enviado por: ${item.arquivo_impressao_digital_enviado_por || '?'} em ${new Date(item.arquivo_impressao_digital_enviado_em).toLocaleDateString()}</small>
+                                       </div>`
+                                    : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo de impressão digital anexado</div>`
+                                }
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="file" id="digitalFile_${item.id}" accept=".pdf,.cdr,.zip" style="font-size: 0.8rem; flex-grow: 1;">
+                                <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'digital', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #166534; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
+                            </div>
+                        </div>
+
+                        <!-- Laser File Section -->
+                        <div id="laserFileSection_${item.id}" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${isLaser ? 'block' : 'none'};">
+                            <div style="font-weight: bold; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="ph-lightning"></i> Arquivo Laser
+                            </div>
+                            <div id="laserContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                ${item.arquivo_impressao_laser_url
+                                    ? `<div style="color:#92400e; font-size: 0.85rem;">
+                                           <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                                           <strong>${item.arquivo_impressao_laser_nome}</strong> <br>
+                                           <small style="color: #b45309;">Enviado por: ${item.arquivo_impressao_laser_enviado_por || '?'} em ${new Date(item.arquivo_impressao_laser_enviado_em).toLocaleDateString()}</small>
+                                       </div>`
+                                    : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo laser anexado</div>`
+                                }
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="file" id="laserFile_${item.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.8rem; flex-grow: 1;">
+                                <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'laser', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #d97706; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Coluna Direita: Especificações de Produção -->
+                    <div>
+                        <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Especificações de Produção</h4>
+                        
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Cor de Impressão <span style="color:var(--danger)">*</span></label>
+                            <input type="text" id="corImpressao_${item.id}" class="form-control" placeholder="Ex: Pantone 186 C" value="${item.cor_impressao || ''}" style="margin-bottom: 0;">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Setor Destino ${item.is_terceirizado ? '<span style="color:#854d0e">(Terceirizado - Pula Impressão)</span>' : ''}</label>
+                            <select id="setorDestino_${item.id}" class="form-control" ${item.is_terceirizado ? 'disabled' : ''} onchange="toggleItemFileSections(${item.id})" style="margin-bottom: 0;">
+                                <option value="">Selecione...</option>
+                                <option value="SILK_PLANO" ${item.setor_destino === 'SILK_PLANO' ? 'selected' : ''}>Silk Plano</option>
+                                <option value="SILK_CILINDRICA" ${item.setor_destino === 'SILK_CILINDRICA' ? 'selected' : ''}>Silk Cilíndrica</option>
+                                <option value="TAMPOGRAFIA" ${item.setor_destino === 'TAMPOGRAFIA' ? 'selected' : ''}>Tampografia</option>
+                                <option value="IMPRESSAO_LASER" ${item.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
+                                <option value="IMPRESSAO_DIGITAL" ${item.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
+                                <option value="ESTAMPARIA" ${item.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
+                                <option value="TERCEIRIZADO" ${item.is_terceirizado || item.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''} ${item.is_terceirizado ? '' : 'style="display:none;"'}>Terceirizado</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Observações da Arte</label>
+                            <textarea id="obsArte_${item.id}" class="form-control" rows="2" placeholder="Detalhes técnicos, cuidados na gravação, etc.">${item.observacao_arte || ''}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    const itemsJsonStr = encodeURIComponent(JSON.stringify(items));
 
     const html = `
-        <style>
-            .step-card { border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; position: relative; opacity: 1; transition: all 0.3s; }
-            .step-locked { opacity: 0.5; pointer-events: none; background: #f9f9f9; }
-            .step-done { border-color: var(--success); background: #f0fdf4; }
-            .step-active { border-color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-            .step-badge { position: absolute; top: -10px; left: 20px; background: #fff; padding: 0 10px; font-weight: bold; font-size: 0.9rem; color: #555; }
-            .step-active .step-badge { color: var(--primary); }
-            .step-done .step-badge { color: var(--success); }
-        </style>
-
         <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <!-- Top bar -->
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); flex-wrap: wrap; gap: 1rem;">
                 <div>
-                   <h3 style="margin:0; font-size: 1.25rem;">Gestão de Arte (Item #${itemId})</h3>
-                   <div style="font-size: 0.95rem; font-weight: 600; color: #334155; margin-top: 0.4rem; margin-bottom: 0.2rem;">${item.produto} <span style="color:var(--primary); font-weight: 700;">(x${item.quantidade})</span> &bull; <span style="font-weight: 400;">Cliente:</span> <span style="color: #475569;">${item.cliente || 'Não Informado'}</span></div>
-                   <div style="font-size: 0.85rem; color: #64748b;">Defina o responsável e o fluxo do item</div>
+                    <h2 style="margin: 0; font-size: 1.5rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="ph-paint-brush" style="color: var(--primary);"></i> Pedido #${orderNo}
+                        <span class="badge" style="font-size: 0.75rem; background: var(--accent-light); color: var(--accent); vertical-align: middle;">${statusLabel}</span>
+                    </h2>
+                    <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                        <strong>Cliente:</strong> ${cliente || 'Não informado'} | 
+                        <strong>Envio:</strong> ${tipoEnvio || 'Não informado'} ${transportadora ? `(${transportadora})` : ''} | 
+                        <strong>Prazo:</strong> ${prazoStr}
+                    </div>
+                    ${obsPedido ? `<div style="margin-top: 0.5rem; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem;"><strong>Obs Pedido:</strong> ${obsPedido}</div>` : ''}
                 </div>
-                <div style="width: 250px;">
-                    <label style="font-size:0.75rem; font-weight:bold; text-transform:uppercase; color:#475569; display:block; margin-bottom:0.25rem;">Responsável Arte Final</label>
-                    <div style="display:flex; gap:0.5rem;">
-                        <select class="form-control" id="resp_select_${itemId}" style="margin-bottom:0;" onchange="assignItem(${itemId}, 'arte', this.value)">
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <label style="font-size: 0.75rem; font-weight: bold; display: block; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase;">Arte-Finalista</label>
+                        <select class="form-control" id="resp_select_${pedidoId}" style="min-width: 200px; margin-bottom: 0;" onchange="assignOrder(${pedidoId}, this.value)">
                             ${respOptions}
                         </select>
                     </div>
+                    <button class="btn btn-secondary" onclick="loadArteQueue()" style="align-self: flex-end; height: 38px; display: flex; align-items: center; gap: 0.25rem; background: #f1f5f9; border: 1px solid #e2e8f0; color: #475569;"><i class="ph-arrow-left"></i> Voltar</button>
                 </div>
             </div>
 
-            <p style="color:red; font-size:0.9rem; margin-bottom: 1.5rem;">Status Atual: <strong>${status}</strong></p>
-            
-            <!-- PASSO 1 -->
-            <div class="step-card ${s1Class}">
-                <span class="step-badge">PASSO 1: Solicitar Aprovação</span>
-                <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Envie a arte para aprovação do cliente ou interno.</p>
-                ${step1Done
-            ? `<div style="color:var(--success); font-weight:bold;"><i class="ph-check"></i> Enviado para Aprovação</div>`
-            : `<button class="btn" style="background: var(--warning); color: #92400e;" onclick="updateArteStatus(${itemId}, 'AGUARDANDO_APROVACAO')"> <i class="ph-paper-plane-right"></i> Enviar para Aprovação</button>`
-        }
-            </div>
+            <!-- Workflow control banner -->
+            ${statusBanner}
 
-            <!-- PASSO 2 -->
-            <div class="step-card ${s2Class}">
-                 <span class="step-badge">PASSO 2: Upload do Layout Aprovado (Opcional)</span>
-                 <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Faça o upload do arquivo final que foi aprovado se desejar.</p>
-                 
-                 <div style="display:flex; gap: 1rem; align-items: center;">
-                    ${item.layout_path
-            ? `<div style="color:var(--success);"><i class="ph-file-pdf"></i> Arquivo Presente <br> <small>Enviado por: ${item.layout_uploaded_by || '?'}</small></div>`
-            : ``
-        }
-                    <div class="upload-zone" style="margin:0; flex-grow:1;">
-                        <input type="file" id="layoutFile" accept="image/*,application/pdf" style="display: block; margin-bottom: 0.5rem; width: 100%;">
-                        <button class="btn" style="width: auto; font-size: 0.9rem;" onclick="uploadLayout(${itemId})"> <i class="ph-upload-simple"></i> ${item.layout_path ? 'Reenviar Arquivo' : 'Enviar Arquivo'}</button>
-                    </div>
-                </div>
-            </div>
+            <!-- Items list -->
+            ${itemsHtml}
 
-            <!-- PASSO 3 -->
-            <div class="step-card ${s3Class}">
-                <span class="step-badge">PASSO 3: Aprovação Final & Produção</span>
-                <p style="font-size:0.9rem; color: #666; margin-bottom: 1rem;">Defina as especificações finais e envie para o próximo setor.</p>
-                
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div class="form-group">
-                        <label>Cor de Impressão <span style="color:var(--danger)">*</span></label>
-                        <input type="text" id="corImpressao" class="form-control" placeholder="Ex: Pantone 186 C" value="${item.cor_impressao || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label>Setor Destino ${item.is_terceirizado ? '<span style="color:#854d0e">(Terceirizado - Pula Impressão)</span>' : ''}</label>
-                        <select id="setorDestino" class="form-control" ${item.is_terceirizado ? 'disabled' : ''}>
-                            <option value="">Selecione...</option>
-                            <option value="SILK_PLANO">Silk Plano</option>
-                            <option value="SILK_CILINDRICA">Silk Cilíndrica</option>
-                            <option value="TAMPOGRAFIA">Tampografia</option>
-                            <option value="IMPRESSAO_LASER">Impressão Laser</option>
-                            <option value="IMPRESSAO_DIGITAL">Impressão Digital</option>
-                            <option value="ESTAMPARIA">Estamparia</option>
-                            <option value="TERCEIRIZADO" ${item.is_terceirizado ? 'selected' : 'style="display:none;"'}>Terceirizado</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Digital Print File Upload (Conditional) -->
-                <div id="digitalFileSection" style="margin-top: 1rem; display: ${activeSector === 'IMPRESSAO_DIGITAL' || activeSector === 'ESTAMPARIA' ? 'block' : 'none'}; border: 1px dashed #cbd5e1; padding: 1rem; border-radius: 8px; background: #f8fafc;">
-                    <div style="font-weight: bold; font-size: 0.9rem; color: #475569; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
-                         <i class="ph-printer"></i> ARQUIVO DE IMPRESSÃO (DIGITAL)
-                    </div>
-                    <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">
-                        Anexe o arquivo final (PDF ou CDR) para a Impressão Digital. *Obrigatório para este setor.*
-                    </p>
-
-                    <div style="display:flex; gap: 1rem; align-items: center;">
-                        ${item.arquivo_impressao_digital_url
-            ? `<div style="color:var(--success); font-size:0.85rem;">
-                                 <i class="ph-check-circle"></i> <strong>${item.arquivo_impressao_digital_nome}</strong> <br>
-                                 <small>Enviado por: ${item.arquivo_impressao_digital_enviado_por || '?'} em ${new Date(item.arquivo_impressao_digital_enviado_em).toLocaleDateString()}</small>
-                               </div>`
-            : `<div style="color:var(--danger); font-size:0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo anexado</div>`
-        }
-                        
-                        <div class="upload-zone" style="margin:0; flex-grow:1; display:flex; gap:0.5rem; align-items:center;">
-                            <input type="file" id="digitalFile" accept=".pdf,.cdr,.zip" style="display: block; width: 100%; font-size:0.8rem;">
-                            <button class="btn" style="width: auto; font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick="uploadDigitalFile(${itemId})">
-                                <i class="ph-upload-simple"></i> Enviar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Laser Print File Upload (Conditional) -->
-                <div id="laserFileSection" style="margin-top: 1rem; display: ${activeSector === 'IMPRESSAO_LASER' ? 'block' : 'none'}; border: 1px dashed #cbd5e1; padding: 1rem; border-radius: 8px; background: #fffbe6;">
-                    <div style="font-weight: bold; font-size: 0.9rem; color: #b45309; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
-                         <i class="ph-lightning"></i> ARQUIVO DE CORTE/GRAVAÇÃO (LASER)
-                    </div>
-                    <p style="font-size: 0.8rem; color: #92400e; margin-bottom: 0.5rem;">
-                        Anexe o arquivo (CDR/DXF/PDF) para o Laser.
-                    </p>
-
-                    <div style="display:flex; gap: 1rem; align-items: center;">
-                        ${item.arquivo_impressao_laser_url
-            ? `<div style="color:var(--success); font-size:0.85rem;">
-                                 <i class="ph-check-circle"></i> <strong>${item.arquivo_impressao_laser_nome}</strong> <br>
-                                 <small>Enviado por: ${item.arquivo_impressao_laser_enviado_por || '?'} em ${new Date(item.arquivo_impressao_laser_enviado_em).toLocaleDateString()}</small>
-                               </div>`
-            : `<div style="color:var(--danger); font-size:0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo anexado</div>`
-        }
-                        
-                        <div class="upload-zone" style="margin:0; flex-grow:1; display:flex; gap:0.5rem; align-items:center; background:#fff;">
-                            <input type="file" id="laserFile" accept=".cdr,.dxf,.pdf,.zip,.ai" style="display: block; width: 100%; font-size:0.8rem;">
-                            <button class="btn" style="width: auto; font-size: 0.8rem; padding: 0.4rem 0.8rem; background: #d97706;" onclick="uploadLaserFile(${itemId})">
-                                <i class="ph-upload-simple"></i> Enviar Laser
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="form-group" style="grid-column: span 2; margin-top: 1rem;">
-                    <label>Observação (Opcional)</label>
-                    <textarea id="obsArte" class="form-control" rows="2" placeholder="Detalhes técnicos, cuidados na impressão, etc.">${item.observacao_arte || ''}</textarea>
-                </div>
-
-                <div style="margin-top: 1.5rem; text-align: right;">
-                    <button class="btn" style="width: auto; background: var(--success);" onclick="aprovarArte(${itemId})">
-                         <i class="ph-check-circle"></i> Finalizar (Aprovar)
+            <!-- Final consolidated approval button -->
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem; display: flex; justify-content: flex-end; align-items: center; box-shadow: var(--shadow-sm);">
+                <div style="text-align: right;">
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Defina a cor e o setor de todos os itens antes de aprovar.</p>
+                    <button class="btn" style="background: var(--success); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: bold; display: flex; align-items: center; gap: 0.5rem;" onclick="aprovarPedidoCompleto(${pedidoId}, '${itemsJsonStr}')">
+                        <i class="ph-check-circle" style="font-size: 1.25rem;"></i> Finalizar e Aprovar Pedido
                     </button>
                 </div>
             </div>
@@ -2173,190 +2613,126 @@ async function openArteAction(itemId, preservedSector = null, preservedResp = nu
     `;
 
     document.getElementById('contentArea').innerHTML = html;
-
-    // Add logic to toggle visibility
-    const setorSelect = document.getElementById('setorDestino');
-    setorSelect.value = activeSector; // Use determined sector
-
-    setorSelect.addEventListener('change', (e) => {
-        const val = e.target.value;
-        const section = document.getElementById('digitalFileSection');
-        const laserSection = document.getElementById('laserFileSection');
-
-        if (val === 'IMPRESSAO_DIGITAL' || val === 'ESTAMPARIA') {
-            section.style.display = 'block';
-            if (laserSection) laserSection.style.display = 'none';
-        } else if (val === 'IMPRESSAO_LASER') {
-            if (laserSection) laserSection.style.display = 'block';
-            section.style.display = 'none';
-        } else {
-            section.style.display = 'none';
-            if (laserSection) laserSection.style.display = 'none';
-        }
-    });
-
-    // Manually trigger change if needed? 
-    // No, logic is handled by template literals using activeSector too.
 }
 
-// (Function aprovarArte moved to end of file with enhanced validation)
+function toggleItemFileSections(itemId) {
+    const val = document.getElementById(`setorDestino_${itemId}`).value;
+    const digitalSec = document.getElementById(`digitalFileSection_${itemId}`);
+    const laserSec = document.getElementById(`laserFileSection_${itemId}`);
+    
+    if (digitalSec) {
+        digitalSec.style.display = (val === 'IMPRESSAO_DIGITAL' || val === 'ESTAMPARIA') ? 'block' : 'none';
+    }
+    if (laserSec) {
+        laserSec.style.display = (val === 'IMPRESSAO_LASER') ? 'block' : 'none';
+    }
+}
 
+async function uploadItemFile(itemId, fileType, pedidoId) {
+    let fileInputId = '';
+    let endpoint = '';
+    let bodyFieldName = '';
+    let containerId = '';
 
+    if (fileType === 'layout') {
+        fileInputId = `layoutFile_${itemId}`;
+        endpoint = `/api/production/item/${itemId}/layout`;
+        bodyFieldName = 'layout';
+        containerId = `layoutContainer_${itemId}`;
+    } else if (fileType === 'digital') {
+        fileInputId = `digitalFile_${itemId}`;
+        endpoint = `/api/production/item/${itemId}/digital`;
+        bodyFieldName = 'digital_file';
+        containerId = `digitalContainer_${itemId}`;
+    } else if (fileType === 'laser') {
+        fileInputId = `laserFile_${itemId}`;
+        endpoint = `/api/production/item/${itemId}/laser`;
+        bodyFieldName = 'laser_file';
+        containerId = `laserContainer_${itemId}`;
+    }
 
-async function uploadLayout(itemId) {
-    const fileInput = document.getElementById('layoutFile');
-    const btn = event.target; // Captura o botão clicado
-
-    // CAPTURE CURRENT SECTOR SELECTION
-    const currentSector = document.getElementById('setorDestino') ? document.getElementById('setorDestino').value : null;
-
-    if (fileInput.files.length === 0) {
-        return alert('Selecione um arquivo!');
+    const fileInput = document.getElementById(fileInputId);
+    if (!fileInput || fileInput.files.length === 0) {
+        return alert('Selecione um arquivo primeiro!');
     }
 
     const file = fileInput.files[0];
+    const btn = event.target;
 
-    // 1. Validação Client-Side
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
         return alert('Arquivo muito grande! Limite é 10MB.');
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-        return alert('Formato inválido! Use JPG, PNG ou PDF.');
+    if (fileType === 'layout') {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+            return alert('Formato inválido! Use JPG, PNG ou PDF.');
+        }
     }
 
-    // 2. Preparar Upload
     const formData = new FormData();
-    formData.append('layout', file);
-    formData.append('operador_id', currentUser.id); // Fundamental para permissão
+    formData.append(bodyFieldName, file);
+    formData.append('operador_id', currentUser.id);
 
-    // UI State: Loading
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="ph-spinner ph-spin"></i> Enviando...';
+    btn.innerHTML = '<i class="ph-spinner ph-spin"></i>';
     btn.disabled = true;
 
     try {
-        const res = await fetch(`/api/production/item/${itemId}/layout`, {
+        const res = await fetch(endpoint, {
             method: 'POST',
             body: formData
         });
 
-        // Check if response is JSON
         const contentType = res.headers.get('content-type');
         let data;
         if (contentType && contentType.includes('application/json')) {
             data = await res.json();
         } else {
-            // Probably HTML error (404, 500)
-            const text = await res.text();
             throw new Error(`Erro ${res.status}: ${res.statusText}`);
         }
 
         if (res.ok) {
-
-
-            alert('Layout enviado com sucesso!');
-            // Capture current responsible to preserve it
-            const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
-            openArteAction(itemId, currentSector, currentResp); // Refresh in place with preserved sector and resp
+            alert('Arquivo enviado com sucesso!');
+            const container = document.getElementById(containerId);
+            if (container) {
+                if (fileType === 'layout') {
+                    container.innerHTML = `
+                        <div style="color:var(--success); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="ph-check-circle" style="font-size: 1.2rem;"></i>
+                            <div>
+                                <strong>Layout Presente</strong> <br>
+                                <small style="color: var(--text-tertiary);">Enviado agora mesmo</small>
+                            </div>
+                            <div style="margin-left: auto;">${renderLayoutIndicator(data.path, data.type)}</div>
+                        </div>
+                    `;
+                } else if (fileType === 'digital') {
+                    container.innerHTML = `
+                        <div style="color:#166534; font-size: 0.85rem;">
+                            <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                            <strong>${file.name}</strong> <br>
+                            <small style="color: #15803d;">Enviado agora mesmo</small>
+                        </div>
+                    `;
+                } else if (fileType === 'laser') {
+                    container.innerHTML = `
+                        <div style="color:#92400e; font-size: 0.85rem;">
+                            <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                            <strong>${file.name}</strong> <br>
+                            <small style="color: #b45309;">Enviado agora mesmo</small>
+                        </div>
+                    `;
+                }
+            }
+            fileInput.value = '';
         } else {
-            // Mostrar erro detalhado do backend
-            alert('Erro: ' + (data.error || 'Falha desconhecida no upload.'));
+            alert('Erro: ' + (data.error || 'Falha no upload.'));
         }
     } catch (e) {
         alert('Falha no envio: ' + e.message);
         console.error(e);
-    } finally {
-        // Reset UI State
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-}
-
-async function uploadDigitalFile(itemId) {
-    const fileInput = document.getElementById('digitalFile');
-    const btn = event.target; // Captura botão
-
-    // CAPTURE CURRENT SECTOR SELECTION
-    const currentSector = document.getElementById('setorDestino') ? document.getElementById('setorDestino').value : null;
-
-    if (fileInput.files.length === 0) return alert('Selecione um arquivo!');
-    const file = fileInput.files[0];
-
-    // Validação Basica
-    const formData = new FormData();
-    formData.append('digital_file', file); // Field name must match backend
-    formData.append('operador_id', currentUser.id);
-
-    // UI
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="ph-spinner ph-spin"></i>';
-    btn.disabled = true;
-
-    try {
-        const res = await fetch(`/api/production/item/${itemId}/digital`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await res.json();
-
-        if (res.ok) {
-
-
-            alert('Arquivo de Impressão anexado com sucesso!');
-            const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
-            openArteAction(itemId, currentSector, currentResp);
-        } else {
-            alert('Erro: ' + (data.error || 'Falha no envio'));
-        }
-    } catch (e) {
-        console.error(e);
-        alert('Erro de conexão: ' + e.message);
-    } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-}
-
-async function uploadLaserFile(itemId) {
-    const fileInput = document.getElementById('laserFile');
-    const btn = event.target;
-
-    // CAPTURE CURRENT SECTOR SELECTION
-    const currentSector = document.getElementById('setorDestino') ? document.getElementById('setorDestino').value : null;
-
-    if (fileInput.files.length === 0) return alert('Selecione um arquivo!');
-    const file = fileInput.files[0];
-
-    const formData = new FormData();
-    formData.append('laser_file', file);
-    formData.append('operador_id', currentUser.id);
-
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="ph-spinner ph-spin"></i>';
-    btn.disabled = true;
-
-    try {
-        const res = await fetch(`/api/production/item/${itemId}/laser`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await res.json();
-
-        if (res.ok) {
-
-
-            alert('Arquivo Laser anexado com sucesso!');
-            const currentResp = document.getElementById(`resp_select_${itemId}`) ? document.getElementById(`resp_select_${itemId}`).value : null;
-            openArteAction(itemId, currentSector, currentResp);
-        } else {
-            alert('Erro: ' + (data.error || 'Falha no envio'));
-        }
-    } catch (e) {
-        console.error(e);
-        alert('Erro de conexão: ' + e.message);
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -4046,3 +4422,102 @@ async function skipProduction(itemId, setor) {
         alert('Erro de conexão ao tentar despachar o pedido.');
     }
 }
+
+async function reverterPedidoParaArte(pedidoId) {
+    if (!confirm('Tem certeza de que deseja reverter este pedido inteiro para a Fila de Arte (Aguardando Aprovação)?')) return;
+
+    try {
+        const res = await fetch(`/api/production/pedido/${pedidoId}/reverter-arte`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operador_id: currentUser.id
+            })
+        });
+
+        if (res.ok) {
+            alert('Pedido revertido com sucesso!');
+            // Se estiver na visualização de detalhes, podemos recarregar os detalhes do pedido
+            viewOrderDetails(pedidoId);
+        } else {
+            const data = await res.json();
+            alert('Erro ao reverter pedido: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao reverter pedido: ' + e.message);
+    }
+}
+
+async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
+    let items = [];
+    try {
+        items = JSON.parse(decodeURIComponent(itemsJsonStr));
+    } catch (e) {
+        console.error(e);
+        return alert('Erro ao processar dados dos itens.');
+    }
+
+    const respSelect = document.getElementById(`resp_select_${pedidoId}`);
+    const responsavel = respSelect ? respSelect.value : '';
+
+    if (!responsavel) {
+        if (respSelect) respSelect.focus();
+        return alert('Selecione um Arte-Finalista Responsável antes de aprovar o pedido.');
+    }
+
+    const payloadItens = [];
+
+    for (const item of items) {
+        const corInput = document.getElementById(`corImpressao_${item.id}`);
+        const setorSelect = document.getElementById(`setorDestino_${item.id}`);
+        const obsTextarea = document.getElementById(`obsArte_${item.id}`);
+
+        const corImpressao = corInput ? corInput.value.trim() : '';
+        const setorDestino = setorSelect ? setorSelect.value : '';
+        const observacaoArte = obsTextarea ? obsTextarea.value.trim() : '';
+
+        if (!corImpressao) {
+            if (corInput) corInput.focus();
+            return alert(`Por favor, preencha a Cor de Impressão para o item "${item.produto}".`);
+        }
+
+        if (!setorDestino) {
+            if (setorSelect) setorSelect.focus();
+            return alert(`Por favor, selecione o Setor Destino para o item "${item.produto}".`);
+        }
+
+        payloadItens.push({
+            id: item.id,
+            cor_impressao: corImpressao,
+            setor_destino: setorDestino,
+            observacao_arte: observacaoArte,
+            responsavel: responsavel
+        });
+    }
+
+    if (!confirm('Deseja realmente finalizar e aprovar a arte deste pedido inteiro?')) return;
+
+    try {
+        const res = await fetch(`/api/production/pedido/${pedidoId}/aprovar`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                itens: payloadItens
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            alert('Pedido finalizado e aprovado com sucesso!');
+            loadArteQueue();
+        } else {
+            alert('Erro ao aprovar pedido: ' + (data.error || 'Erro desconhecido.'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão ao aprovar pedido.');
+    }
+}
+

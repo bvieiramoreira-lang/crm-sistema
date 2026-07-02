@@ -72,7 +72,7 @@ router.get('/itens/:contexto', (req, res) => {
         // Arte não tem "Full Flow" visivel de outros setores ainda, 
         // e nada vem "antes" da Arte a não ser Financeiro (que não é setor de produção listado aqui)
         // Mantemos lógica original
-        query = `${baseSelect} WHERE i.arte_status != 'APROVADO' ORDER BY p.prazo_entrega ASC`;
+        query = `${baseSelect} WHERE i.arte_status != 'APROVADO' AND i.status_atual != 'CANCELADO' ORDER BY p.prazo_entrega ASC`;
     }
     else if (isFuture) {
         // LOGICA DE VISUALIZAÇÃO FUTURA
@@ -141,6 +141,21 @@ router.get('/itens/:contexto', (req, res) => {
     });
 });
 
+// GET todos os itens ativos de um pedido na Arte
+router.get('/pedido/:pedidoId/itens', (req, res) => {
+    const pedidoId = req.params.pedidoId;
+    const query = `
+        SELECT i.*, p.numero_pedido, p.cliente, p.prazo_entrega, p.tipo_envio, p.transportadora, p.observacao as obs_pedido
+        FROM itens_pedido i
+        JOIN pedidos p ON i.pedido_id = p.id
+        WHERE i.pedido_id = ? AND i.arte_status != 'APROVADO' AND i.status_atual != 'CANCELADO'
+    `;
+    db.all(query, [pedidoId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
 // GET Single Item (Detalhes completos)
 router.get('/item/:id', (req, res) => {
     const id = req.params.id;
@@ -159,55 +174,358 @@ router.get('/item/:id', (req, res) => {
 
 // Atualizar Arte e Setor (Da Fila de Arte -> Aguardando Separação)
 router.put('/item/:id/arte', (req, res) => {
-    const { arte_status, setor_destino, cor_impressao, observacao_arte, responsavel } = req.body;
+    const { arte_status, setor_destino, cor_impressao, observacao_arte, responsavel, operador_id, is_alteracao, motivo_reprovacao } = req.body;
     const itemId = req.params.id;
 
-    // Validação de Arte Aprovada
-    if (arte_status === 'APROVADO') {
+    if (arte_status === 'AGUARDANDO_INFO') {
+        db.run(
+            `UPDATE itens_pedido SET arte_status = 'AGUARDANDO_INFO' WHERE id = ?`,
+            [itemId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Item movido para Aguardando Informações', changes: this.changes });
+            }
+        );
+    } else if (arte_status === 'PRONTO_PARA_CRIAR') {
+        if (is_alteracao || is_alteracao === 1) {
+            const note = motivo_reprovacao ? `[Alteração em ${new Date().toLocaleDateString('pt-BR')}]: ${motivo_reprovacao}` : '';
+            db.run(
+                `UPDATE itens_pedido SET 
+                    arte_status = 'PRONTO_PARA_CRIAR', 
+                    is_alteracao = 1, 
+                    responsavel_arte = NULL, 
+                    data_inicio_arte = NULL, 
+                    data_entrada_arte = DATETIME('now', 'localtime'),
+                    observacao_arte = CASE 
+                        WHEN observacao_arte IS NULL OR observacao_arte = '' THEN ? 
+                        ELSE observacao_arte || '\n' || ? 
+                    END
+                 WHERE id = ?`,
+                [note, note, itemId],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    db.run(
+                        `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'REPROVACAO')`,
+                        [itemId, operador_id || null, responsavel || null]
+                    );
+                    res.json({ message: 'Layout reprovado. Item enviado para Fila de Alterações.', changes: this.changes });
+                }
+            );
+        } else {
+            db.run(
+                `UPDATE itens_pedido SET arte_status = 'PRONTO_PARA_CRIAR' WHERE id = ?`,
+                [itemId],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ message: 'Item pronto para criação de arte', changes: this.changes });
+                }
+            );
+        }
+    } else if (arte_status === 'EM_DESENVOLVIMENTO') {
+        db.get("SELECT COUNT(*) as count FROM itens_pedido WHERE arte_status = 'EM_DESENVOLVIMENTO' AND status_atual != 'CANCELADO'", [], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (row && row.count >= 10) {
+                return res.status(400).json({ error: 'Limite Kanban WIP atingido. Máximo de 10 artes podem estar em desenvolvimento simultaneamente.' });
+            }
+
+            db.run(
+                `UPDATE itens_pedido SET arte_status = 'EM_DESENVOLVIMENTO', responsavel_arte = ?, data_inicio_arte = DATETIME('now', 'localtime') WHERE id = ?`,
+                [responsavel, itemId],
+                function (err2) {
+                    if (err2) return res.status(500).json({ error: err2.message });
+                    db.run(
+                        `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'INICIO')`,
+                        [itemId, operador_id || null, responsavel || null]
+                    );
+                    res.json({ message: 'Arte iniciada com sucesso', changes: this.changes });
+                }
+            );
+        });
+    } else if (arte_status === 'AGUARDANDO_APROVACAO') {
+        db.run(
+            `UPDATE itens_pedido SET arte_status = 'AGUARDANDO_APROVACAO' WHERE id = ?`,
+            [itemId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                db.run(
+                    `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'FIM')`,
+                    [itemId, operador_id || null, responsavel || null]
+                );
+                res.json({ message: 'Item enviado para aprovação do cliente', changes: this.changes });
+            }
+        );
+    } else if (arte_status === 'APROVADO') {
         if (!cor_impressao || cor_impressao.trim() === '') {
             return res.status(400).json({ error: 'Preencha a Cor de Impressão / Pantone antes de aprovar.' });
         }
-    }
 
-    // Lógica de Status
-    let query = '';
-    let params = [];
-
-    // Se responsavel vier, atualiza. Se não, mantem.
-    // Melhor approach: Se vier responsavel, incluimos no UPDATE.
-    // Como temos IFs, vamos incluir responsavel_arte se não for nul
-
-    if (arte_status === 'AGUARDANDO_APROVACAO') {
-        // Passo 1: Enviar para aprovação
-        if (responsavel) {
-            query = `UPDATE itens_pedido SET arte_status = ?, responsavel_arte = ? WHERE id = ?`;
-            params = [arte_status, responsavel, itemId];
-        } else {
-            query = `UPDATE itens_pedido SET arte_status = ? WHERE id = ?`;
-            params = [arte_status, itemId];
-        }
-    } else if (arte_status === 'APROVADO') {
-        // Passo 3: Aprovação Final (Define Setor e vai para Separação/Produção)
-        // Se vier responsável, atualiza.
         const respSQL = responsavel ? ', responsavel_arte = ?' : '';
+        const query = `UPDATE itens_pedido SET 
+            arte_status = 'APROVADO', 
+            setor_destino = ?, 
+            cor_impressao = ?, 
+            observacao_arte = ?, 
+            status_atual = 'AGUARDANDO_SEPARACAO', 
+            data_arte_aprovacao = DATETIME('now', 'localtime') 
+            ${respSQL} 
+            WHERE id = ?`;
 
-        query = `UPDATE itens_pedido SET arte_status = ?, setor_destino = ?, cor_impressao = ?, observacao_arte = ?, status_atual = 'AGUARDANDO_SEPARACAO', data_arte_aprovacao = DATETIME('now', 'localtime') ${respSQL} WHERE id = ?`;
-
-        params = [arte_status, setor_destino, cor_impressao || null, observacao_arte || null];
+        const params = [setor_destino, cor_impressao, observacao_arte || null];
         if (responsavel) params.push(responsavel);
         params.push(itemId);
 
+        db.run(query, params, function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Arte aprovada e enviada para Separação/Produção', changes: this.changes });
+        });
     } else {
-        // Outros status (Fallback) - Apenas atualiza o status da arte
-        query = `UPDATE itens_pedido SET arte_status = ? WHERE id = ?`;
-        params = [arte_status, itemId];
+        db.run(`UPDATE itens_pedido SET arte_status = ? WHERE id = ?`, [arte_status, itemId], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Arte atualizada (fallback)', changes: this.changes });
+        });
     }
+});
 
-    db.run(query, params, function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Arte atualizada', changes: this.changes });
+// Atualizar Status do Pedido na Arte em Lote
+router.put('/pedido/:pedidoId/status', (req, res) => {
+    const { arte_status, responsavel, operador_id } = req.body;
+    const pedidoId = req.params.pedidoId;
+
+    if (arte_status === 'AGUARDANDO_INFO') {
+        db.run(
+            `UPDATE itens_pedido SET arte_status = 'AGUARDANDO_INFO' WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+            [pedidoId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Pedido movido para Aguardando Informações', changes: this.changes });
+            }
+        );
+    } else if (arte_status === 'PRONTO_PARA_CRIAR') {
+        db.run(
+            `UPDATE itens_pedido SET arte_status = 'PRONTO_PARA_CRIAR' WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+            [pedidoId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Pedido pronto para criação de arte', changes: this.changes });
+            }
+        );
+    } else if (arte_status === 'EM_DESENVOLVIMENTO') {
+        db.get("SELECT COUNT(DISTINCT pedido_id) as count FROM itens_pedido WHERE arte_status = 'EM_DESENVOLVIMENTO' AND status_atual != 'CANCELADO' AND pedido_id != ?", [pedidoId], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (row && row.count >= 10) {
+                return res.status(400).json({ error: 'Limite Kanban WIP atingido. Máximo de 10 pedidos podem estar em desenvolvimento simultaneamente.' });
+            }
+
+            db.run(
+                `UPDATE itens_pedido SET arte_status = 'EM_DESENVOLVIMENTO', responsavel_arte = ?, data_inicio_arte = COALESCE(data_inicio_arte, DATETIME('now', 'localtime')) WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+                [responsavel, pedidoId],
+                function (err2) {
+                    if (err2) return res.status(500).json({ error: err2.message });
+                    
+                    db.all(`SELECT id FROM itens_pedido WHERE pedido_id = ? AND arte_status = 'EM_DESENVOLVIMENTO'`, [pedidoId], (err3, items) => {
+                        if (!err3 && items) {
+                            db.serialize(() => {
+                                items.forEach(item => {
+                                    db.run(
+                                        `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'INICIO')`,
+                                        [item.id, operador_id || null, responsavel || null]
+                                    );
+                                });
+                            });
+                        }
+                    });
+
+                    res.json({ message: 'Desenvolvimento de arte iniciado para o pedido', changes: this.changes });
+                }
+            );
+        });
+    } else if (arte_status === 'AGUARDANDO_APROVACAO') {
+        db.run(
+            `UPDATE itens_pedido SET arte_status = 'AGUARDANDO_APROVACAO' WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+            [pedidoId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                
+                db.all(`SELECT id, responsavel_arte FROM itens_pedido WHERE pedido_id = ? AND status_atual != 'CANCELADO'`, [pedidoId], (err3, items) => {
+                    if (!err3 && items) {
+                        db.serialize(() => {
+                            items.forEach(item => {
+                                db.run(
+                                    `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'FIM')`,
+                                    [item.id, operador_id || null, item.responsavel_arte || null]
+                                );
+                            });
+                        });
+                    }
+                });
+
+                res.json({ message: 'Pedido enviado para aprovação', changes: this.changes });
+            }
+        );
+    } else {
+        db.run(
+            `UPDATE itens_pedido SET arte_status = ? WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+            [arte_status, pedidoId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Status do pedido atualizado (fallback)', changes: this.changes });
+            }
+        );
+    }
+});
+
+// Atribuir Responsável da Arte em Lote
+router.put('/pedido/:pedidoId/assign', (req, res) => {
+    const { responsavel } = req.body;
+    const pedidoId = req.params.pedidoId;
+
+    db.run(
+        `UPDATE itens_pedido SET responsavel_arte = ? WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+        [responsavel, pedidoId],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Responsável atribuído com sucesso ao pedido', changes: this.changes });
+        }
+    );
+});
+
+// Reprovar Arte do Pedido em Lote
+router.put('/pedido/:pedidoId/reprovar', (req, res) => {
+    const { motivo_reprovacao, operador_id } = req.body;
+    const pedidoId = req.params.pedidoId;
+    const note = motivo_reprovacao ? `[Reprovação em ${new Date().toLocaleDateString('pt-BR')}]: ${motivo_reprovacao}` : '';
+
+    db.serialize(() => {
+        db.run(
+            `UPDATE itens_pedido SET 
+                arte_status = 'PRONTO_PARA_CRIAR', 
+                is_alteracao = 1, 
+                responsavel_arte = NULL, 
+                data_inicio_arte = NULL, 
+                data_entrada_arte = DATETIME('now', 'localtime'),
+                observacao_arte = CASE 
+                    WHEN observacao_arte IS NULL OR observacao_arte = '' THEN ? 
+                    ELSE observacao_arte || '\n' || ? 
+                END
+             WHERE pedido_id = ? AND arte_status != 'APROVADO' AND status_atual != 'CANCELADO'`,
+            [note, note, pedidoId],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                const changes = this.changes;
+
+                db.all(`SELECT id FROM itens_pedido WHERE pedido_id = ? AND status_atual != 'CANCELADO'`, [pedidoId], (err3, items) => {
+                    if (!err3 && items) {
+                        items.forEach(item => {
+                            db.run(
+                                `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'REPROVACAO')`,
+                                [item.id, operador_id || null, null]
+                            );
+                        });
+                    }
+                });
+
+                res.json({ message: 'Pedido reprovado e enviado para Fila de Alterações', changes });
+            }
+        );
     });
 });
+
+// Aprovar Arte do Pedido em Lote (Roteamento Individual por Item)
+router.put('/pedido/:pedidoId/aprovar', (req, res) => {
+    const { itens } = req.body; // Array de { id, setor_destino, cor_impressao, observacao_arte, responsavel }
+    const pedidoId = req.params.pedidoId;
+
+    if (!itens || !Array.isArray(itens) || itens.length === 0) {
+        return res.status(400).json({ error: 'Nenhum item enviado para aprovação.' });
+    }
+
+    db.serialize(() => {
+        let errors = [];
+        let completed = 0;
+
+        itens.forEach(item => {
+            if (!item.cor_impressao || item.cor_impressao.trim() === '') {
+                errors.push({ id: item.id, error: 'Preencha a Cor de Impressão antes de aprovar.' });
+                completed++;
+                if (completed === itens.length) {
+                    return res.status(400).json({ error: 'Existem campos obrigatórios em branco.', details: errors });
+                }
+                return;
+            }
+
+            const respSQL = item.responsavel ? ', responsavel_arte = ?' : '';
+            const query = `UPDATE itens_pedido SET 
+                arte_status = 'APROVADO', 
+                setor_destino = ?, 
+                cor_impressao = ?, 
+                observacao_arte = ?, 
+                status_atual = 'AGUARDANDO_SEPARACAO', 
+                data_arte_aprovacao = DATETIME('now', 'localtime') 
+                ${respSQL} 
+                WHERE id = ? AND pedido_id = ?`;
+
+            const params = [item.setor_destino, item.cor_impressao, item.observacao_arte || null];
+            if (item.responsavel) params.push(item.responsavel);
+            params.push(item.id, pedidoId);
+
+            db.run(query, params, function (err) {
+                if (err) {
+                    errors.push({ id: item.id, error: err.message });
+                }
+                completed++;
+                if (completed === itens.length) {
+                    if (errors.length > 0) {
+                        res.status(500).json({ error: 'Alguns itens não puderam ser aprovados.', details: errors });
+                    } else {
+                        res.json({ message: 'Todos os itens do pedido foram aprovados com sucesso!' });
+                    }
+                }
+            });
+        });
+    });
+});
+
+// Reverter Pedido Completo de volta para Fila de Arte (Aguardando Aprovação)
+router.put('/pedido/:pedidoId/reverter-arte', (req, res) => {
+    const pedidoId = req.params.pedidoId;
+    const { operador_id } = req.body;
+
+    console.log(`[REVERT-ART-ORDER] Reverting entire order ${pedidoId} to Fila de Arte (Aguardando Aprovação) by Operator: ${operador_id}`);
+
+    db.serialize(() => {
+        // Reset status_atual to 'AGUARDANDO_ARTE'
+        // Reset arte_status to 'AGUARDANDO_APROVACAO' (Aguardando Aprovação)
+        // Keep responsavel_arte and uploaded files as per user's specifications
+        const sqlUpdate = `
+            UPDATE itens_pedido SET 
+                status_atual = 'AGUARDANDO_ARTE',
+                arte_status = 'AGUARDANDO_APROVACAO',
+                is_alteracao = 1,
+                data_arte_aprovacao = NULL
+            WHERE pedido_id = ? AND status_atual != 'CANCELADO'
+        `;
+
+        db.run(sqlUpdate, [pedidoId], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            const changes = this.changes;
+
+            // Log event in events history for each item in the order
+            db.all(`SELECT id FROM itens_pedido WHERE pedido_id = ? AND status_atual != 'CANCELADO'`, [pedidoId], (err3, items) => {
+                if (!err3 && items) {
+                    items.forEach(item => {
+                        db.run(
+                            `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'ARTE_FINAL', 'RETORNO')`,
+                            [item.id, operador_id || null, null]
+                        );
+                    });
+                }
+            });
+
+            res.json({ message: 'Pedido revertido com sucesso para a Fila de Arte (Aguardando Aprovação)', changes });
+        });
+    });
+});
+
 
 // Atualizar Status Genérico do Item (Movimentação entre filas)
 router.put('/item/:id/status', (req, res) => {
@@ -666,7 +984,7 @@ router.put('/item/:id/return', (req, res) => {
         // CORRECTION: If returning to Art/Start, reset art approval and clear sector
         if (target_status === 'NOVO' || target_status === 'AGUARDANDO_ARTE' || target_status.includes('ARTE')) {
             console.log(`[ROLLBACK-RESET] Reseting Art Status for Item ${itemId}. Target: ${target_status}`);
-            sqlUpdate = `UPDATE itens_pedido SET status_atual = ?, arte_status = 'AGUARDANDO_APROVACAO', setor_destino = NULL WHERE id = ?`;
+            sqlUpdate = `UPDATE itens_pedido SET status_atual = 'AGUARDANDO_ARTE', arte_status = 'PRONTO_PARA_CRIAR', is_alteracao = 1, responsavel_arte = NULL, data_inicio_arte = NULL, data_entrada_arte = DATETIME('now', 'localtime'), setor_destino = NULL WHERE id = ?`;
         } else {
             console.log(`[ROLLBACK-NORMAL] Item ${itemId} Target: ${target_status} (No Art Reset)`);
         }
@@ -676,15 +994,11 @@ router.put('/item/:id/return', (req, res) => {
 
             // 3. Log Event
             const sqlEvent = `
-                INSERT INTO eventos_producao (pedido_id, item_id, tipo_evento, setor, operador_id, detalhes, data_evento)
-                VALUES (
-                    (SELECT pedido_id FROM itens_pedido WHERE id = ?), 
-                    ?, 'RETORNO', 'SISTEMA', ?, ?, DATETIME('now', 'localtime')
-                )
+                INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao)
+                VALUES (?, ?, ?, 'SISTEMA', 'RETORNO')
             `;
-            const detalhes = `De: ${previousStatus} Para: ${target_status}. Motivo: ${observation || 'N/A'}`;
 
-            db.run(sqlEvent, [itemId, itemId, operador_id, detalhes], (err3) => {
+            db.run(sqlEvent, [itemId, operador_id || null, null], (err3) => {
                 if (err3) console.error("Erro ao logar evento de retorno:", err3);
             });
 
