@@ -1111,7 +1111,12 @@ async function assignOrder(pedidoId, responsavel) {
             toast.style.cssText = `position:fixed; bottom:20px; right:20px; background:#22c55e; color:white; padding:10px 20px; border-radius:4px; z-index:1000`;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2000);
-            loadArteQueue();
+            
+            if (document.getElementById(`resp_select_${pedidoId}`)) {
+                openArteAction(pedidoId);
+            } else {
+                loadArteQueue();
+            }
         } else {
             alert('Erro ao atribuir responsável.');
         }
@@ -1145,7 +1150,7 @@ function renderKanbanCard(order, sectorUsers) {
     // Responsável a nível de Pedido (usa o primeiro item ativo da arte)
     const currentResp = order.items[0].responsavel_arte || '';
     let respSelect = '';
-    if (st === 'PRONTO_PARA_CRIAR' || st === 'EM_DESENVOLVIMENTO') {
+    if (st !== 'AGUARDANDO_APROVACAO') {
         let options = `<option value="">-- Selecione --</option>`;
         sectorUsers.forEach(u => {
             const sel = u.nome === currentResp ? 'selected' : '';
@@ -1199,7 +1204,10 @@ function renderKanbanCard(order, sectorUsers) {
     }
 
     let itemsHtml = `<div style="display:flex; flex-direction:column; gap:0.4rem; margin-top:0.5rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.5rem; border-radius:6px;">`;
-    order.items.forEach(item => {
+    const visibleItems = order.items.slice(0, 3);
+    const extraItems = order.items.slice(3);
+
+    visibleItems.forEach(item => {
         const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
         itemsHtml += `
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; border-bottom:1px dashed #e2e8f0; padding-bottom:0.25rem; margin-bottom:0.25rem;">
@@ -1212,6 +1220,29 @@ function renderKanbanCard(order, sectorUsers) {
             </div>
         `;
     });
+
+    if (extraItems.length > 0) {
+        itemsHtml += `<div id="extra-items-${order.pedido_id}" style="display:none; flex-direction:column; gap:0.4rem;">`;
+        extraItems.forEach(item => {
+            const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
+            itemsHtml += `
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; border-bottom:1px dashed #e2e8f0; padding-bottom:0.25rem; margin-bottom:0.25rem;">
+                    <div style="flex-grow:1; padding-right:0.5rem;">
+                        <strong>${item.produto}</strong> (x${item.quantidade})
+                        ${item.referencia ? `<div style="font-size:0.7rem; color:#64748b;">Ref: <b>${item.referencia}</b></div>` : ''}
+                        ${item.cor_impressao ? `<div style="font-size:0.7rem; color:#64748b;">Cor: <b>${item.cor_impressao}</b></div>` : ''}
+                    </div>
+                    <div>${layoutIndicator}</div>
+                </div>
+            `;
+        });
+        itemsHtml += `</div>`;
+        itemsHtml += `
+            <button type="button" class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; margin-top:0.25rem; background:#e2e8f0; color:#475569; border:none; display:flex; align-items:center; justify-content:center; gap:0.25rem;" onclick="event.stopPropagation(); toggleExtraItems(this, ${order.pedido_id}, ${extraItems.length})">
+                Mostrar mais (${extraItems.length}) <i class="ph-caret-down"></i>
+            </button>
+        `;
+    }
     itemsHtml += `</div>`;
 
     let actionButtons = '';
@@ -1221,12 +1252,10 @@ function renderKanbanCard(order, sectorUsers) {
                 <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_INFO')">Aguardando Info</button>
                 <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
             </div>
-            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
         `;
     } else if (st === 'AGUARDANDO_INFO') {
         actionButtons = `
             <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
-            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
         `;
     } else if (st === 'PRONTO_PARA_CRIAR') {
         actionButtons = `
@@ -1234,12 +1263,10 @@ function renderKanbanCard(order, sectorUsers) {
                 <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_INFO')">Devolver Info</button>
                 <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="iniciarDesenvolvimentoOrderDirect(${order.pedido_id})">Iniciar Arte</button>
             </div>
-            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
         `;
     } else if (st === 'EM_DESENVOLVIMENTO') {
         actionButtons = `
             <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--warning-bg); color:var(--warning);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
-            <button class="btn" style="width:100%; margin-top:0.25rem; padding:0.25rem; font-size:0.7rem;" onclick="openArteAction(${order.pedido_id})">Definir / Upload</button>
         `;
     } else if (st === 'AGUARDANDO_APROVACAO') {
         actionButtons = `
@@ -1279,6 +1306,17 @@ function renderKanbanCard(order, sectorUsers) {
             </div>
         </div>
     `;
+}
+
+function toggleExtraItems(btn, pedidoId, count) {
+    const container = document.getElementById(`extra-items-${pedidoId}`);
+    if (container.style.display === 'none') {
+        container.style.display = 'flex';
+        btn.innerHTML = `Mostrar menos <i class="ph-caret-up"></i>`;
+    } else {
+        container.style.display = 'none';
+        btn.innerHTML = `Mostrar mais (${count}) <i class="ph-caret-down"></i>`;
+    }
 }
 
 async function assignItem(itemId, sectorCode, paramsOrName) {
@@ -2445,6 +2483,8 @@ async function openArteAction(pedidoId) {
     }
 
     let itemsHtml = '';
+    const isAprovacao = (status === 'AGUARDANDO_APROVACAO');
+
     items.forEach(item => {
         const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
         const isDigitalOrEstamparia = item.setor_destino === 'IMPRESSAO_DIGITAL' || item.setor_destino === 'ESTAMPARIA';
@@ -2465,100 +2505,138 @@ async function openArteAction(pedidoId) {
                     <div>
                         <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Layout & Arquivos</h4>
                         
-                        <!-- Layout Section -->
-                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                            <div style="font-weight: bold; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="ph-image" style="color: var(--primary);"></i> Layout de Aprovação
+                        ${!isAprovacao && !item.layout_path && !item.arquivo_impressao_digital_url && !item.arquivo_impressao_laser_url ? `
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                <i class="ph-info" style="vertical-align: middle; margin-right: 0.25rem;"></i> Nenhum arquivo ou layout anexado. Os arquivos serão vinculados na etapa de aprovação.
                             </div>
-                            <div id="layoutContainer_${item.id}" style="margin-bottom: 0.75rem;">
-                                ${item.layout_path 
-                                    ? `<div style="color:var(--success); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
-                                           <i class="ph-check-circle" style="font-size: 1.2rem;"></i>
-                                           <div>
-                                               <strong>Layout Presente</strong> <br>
-                                               <small style="color: var(--text-tertiary);">Upload por: ${item.layout_uploaded_by || 'Sistema'}</small>
-                                           </div>
-                                           <div style="margin-left: auto;">${layoutIndicator}</div>
-                                       </div>`
-                                    : `<div style="color:var(--text-tertiary); font-size: 0.85rem;"><i class="ph-info"></i> Nenhum layout enviado</div>`
-                                }
+                        ` : `
+                            <!-- Layout Section -->
+                            ${isAprovacao || item.layout_path ? `
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                                <div style="font-weight: bold; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <i class="ph-image" style="color: var(--primary);"></i> Layout de Aprovação
+                                </div>
+                                <div id="layoutContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                    ${item.layout_path 
+                                        ? `<div style="color:var(--success); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+                                               <i class="ph-check-circle" style="font-size: 1.2rem;"></i>
+                                               <div>
+                                                   <strong>Layout Presente</strong> <br>
+                                                   <small style="color: var(--text-tertiary);">Upload por: ${item.layout_uploaded_by || 'Sistema'}</small>
+                                               </div>
+                                               <div style="margin-left: auto;">${layoutIndicator}</div>
+                                           </div>`
+                                        : `<div style="color:var(--text-tertiary); font-size: 0.85rem;"><i class="ph-info"></i> Nenhum layout enviado</div>`
+                                    }
+                                </div>
+                                ${isAprovacao ? `
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="file" id="layoutFile_${item.id}" accept="image/*,application/pdf" style="font-size: 0.8rem; flex-grow: 1;">
+                                    <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'layout', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"><i class="ph-upload-simple"></i> Enviar</button>
+                                </div>
+                                ` : ''}
                             </div>
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <input type="file" id="layoutFile_${item.id}" accept="image/*,application/pdf" style="font-size: 0.8rem; flex-grow: 1;">
-                                <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'layout', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;"><i class="ph-upload-simple"></i> Enviar</button>
-                            </div>
-                        </div>
+                            ` : ''}
 
-                        <!-- Digital File Section -->
-                        <div id="digitalFileSection_${item.id}" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${isDigitalOrEstamparia ? 'block' : 'none'};">
-                            <div style="font-weight: bold; font-size: 0.85rem; color: #166534; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="ph-printer"></i> Arquivo de Impressão (Digital/Estamparia)
+                            <!-- Digital File Section -->
+                            ${isAprovacao || item.arquivo_impressao_digital_url ? `
+                            <div id="digitalFileSection_${item.id}" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${(isAprovacao ? isDigitalOrEstamparia : item.arquivo_impressao_digital_url) ? 'block' : 'none'};">
+                                <div style="font-weight: bold; font-size: 0.85rem; color: #166534; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <i class="ph-printer"></i> Arquivo de Impressão (Digital/Estamparia)
+                                </div>
+                                <div id="digitalContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                    ${item.arquivo_impressao_digital_url
+                                        ? `<div style="color:#166534; font-size: 0.85rem;">
+                                               <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                                               <strong>${item.arquivo_impressao_digital_nome}</strong> <br>
+                                               <small style="color: #15803d;">Enviado por: ${item.arquivo_impressao_digital_enviado_por || '?'} em ${new Date(item.arquivo_impressao_digital_enviado_em).toLocaleDateString()}</small>
+                                           </div>`
+                                        : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo de impressão digital anexado</div>`
+                                    }
+                                </div>
+                                ${isAprovacao ? `
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="file" id="digitalFile_${item.id}" accept=".pdf,.cdr,.zip" style="font-size: 0.8rem; flex-grow: 1;">
+                                    <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'digital', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #166534; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
+                                </div>
+                                ` : ''}
                             </div>
-                            <div id="digitalContainer_${item.id}" style="margin-bottom: 0.75rem;">
-                                ${item.arquivo_impressao_digital_url
-                                    ? `<div style="color:#166534; font-size: 0.85rem;">
-                                           <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
-                                           <strong>${item.arquivo_impressao_digital_nome}</strong> <br>
-                                           <small style="color: #15803d;">Enviado por: ${item.arquivo_impressao_digital_enviado_por || '?'} em ${new Date(item.arquivo_impressao_digital_enviado_em).toLocaleDateString()}</small>
-                                       </div>`
-                                    : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo de impressão digital anexado</div>`
-                                }
-                            </div>
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <input type="file" id="digitalFile_${item.id}" accept=".pdf,.cdr,.zip" style="font-size: 0.8rem; flex-grow: 1;">
-                                <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'digital', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #166534; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
-                            </div>
-                        </div>
+                            ` : ''}
 
-                        <!-- Laser File Section -->
-                        <div id="laserFileSection_${item.id}" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${isLaser ? 'block' : 'none'};">
-                            <div style="font-weight: bold; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="ph-lightning"></i> Arquivo Laser
+                            <!-- Laser File Section -->
+                            ${isAprovacao || item.arquivo_impressao_laser_url ? `
+                            <div id="laserFileSection_${item.id}" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${(isAprovacao ? isLaser : item.arquivo_impressao_laser_url) ? 'block' : 'none'};">
+                                <div style="font-weight: bold; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <i class="ph-lightning"></i> Arquivo Laser
+                                </div>
+                                <div id="laserContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                    ${item.arquivo_impressao_laser_url
+                                        ? `<div style="color:#92400e; font-size: 0.85rem;">
+                                               <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                                               <strong>${item.arquivo_impressao_laser_nome}</strong> <br>
+                                               <small style="color: #b45309;">Enviado por: ${item.arquivo_impressao_laser_enviado_por || '?'} em ${new Date(item.arquivo_impressao_laser_enviado_em).toLocaleDateString()}</small>
+                                           </div>`
+                                        : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo laser anexado</div>`
+                                    }
+                                </div>
+                                ${isAprovacao ? `
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="file" id="laserFile_${item.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.8rem; flex-grow: 1;">
+                                    <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'laser', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #d97706; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
+                                </div>
+                                ` : ''}
                             </div>
-                            <div id="laserContainer_${item.id}" style="margin-bottom: 0.75rem;">
-                                ${item.arquivo_impressao_laser_url
-                                    ? `<div style="color:#92400e; font-size: 0.85rem;">
-                                           <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
-                                           <strong>${item.arquivo_impressao_laser_nome}</strong> <br>
-                                           <small style="color: #b45309;">Enviado por: ${item.arquivo_impressao_laser_enviado_por || '?'} em ${new Date(item.arquivo_impressao_laser_enviado_em).toLocaleDateString()}</small>
-                                       </div>`
-                                    : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo laser anexado</div>`
-                                }
-                            </div>
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <input type="file" id="laserFile_${item.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.8rem; flex-grow: 1;">
-                                <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'laser', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #d97706; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
-                            </div>
-                        </div>
+                            ` : ''}
+                        `}
                     </div>
 
                     <!-- Coluna Direita: Especificações de Produção -->
                     <div>
                         <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Especificações de Produção</h4>
                         
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Cor de Impressão <span style="color:var(--danger)">*</span></label>
-                            <input type="text" id="corImpressao_${item.id}" class="form-control" placeholder="Ex: Pantone 186 C" value="${item.cor_impressao || ''}" style="margin-bottom: 0;">
-                        </div>
+                        ${isAprovacao ? `
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Cor de Impressão <span style="color:var(--danger)">*</span></label>
+                                <input type="text" id="corImpressao_${item.id}" class="form-control" placeholder="Ex: Pantone 186 C" value="${item.cor_impressao || ''}" style="margin-bottom: 0;">
+                            </div>
 
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Setor Destino ${item.is_terceirizado ? '<span style="color:#854d0e">(Terceirizado - Pula Impressão)</span>' : ''}</label>
-                            <select id="setorDestino_${item.id}" class="form-control" ${item.is_terceirizado ? 'disabled' : ''} onchange="toggleItemFileSections(${item.id})" style="margin-bottom: 0;">
-                                <option value="">Selecione...</option>
-                                <option value="SILK_PLANO" ${item.setor_destino === 'SILK_PLANO' ? 'selected' : ''}>Silk Plano</option>
-                                <option value="SILK_CILINDRICA" ${item.setor_destino === 'SILK_CILINDRICA' ? 'selected' : ''}>Silk Cilíndrica</option>
-                                <option value="TAMPOGRAFIA" ${item.setor_destino === 'TAMPOGRAFIA' ? 'selected' : ''}>Tampografia</option>
-                                <option value="IMPRESSAO_LASER" ${item.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
-                                <option value="IMPRESSAO_DIGITAL" ${item.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
-                                <option value="ESTAMPARIA" ${item.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
-                                <option value="TERCEIRIZADO" ${item.is_terceirizado || item.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''} ${item.is_terceirizado ? '' : 'style="display:none;"'}>Terceirizado</option>
-                            </select>
-                        </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Setor Destino ${item.is_terceirizado ? '<span style="color:#854d0e">(Terceirizado - Pula Impressão)</span>' : ''}</label>
+                                <select id="setorDestino_${item.id}" class="form-control" ${item.is_terceirizado ? 'disabled' : ''} onchange="toggleItemFileSections(${item.id})" style="margin-bottom: 0;">
+                                    <option value="">Selecione...</option>
+                                    <option value="SILK_PLANO" ${item.setor_destino === 'SILK_PLANO' ? 'selected' : ''}>Silk Plano</option>
+                                    <option value="SILK_CILINDRICA" ${item.setor_destino === 'SILK_CILINDRICA' ? 'selected' : ''}>Silk Cilíndrica</option>
+                                    <option value="TAMPOGRAFIA" ${item.setor_destino === 'TAMPOGRAFIA' ? 'selected' : ''}>Tampografia</option>
+                                    <option value="IMPRESSAO_LASER" ${item.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
+                                    <option value="IMPRESSAO_DIGITAL" ${item.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
+                                    <option value="ESTAMPARIA" ${item.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
+                                    <option value="TERCEIRIZADO" ${item.is_terceirizado || item.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''} ${item.is_terceirizado ? '' : 'style="display:none;"'}>Terceirizado</option>
+                                </select>
+                            </div>
 
-                        <div class="form-group">
-                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Observações da Arte</label>
-                            <textarea id="obsArte_${item.id}" class="form-control" rows="2" placeholder="Detalhes técnicos, cuidados na gravação, etc.">${item.observacao_arte || ''}</textarea>
-                        </div>
+                            <div class="form-group">
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Observações da Arte</label>
+                                <textarea id="obsArte_${item.id}" class="form-control" rows="2" placeholder="Detalhes técnicos, cuidados na gravação, etc.">${item.observacao_arte || ''}</textarea>
+                            </div>
+                        ` : `
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; font-size: 0.9rem;">
+                                <div style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">Cor de Impressão:</span> 
+                                    <strong>${item.cor_impressao || '<span style="color:var(--text-tertiary); font-weight: normal;">Não definida</span>'}</strong>
+                                </div>
+                                <div style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">Setor Destino:</span> 
+                                    <strong>${item.setor_destino || '<span style="color:var(--text-tertiary); font-weight: normal;">Não definido</span>'}</strong>
+                                </div>
+                                <div style="border-top: 1px solid #e2e8f0; padding-top: 0.5rem; margin-top: 0.5rem;">
+                                    <span style="color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Observações da Arte:</span>
+                                    <div style="font-style: italic; color: var(--text-primary); word-break: break-all;">${item.observacao_arte || '<span style="color:var(--text-tertiary); font-style: normal;">Nenhuma observação</span>'}</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem; color: var(--text-tertiary); font-size: 0.8rem; text-align: center; border: 1px dashed #e2e8f0; padding: 0.5rem; border-radius: 6px;">
+                                <i class="ph-info"></i> As especificações serão preenchidas na etapa de aprovação.
+                            </div>
+                        `}
                     </div>
                 </div>
             </div>
@@ -2601,6 +2679,7 @@ async function openArteAction(pedidoId) {
             ${itemsHtml}
 
             <!-- Final consolidated approval button -->
+            ${isAprovacao ? `
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem; display: flex; justify-content: flex-end; align-items: center; box-shadow: var(--shadow-sm);">
                 <div style="text-align: right;">
                     <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Defina a cor e o setor de todos os itens antes de aprovar.</p>
@@ -2609,6 +2688,7 @@ async function openArteAction(pedidoId) {
                     </button>
                 </div>
             </div>
+            ` : ''}
         </div>
     `;
 

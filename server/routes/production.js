@@ -984,7 +984,7 @@ router.put('/item/:id/return', (req, res) => {
         // CORRECTION: If returning to Art/Start, reset art approval and clear sector
         if (target_status === 'NOVO' || target_status === 'AGUARDANDO_ARTE' || target_status.includes('ARTE')) {
             console.log(`[ROLLBACK-RESET] Reseting Art Status for Item ${itemId}. Target: ${target_status}`);
-            sqlUpdate = `UPDATE itens_pedido SET status_atual = 'AGUARDANDO_ARTE', arte_status = 'PRONTO_PARA_CRIAR', is_alteracao = 1, responsavel_arte = NULL, data_inicio_arte = NULL, data_entrada_arte = DATETIME('now', 'localtime'), setor_destino = NULL WHERE id = ?`;
+            sqlUpdate = `UPDATE itens_pedido SET status_atual = ?, arte_status = 'AGUARDANDO_APROVACAO', is_alteracao = 1, responsavel_arte = NULL, data_inicio_arte = NULL, data_entrada_arte = DATETIME('now', 'localtime'), setor_destino = NULL WHERE id = ?`;
         } else {
             console.log(`[ROLLBACK-NORMAL] Item ${itemId} Target: ${target_status} (No Art Reset)`);
         }
