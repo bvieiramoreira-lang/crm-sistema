@@ -5,7 +5,11 @@ const db = require('../database');
 // Criar Pedido (Financeiro)
 router.post('/', (req, res) => {
     console.log("[DEBUG] Nova requisição POST /api/orders. Body:", JSON.stringify(req.body, null, 2));
-    const { cliente, numero_pedido, prazo_entrega, tipo_envio, transportadora, itens, observacao } = req.body;
+    const { cliente, numero_pedido, prazo_entrega, tipo_envio, transportadora, itens, observacao, tags } = req.body;
+
+    if (tags && tags.length > 3) {
+        return res.status(400).json({ error: 'Máximo de 3 tags permitidas por pedido' });
+    }
 
     // Usar transação seria ideal, mas SQLite nodejs simples não tem beginTransaction explícito fácil sem async/await wrapper
     // Vamos fazer sequencial simples
@@ -16,27 +20,44 @@ router.post('/', (req, res) => {
 
             const pedidoId = this.lastID;
 
-            // Inserir Itens
-            if (itens && itens.length > 0) {
-                const placeholders = itens.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
-                const values = [];
-                itens.forEach(item => {
-                    values.push(pedidoId, item.produto, item.quantidade, item.setor_destino || null, item.referencia ? item.referencia.toUpperCase() : null, item.is_terceirizado ? 1 : 0);
-                });
+            // Inserir associação com tags
+            const saveTagsPromise = new Promise((resolve) => {
+                if (tags && tags.length > 0) {
+                    const tagPlaceholders = tags.map(() => '(?, ?)').join(',');
+                    const tagValues = [];
+                    tags.forEach(tId => tagValues.push(pedidoId, tId));
+                    db.run(`INSERT OR IGNORE INTO pedido_tags (pedido_id, tag_id) VALUES ` + tagPlaceholders, tagValues, (errTags) => {
+                        if (errTags) console.error("Error inserting order tags:", errTags);
+                        resolve();
+                    });
+                } else {
+                    resolve();
+                }
+            });
 
-                db.run(`INSERT INTO itens_pedido (pedido_id, produto, quantidade, setor_destino, referencia, is_terceirizado) VALUES ` + placeholders, values, (err) => {
-                    if (err) {
-                        console.error("**** SQL ERROR INSERTING ITEMS ****", err);
-                        console.error("Values:", values);
-                        console.error("Placeholders:", placeholders);
-                        return res.status(207).json({ id: pedidoId, message: 'Pedido criado, mas erro ao inserir itens: ' + err.message });
-                    }
-                    console.log("[DEBUG] Itens inseridos com sucesso para pedido", pedidoId);
+            saveTagsPromise.then(() => {
+                // Inserir Itens
+                if (itens && itens.length > 0) {
+                    const placeholders = itens.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+                    const values = [];
+                    itens.forEach(item => {
+                        values.push(pedidoId, item.produto, item.quantidade, item.setor_destino || null, item.referencia ? item.referencia.toUpperCase() : null, item.is_terceirizado ? 1 : 0);
+                    });
+
+                    db.run(`INSERT INTO itens_pedido (pedido_id, produto, quantidade, setor_destino, referencia, is_terceirizado) VALUES ` + placeholders, values, (err) => {
+                        if (err) {
+                            console.error("**** SQL ERROR INSERTING ITEMS ****", err);
+                            console.error("Values:", values);
+                            console.error("Placeholders:", placeholders);
+                            return res.status(207).json({ id: pedidoId, message: 'Pedido criado, mas erro ao inserir itens: ' + err.message });
+                        }
+                        console.log("[DEBUG] Itens inseridos com sucesso para pedido", pedidoId);
+                        res.json({ id: pedidoId, message: 'Pedido criado com sucesso' });
+                    });
+                } else {
                     res.json({ id: pedidoId, message: 'Pedido criado com sucesso' });
-                });
-            } else {
-                res.json({ id: pedidoId, message: 'Pedido criado com sucesso' });
-            }
+                }
+            });
         }
     );
 });
@@ -50,38 +71,61 @@ router.get('/', async (req, res) => {
         const search = req.query.search ? req.query.search.toLowerCase() : '';
         const status = req.query.status || '';
         const itemStatus = req.query.itemStatus || '';
-        const viewMode = req.query.viewMode || 'active'; // 'active' or 'finished'
+               const viewMode = req.query.viewMode || 'active'; // 'active' or 'finished'
+        const finishedSubMode = req.query.finishedSubMode || 'all'; // 'all', 'shipped', 'pickup', or 'archived'
+        const deliveryStatus = req.query.deliveryStatus || ''; // 'all', 'retirado', 'despachado'
+        const dateFilterType = req.query.dateFilterType || 'finished'; // 'finished' or 'delivery'
         const startDate = req.query.startDate || '';
         const endDate = req.query.endDate || '';
 
         // Sorting
         // For active: prazo_entrega ASC, id DESC
         // For finished: finalizado_em DESC, id DESC
-        let orderBy = viewMode === 'finished' ? 'ORDER BY p.finalizado_em DESC, p.id DESC' : 'ORDER BY p.prazo_entrega ASC, p.id DESC';
+        let orderBy = viewMode === 'finished' ? 'ORDER BY p.finalizado_em DESC, p.id DESC' : 'ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = \'\' THEN 1 ELSE 0 END, p.prazo_entrega ASC, p.id DESC';
         if (req.query.sort === 'recent') orderBy = 'ORDER BY p.id DESC';
 
         // Filters applied to the SQL directly
         let whereClauses = [];
         let params = [];
 
-        // 1. Strict Mode Separation
         if (viewMode === 'finished') {
-            whereClauses.push("p.status_geral = 'FINALIZADO'");
+            if (finishedSubMode === 'pickup') {
+                whereClauses.push("p.status_geral = 'FINALIZADO' AND p.tipo_envio IN ('RETIRA', 'RETIRADA') AND (p.retirado = 0 OR p.retirado IS NULL) AND (p.finalizado_em >= datetime('now', '-20 days', 'localtime') OR p.finalizado_em IS NULL)");
+            } else if (finishedSubMode === 'shipped') {
+                whereClauses.push("p.status_geral = 'FINALIZADO' AND (p.tipo_envio NOT IN ('RETIRA', 'RETIRADA') OR p.retirado = 1) AND (p.finalizado_em >= datetime('now', '-20 days', 'localtime') OR p.finalizado_em IS NULL)");
+            } else if (finishedSubMode === 'archived') {
+                whereClauses.push("p.status_geral = 'FINALIZADO' AND p.finalizado_em < datetime('now', '-20 days', 'localtime')");
+            } else {
+                whereClauses.push("p.status_geral = 'FINALIZADO'");
+            }
+
+            // Apply deliveryStatus filter
+            if (deliveryStatus === 'retirado') {
+                whereClauses.push("p.tipo_envio IN ('RETIRA', 'RETIRADA') AND p.retirado = 1");
+            } else if (deliveryStatus === 'despachado') {
+                whereClauses.push("p.tipo_envio NOT IN ('RETIRA', 'RETIRADA')");
+            }
         } else {
             whereClauses.push("p.status_geral != 'FINALIZADO'");
         }
 
-        // 2. Date Filters (Prazo or Finalizado)
+        // 2. Date Filters (Prazo or Finalizado/Entrega)
         if (startDate && endDate) {
-            const field = viewMode === 'finished' ? 'p.finalizado_em' : 'p.prazo_entrega';
+            const field = viewMode === 'finished' 
+                ? (dateFilterType === 'delivery' ? 'COALESCE(p.data_retirada, p.finalizado_em)' : 'p.finalizado_em')
+                : 'p.prazo_entrega';
             whereClauses.push(`(${field} BETWEEN ? AND ?)`);
             params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
         } else if (startDate) {
-            const field = viewMode === 'finished' ? 'p.finalizado_em' : 'p.prazo_entrega';
+            const field = viewMode === 'finished'
+                ? (dateFilterType === 'delivery' ? 'COALESCE(p.data_retirada, p.finalizado_em)' : 'p.finalizado_em')
+                : 'p.prazo_entrega';
             whereClauses.push(`(${field} >= ?)`);
             params.push(`${startDate} 00:00:00`);
         } else if (endDate) {
-            const field = viewMode === 'finished' ? 'p.finalizado_em' : 'p.prazo_entrega';
+            const field = viewMode === 'finished'
+                ? (dateFilterType === 'delivery' ? 'COALESCE(p.data_retirada, p.finalizado_em)' : 'p.finalizado_em')
+                : 'p.prazo_entrega';
             whereClauses.push(`(${field} <= ?)`);
             params.push(`${endDate} 23:59:59`);
         }
@@ -129,16 +173,30 @@ router.get('/', async (req, res) => {
             });
         });
 
-        // 6. Fetch Items for the paginated orders
+        // 6. Fetch Items and Tags for the paginated orders
         const orderIds = orders.map(o => o.id);
         let allItems = [];
+        let allTags = [];
         if (orderIds.length > 0) {
             const placeholders = orderIds.map(() => '?').join(',');
-            allItems = await new Promise((resolve, reject) => {
+            const fetchItems = new Promise((resolve, reject) => {
                 db.all(`SELECT id, pedido_id, produto, quantidade, referencia, status_atual, arte_status, setor_destino, layout_path, layout_type, is_terceirizado FROM itens_pedido WHERE pedido_id IN (${placeholders})`, orderIds, (err, rows) => {
                     if (err) reject(err); else resolve(rows);
                 });
             });
+
+            const fetchTags = new Promise((resolve, reject) => {
+                db.all(`SELECT pt.pedido_id, t.id, t.nome, t.cor 
+                        FROM pedido_tags pt 
+                        JOIN tags t ON pt.tag_id = t.id 
+                        WHERE pt.pedido_id IN (${placeholders})`, orderIds, (err, rows) => {
+                    if (err) reject(err); else resolve(rows);
+                });
+            });
+
+            const results = await Promise.all([fetchItems, fetchTags]);
+            allItems = results[0];
+            allTags = results[1];
         }
 
         // Group items by order
@@ -146,6 +204,13 @@ router.get('/', async (req, res) => {
         allItems.forEach(item => {
             if (!itemsByOrder.has(item.pedido_id)) itemsByOrder.set(item.pedido_id, []);
             itemsByOrder.get(item.pedido_id).push(item);
+        });
+
+        // Group tags by order
+        const tagsByOrder = new Map();
+        allTags.forEach(tag => {
+            if (!tagsByOrder.has(tag.pedido_id)) tagsByOrder.set(tag.pedido_id, []);
+            tagsByOrder.get(tag.pedido_id).push({ id: tag.id, nome: tag.nome, cor: tag.cor });
         });
 
         // 7. Calculate Official Status and Final Filter
@@ -187,7 +252,7 @@ router.get('/', async (req, res) => {
                 }
             }
 
-            return { ...order, status_oficial: statusOficial, setor_detalhe: sectorDetail, itens: items };
+            return { ...order, status_oficial: statusOficial, setor_detalhe: sectorDetail, itens: items, tags: tagsByOrder.get(order.id) || [] };
         });
 
         // Apply advanced post-SQL filters if present (itemStatus and strict official status)
@@ -265,6 +330,16 @@ router.get('/:id', async (req, res) => {
 
         pedido.itens = items;
 
+        const tags = await new Promise((resolve, reject) => {
+            db.all(`SELECT t.id, t.nome, t.cor 
+                    FROM pedido_tags pt 
+                    JOIN tags t ON pt.tag_id = t.id 
+                    WHERE pt.pedido_id = ?`, [pedidoId], (err, rows) => {
+                if (err) reject(err); else resolve(rows);
+            });
+        });
+        pedido.tags = tags || [];
+
         // Lógica do Status Oficial (Mesma lógica da listagem)
         let statusOficial = 'FINALIZADO';
         let sectorDetail = '';
@@ -315,6 +390,20 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+// Marcar pedido como retirado (Local Pickup)
+router.put('/:id/retirar', (req, res) => {
+    const pedidoId = req.params.id;
+    db.run(
+        `UPDATE pedidos SET retirado = 1, data_retirada = datetime('now', 'localtime') WHERE id = ?`,
+        [pedidoId],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (this.changes === 0) return res.status(404).json({ error: 'Pedido não encontrado' });
+            res.json({ message: 'Pedido marcado como retirado', changes: this.changes });
+        }
+    );
+});
+
 // Atualizar Frete (Volumes, Peso, etc) - Rota específica
 router.put('/:id/shipping', (req, res) => {
     // ... mantido para compatibilidade, mas o PUT /:id geral vai cobrir
@@ -355,9 +444,13 @@ router.put('/:id', async (req, res) => {
     const {
         cliente, numero_pedido, prazo_entrega, tipo_envio, transportadora, observacao,
         usuario_id,
-        // motivo removido do body
-        itens // Array de itens (se permitido)
+        itens,
+        tags
     } = req.body;
+
+    if (tags && tags.length > 3) {
+        return res.status(400).json({ error: 'Máximo de 3 tags permitidas por pedido' });
+    }
 
     const motivo = 'Edição Manual';
 
@@ -446,7 +539,33 @@ router.put('/:id', async (req, res) => {
                 });
             }
 
-            res.json({ message: 'Pedido atualizado', changes });
+            // Atualizar Tags
+            const updateTagsPromise = new Promise((resolve) => {
+                if (tags !== undefined) {
+                    db.run(`DELETE FROM pedido_tags WHERE pedido_id = ?`, [pedidoId], (err) => {
+                        if (err) {
+                            console.error("Erro ao limpar tags antigas:", err);
+                            resolve();
+                        } else if (tags && tags.length > 0) {
+                            const tagPlaceholders = tags.map(() => '(?, ?)').join(',');
+                            const tagValues = [];
+                            tags.forEach(tId => tagValues.push(pedidoId, tId));
+                            db.run(`INSERT OR IGNORE INTO pedido_tags (pedido_id, tag_id) VALUES ` + tagPlaceholders, tagValues, (err2) => {
+                                if (err2) console.error("Erro ao associar novas tags:", err2);
+                                resolve();
+                            });
+                        } else {
+                            resolve();
+                        }
+                    });
+                } else {
+                    resolve();
+                }
+            });
+
+            updateTagsPromise.then(() => {
+                res.json({ message: 'Pedido atualizado', changes });
+            });
         });
     });
 });

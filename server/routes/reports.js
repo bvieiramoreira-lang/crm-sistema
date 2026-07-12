@@ -21,17 +21,18 @@ router.get('/productivity', (req, res) => {
         SELECT 
             COALESCE(fim.operador_nome, u.nome) as operador,
             fim.setor,
-            SUM(fim.quantidade_produzida) as total_produzido,
+            SUM(COALESCE(fim.quantidade_produzida, i.quantidade)) as total_produzido,
             COUNT(fim.id) as total_eventos,
             SUM(CASE WHEN inicio.timestamp IS NOT NULL THEN (julianday(fim.timestamp) - julianday(inicio.timestamp)) * 24 * 60 ELSE 0 END) as tempo_total_minutos
         FROM eventos_producao fim
         LEFT JOIN usuarios u ON fim.operador_id = u.id
+        LEFT JOIN itens_pedido i ON fim.item_id = i.id
         LEFT JOIN eventos_producao inicio ON 
             fim.item_id = inicio.item_id AND 
             fim.operador_id = inicio.operador_id AND
             fim.setor = inicio.setor AND
             inicio.acao = 'INICIO'
-        WHERE fim.timestamp BETWEEN ? AND ?
+        WHERE datetime(fim.timestamp, 'localtime') BETWEEN ? AND ?
         AND fim.acao = 'FIM'
         GROUP BY COALESCE(fim.operador_nome, u.nome), fim.setor
         ORDER BY total_produzido DESC

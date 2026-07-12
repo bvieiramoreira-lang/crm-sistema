@@ -135,7 +135,11 @@ async function fetchControleData() {
             
             rowsHtml += `
                 <tr data-setor="${item.setor_destino || ''}" data-status="${item.status_atual || ''}">
-                    <td><strong>${item.numero_pedido}</strong><br><small style="color:var(--text-secondary)">${item.cliente}</small></td>
+                    <td>
+                        <strong>${item.numero_pedido}</strong><br>
+                        <small style="color:var(--text-secondary)">${item.cliente}</small>
+                        ${renderTagBadges(item.tags)}
+                    </td>
                     <td><strong>${item.produto}</strong></td>
                     <td>x${item.quantidade}</td>
                     <td>${item.setor_destino || '-'}</td>
@@ -186,7 +190,11 @@ async function fetchPendingPauses() {
             data.forEach(item => {
                 html += `
                     <tr>
-                        <td><strong>${item.numero_pedido}</strong><br><small>${item.cliente}</small></td>
+                        <td>
+                            <strong>${item.numero_pedido}</strong><br>
+                            <small>${item.cliente}</small>
+                            ${renderTagBadges(item.tags)}
+                        </td>
                         <td>${item.produto} (x${item.quantidade})</td>
                         <td>${item.setor_destino || '-'}</td>
                         <td style="color: var(--danger); font-weight: bold;">${item.motivo_pausa_producao || 'Não informado'}</td>

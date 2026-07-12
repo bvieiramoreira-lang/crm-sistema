@@ -19,7 +19,8 @@ router.post('/login', (req, res) => {
             id: user.id,
             nome: user.nome,
             perfil: user.perfil,
-            setor_impressao: user.setor_impressao
+            setor_impressao: user.setor_impressao,
+            setores_secundarios: user.setores_secundarios
         });
     });
 });

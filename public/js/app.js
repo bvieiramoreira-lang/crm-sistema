@@ -1,6 +1,17 @@
 // Estado Global
 let currentUser = null;
 
+function hasProfile(profileName) {
+    if (!currentUser) return false;
+    const p = currentUser.perfil ? currentUser.perfil.toLowerCase() : '';
+    if (p === 'admin') return true;
+    if (p === profileName.toLowerCase()) return true;
+    const sec = currentUser.setores_secundarios 
+        ? currentUser.setores_secundarios.toLowerCase().split(',').map(s => s.trim()) 
+        : [];
+    return sec.includes(profileName.toLowerCase());
+}
+
 // Inicialização
 
 // ==== CACHE GLOBAL DE COLABORADORES POR SETOR ====
@@ -186,9 +197,8 @@ function renderShippingBadge(tipo) {
     </span>`;
 }
 
-// Helper: Deadline Badge with Logic
 function renderDeadline(dateStr) {
-    if (!dateStr) return '<span class="badge" style="background:#ccc">Sem Prazo</span>';
+    if (!dateStr) return '<span style="color: #cbd5e1; font-weight: 500;">Sem Prazo</span>';
 
     const deadline = new Date(dateStr);
     const today = new Date();
@@ -198,35 +208,26 @@ function renderDeadline(dateStr) {
     const diffTime = deadline - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    let badgeClass = 'badge-blue'; // Default
-    let icon = 'ph-calendar';
-    let label = deadline.toLocaleDateString();
-    let style = '';
+    const dateFormatted = deadline.toLocaleDateString('pt-BR');
 
     if (diffDays < 0) {
         // Atrasado
-        style = 'background: #dc2626; color: white;'; // Red
-        icon = 'ph-warning';
-        label += ' (Atrasado)';
-    } else if (diffDays === 0 || diffDays === 1) {
-        // Hoje/Amanhã (Urgente)
-        style = 'background: #ea580c; color: white;'; // Orange
-        icon = 'ph-fire';
-        label += ' (Urgente)';
+        return `<span style="color: #dc2626; font-weight: bold;"><i class="ph-warning"></i> ${dateFormatted} (${Math.abs(diffDays)}d atrás)</span>`;
+    } else if (diffDays === 0) {
+        // Hoje
+        return `<span style="color: #ea580c; font-weight: bold;"><i class="ph-fire"></i> ${dateFormatted} (Hoje)</span>`;
+    } else if (diffDays === 1) {
+        // Amanhã
+        return `<span style="color: #ea580c; font-weight: bold;"><i class="ph-fire"></i> ${dateFormatted} (Amanhã)</span>`;
     } else if (diffDays <= 3) {
         // Atenção
-        style = 'background: #ca8a04; color: white;'; // Yellow/Gold darken
-        icon = 'ph-bell';
-        label += ' (Atenção)';
+        return `<span style="color: #ca8a04; font-weight: bold;"><i class="ph-bell"></i> ${dateFormatted} (${diffDays} dias)</span>`;
     } else {
-        // Normal
-        style = 'background: var(--bg-surface); color: var(--info); border: 1px solid var(--info-bg);'; // Blue
+        // Seguro / Verde
+        return `<span style="color: #16a34a; font-weight: bold;"><i class="ph-calendar"></i> ${dateFormatted} (${diffDays} dias)</span>`;
     }
-
-    return `<span class="badge" style="${style} display:inline-flex; align-items:center; gap:0.25rem;">
-        <i class="${icon}"></i> ${label}
-    </span>`;
 }
+
 
 // Helper: Modal de Etiqueta (Logística)
 
@@ -258,11 +259,11 @@ function setupNavigation() {
                 id: 'dashboard',
                 label: 'Dashboard',
                 icon: 'ph-house',
-                profiles: ['admin', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica'],
+                profiles: ['admin', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica', 'vendedor'],
                 action: openDashboard
             },
             { id: 'orders', label: 'Todos os Pedidos', icon: 'ph-stack', profiles: ['financeiro', 'admin'], action: loadOrders },
-            { id: 'controle', label: 'Controle', icon: 'ph-chart-bar', profiles: ['admin'], action: loadControleQueue },
+            { id: 'controle', label: 'Controle', icon: 'ph-chart-bar', profiles: ['admin', 'vendedor'], action: loadControleQueue },
             { id: 'new_order', label: 'Novo Pedido', icon: 'ph-plus-circle', profiles: ['financeiro', 'admin'], action: openNewOrderModal },
             { id: 'arte', label: 'Arte Final', icon: 'ph-paint-brush', profiles: ['arte', 'admin'], action: loadArteQueue },
             { id: 'separacao', label: 'Separação', icon: 'ph-basket', profiles: ['separacao', 'admin'], action: () => loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação') },
@@ -284,29 +285,36 @@ function setupNavigation() {
 
             { id: 'embale', label: 'Embale', icon: 'ph-check-square-offset', profiles: ['embale', 'admin'], action: () => loadGenericQueue('AGUARDANDO_EMBALE', 'Embale') },
             { id: 'logistica', label: 'Logística', icon: 'ph-truck', profiles: ['logistica', 'admin'], action: () => loadGenericQueue('AGUARDANDO_ENVIO', 'Logística') },
-            { id: 'finalizados', label: 'Finalizados', icon: 'ph-check-circle', profiles: ['admin', 'financeiro'], action: loadFinishedOrders },
-            { id: 'manual', label: 'Manual do Sistema', icon: 'ph-book-open', profiles: ['admin', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica'], action: loadManuals },
+            { id: 'finalizados', label: 'Finalizados', icon: 'ph-check-circle', profiles: ['admin', 'financeiro', 'vendedor'], action: loadFinishedOrders },
         ],
-        'ADMIN': [
-            { id: 'colab', label: 'Colaboradores', icon: 'ph-users', profiles: ['admin'], action: loadCollaborators }
+        'CONFIGURAÇÃO': [
+            { id: 'tags', label: 'Tags de Pedidos', icon: 'ph-tag', profiles: ['admin'], action: loadTagsView },
+            { id: 'colab', label: 'Colaboradores', icon: 'ph-users', profiles: ['admin'], action: loadCollaborators },
+            { id: 'manual', label: 'Manual do Sistema', icon: 'ph-book-open', profiles: ['admin', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica', 'vendedor'], action: loadManuals },
+            { id: 'usuarios', label: 'Usuários', icon: 'ph-user-gear', profiles: ['admin'], action: loadUsersPage }
         ]
     };
 
-    const userProfile = currentUser.perfil;
+    const userProfile = currentUser.perfil ? currentUser.perfil.toLowerCase() : '';
+    const userSecProfiles = currentUser.setores_secundarios 
+        ? currentUser.setores_secundarios.toLowerCase().split(',').map(s => s.trim()) 
+        : [];
 
     Object.keys(menuStructure).forEach(sectionName => {
         const sectionItems = menuStructure[sectionName];
 
         // Filter visible items
         const visibleItems = sectionItems.filter(item => {
-            // Admin sees all defined for admin
-            if (item.profiles.includes('admin') && userProfile === 'admin') return true;
-            // Specific profiles
-            return item.profiles.includes(userProfile);
+            if (userProfile === 'admin') return true;
+            // Check main profile
+            if (item.profiles.includes(userProfile)) return true;
+            // Check secondary profiles
+            if (userSecProfiles.some(sec => item.profiles.includes(sec))) return true;
+            return false;
         });
 
         // Special Case: 'impressao' profile sees 'Produção (Setor)' instead of full submenu
-        if (userProfile === 'impressao' && sectionName === 'PRODUÇÃO') {
+        if (hasProfile('impressao') && !hasProfile('admin') && sectionName === 'PRODUÇÃO') {
             const setor = currentUser.setor_impressao || 'SILK_PLANO';
             // Remove the admin 'Impressão' submenu item from list if present (it fits profile 'impressao', but we want specific behaviour)
             // Actually, simplest is to inject the specific item if profile is impressao
@@ -516,6 +524,7 @@ let cachedOrders = []; // Manted for compatibility, but now holds the current pa
 let currentPage = 1;
 const currentLimit = 30;
 let currentViewMode = 'active'; // 'active' or 'finished'
+let currentFinishedSubMode = 'shipped'; // 'shipped' or 'pickup'
 
 // Relatórios (Movido para reports.js)
 function loadReports() {
@@ -542,17 +551,22 @@ async function loadOrders(page = 1) {
     }
 }
 
-async function loadFinishedOrders(page = 1) {
+async function loadFinishedOrders(page = 1, subMode = null) {
     document.getElementById('pageTitle').textContent = 'Arquivo de Pedidos Finalizados';
+
+    currentViewMode = 'finished';
+    if (subMode !== null) {
+        currentFinishedSubMode = subMode;
+    } else if (!currentFinishedSubMode) {
+        currentFinishedSubMode = 'shipped';
+    }
+    currentPage = page;
 
     if (page === 1 && !document.getElementById('ordersTableBody')) {
         document.getElementById('contentArea').innerHTML = '<p>Carregando...</p>';
     } else if (document.getElementById('ordersTableBody')) {
         document.getElementById('ordersTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Atualizando...</td></tr>';
     }
-
-    currentViewMode = 'finished';
-    currentPage = page;
 
     try {
         await fetchAndRenderOrders();
@@ -569,22 +583,29 @@ async function fetchAndRenderOrders() {
     const searchEl = document.getElementById('searchInput');
     const dateStartEl = document.getElementById('filterDateStart');
     const dateEndEl = document.getElementById('filterDateEnd');
+    const deliveryStatusEl = document.getElementById('filterDeliveryStatus');
+    const dateTypeEl = document.getElementById('filterDateType');
 
     const status = statusEl ? statusEl.value : '';
     const itemStatus = itemEl ? itemEl.value : '';
     const search = searchEl ? searchEl.value.trim() : '';
     const startDate = dateStartEl ? dateStartEl.value : '';
     const endDate = dateEndEl ? dateEndEl.value : '';
+    const deliveryStatus = deliveryStatusEl ? deliveryStatusEl.value : '';
+    const dateFilterType = dateTypeEl ? dateTypeEl.value : 'finished';
 
     const queryParams = new URLSearchParams({
         page: currentPage,
         limit: currentLimit,
         viewMode: currentViewMode,
+        finishedSubMode: currentFinishedSubMode,
         search,
         status,
         itemStatus,
         startDate,
-        endDate
+        endDate,
+        deliveryStatus,
+        dateFilterType
     });
 
     const res = await fetch(`/api/orders?${queryParams.toString()}`);
@@ -657,23 +678,71 @@ function renderOrdersViewStructure() {
     let toolbarHtml = '';
 
     if (isFinishedMode) {
-        // MODO FINALIZADOS: Apenas Pesquisa
+        // MODO FINALIZADOS: Apenas Pesquisa com Abas
+        let cardBg = '#f0fdf4';
+        let cardBorder = '1px solid #bbf7d0';
+        let labelColor = '#15803d';
+        let placeholderText = 'Pesquisar pedido finalizado/enviado por nº ou cliente...';
+
+        if (currentFinishedSubMode === 'pickup') {
+            cardBg = '#eff6ff';
+            cardBorder = '1px solid #bfdbfe';
+            labelColor = '#1d4ed8';
+            placeholderText = 'Pesquisar pedido para retirada por nº ou cliente...';
+        } else if (currentFinishedSubMode === 'archived') {
+            cardBg = '#f8fafc';
+            cardBorder = '1px solid #cbd5e1';
+            labelColor = '#475569';
+            placeholderText = 'Pesquisar no histórico de arquivos por nº ou cliente...';
+        }
+
         toolbarHtml = `
-             <div class="card" style="padding: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: #f0fdf4; border: 1px solid #bbf7d0;">
+            <div class="finished-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 0.25rem;">
+                <button class="btn" style="width: auto; background: ${currentFinishedSubMode === 'shipped' ? '#10b981' : '#e2e8f0'}; color: ${currentFinishedSubMode === 'shipped' ? '#ffffff' : '#334155'}; font-weight: 600; padding: 0.5rem 1rem;" onclick="loadFinishedOrders(1, 'shipped')">
+                    <i class="ph-package"></i> Envios / Entregues
+                </button>
+                <button class="btn" style="width: auto; background: ${currentFinishedSubMode === 'pickup' ? '#2563eb' : '#e2e8f0'}; color: ${currentFinishedSubMode === 'pickup' ? '#ffffff' : '#334155'}; font-weight: 600; padding: 0.5rem 1rem;" onclick="loadFinishedOrders(1, 'pickup')">
+                    <i class="ph-storefront"></i> Aguardando Retirada
+                </button>
+                <button class="btn" style="width: auto; background: ${currentFinishedSubMode === 'archived' ? '#475569' : '#e2e8f0'}; color: ${currentFinishedSubMode === 'archived' ? '#ffffff' : '#334155'}; font-weight: 600; padding: 0.5rem 1rem;" onclick="loadFinishedOrders(1, 'archived')">
+                    <i class="ph-archive"></i> Arquivos (+20 dias)
+                </button>
+            </div>
+            
+            <div class="card" style="padding: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: ${cardBg}; border: ${cardBorder};">
                 <div class="form-group" style="margin-bottom:0; flex: 1; min-width: 250px;">
-                    <label style="font-size: 0.8rem; color: #15803d;"><strong>Arquivo de Finalizados</strong> - Pesquisa</label>
-                    <input type="text" id="searchInput" class="form-control" placeholder="Pesquisar pedido finalizado por nº ou cliente..." oninput="debouncedApplyOrderFilters()">
+                    <label style="font-size: 0.8rem; color: ${labelColor};"><strong>${currentFinishedSubMode === 'shipped' ? 'Envios' : (currentFinishedSubMode === 'pickup' ? 'Aguardando Retirada' : 'Arquivos')}</strong> - Pesquisa</label>
+                    <input type="text" id="searchInput" class="form-control" placeholder="${placeholderText}" oninput="debouncedApplyOrderFilters()">
+                </div>
+
+                <div class="form-group" style="margin-bottom:0; min-width: 140px;">
+                     <label style="font-size: 0.8rem; color: ${labelColor};">Tipo de Data</label>
+                     <select id="filterDateType" class="form-control" onchange="triggerFilterResetPage()">
+                         <option value="finished">Conclusão</option>
+                         <option value="delivery">Entrega/Despacho</option>
+                     </select>
                 </div>
                 
                 <div class="form-group" style="margin-bottom:0; min-width: 140px;">
-                     <label style="font-size: 0.8rem; color: #15803d;">De (Data Finalizado)</label>
+                     <label style="font-size: 0.8rem; color: ${labelColor};">De (Data)</label>
                      <input type="date" id="filterDateStart" class="form-control" onchange="triggerFilterResetPage()">
                 </div>
 
                 <div class="form-group" style="margin-bottom:0; min-width: 140px;">
-                     <label style="font-size: 0.8rem; color: #15803d;">Até (Data Finalizado)</label>
+                     <label style="font-size: 0.8rem; color: ${labelColor};">Até (Data)</label>
                      <input type="date" id="filterDateEnd" class="form-control" onchange="triggerFilterResetPage()">
                 </div>
+
+                ${currentFinishedSubMode !== 'pickup' ? `
+                <div class="form-group" style="margin-bottom:0; min-width: 150px;">
+                     <label style="font-size: 0.8rem; color: ${labelColor};">Status Entrega</label>
+                     <select id="filterDeliveryStatus" class="form-control" onchange="triggerFilterResetPage()">
+                         <option value="">Todos</option>
+                         <option value="retirado">Apenas Retirados</option>
+                         <option value="despachado">Despachados (Transp/Corr)</option>
+                     </select>
+                </div>
+                ` : ''}
                 
                  <button class="btn" style="width: auto; height: 42px; align-self: flex-end;" onclick="resetOrderFilters()">Limpar</button>
                  <div style="flex:1; text-align:right; font-size:0.9rem; color:var(--text-secondary); align-self: flex-end; padding-bottom: 0.5rem;" id="orderCount">
@@ -765,27 +834,56 @@ function renderOrdersViewStructure() {
 function renderOrderRows(orders, isFinishedMode = false) {
     if (orders.length === 0) return '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Nenhum pedido encontrado.</td></tr>';
 
-    const canEdit = currentUser && (currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro');
+    const canEdit = hasProfile('financeiro');
 
     return orders.map(o => `
         <tr>
             <td><strong>${o.numero_pedido}</strong></td>
             ${isFinishedMode ? `<td>${renderLayoutThumbnail(o)}</td>` : ''}
-            <td>${o.cliente}</td>
+            <td>
+                <div><strong>${o.cliente}</strong></div>
+                ${renderTagBadges(o.tags)}
+            </td>
             <td>${renderDeadline(o.prazo_entrega)}</td>
             <td>
                 ${renderOrderStatusBadge(o.status_oficial, o.setor_detalhe)}
                 <div style="margin-top:0.25rem">${renderShippingBadge(o.tipo_envio)}</div>
                 ${o.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${o.transportadora}</b></div>` : ''}
+                ${o.retirado === 1 ? `<div style="font-size:0.72rem; color:#16a34a; margin-top:0.25rem; font-weight:600;"><i class="ph-check-circle"></i> Retirado em: <br>${formatDateTime(o.data_retirada)}</div>` : ''}
             </td>
             <td>
                 <div style="display:flex; gap:0.5rem; white-space: nowrap;">
                     <button class="btn" style="padding: 0.25rem 0.5rem; width: auto;" onclick="viewOrderDetails(${o.id})">Ver</button>
+                    ${isFinishedMode && currentFinishedSubMode === 'pickup' ? `
+                        <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; background: #2563eb; color: #ffffff;" onclick="markAsRetirado(${o.id})">
+                            <i class="ph-check"></i> Entregar
+                        </button>
+                    ` : ''}
                     ${canEdit && !isFinishedMode ? `<button class="btn" style="padding: 0.25rem 0.5rem; width: auto; background: var(--warning); color: #78350f" onclick="openEditOrderModal(${o.id})" title="Editar"><i class="ph-pencil-simple"></i> Editar</button>` : ''}
                 </div>
             </td>
         </tr>
     `).join('');
+}
+
+async function markAsRetirado(id) {
+    if (!confirm('Deseja registrar que este pedido foi RETIRADO pelo cliente?')) return;
+    try {
+        const res = await fetch(`/api/orders/${id}/retirar`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+            alert('Retirada registrada com sucesso!');
+            fetchAndRenderOrders();
+        } else {
+            const err = await res.json();
+            alert('Erro: ' + (err.error || 'Falha ao registrar retirada'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão ao servidor.');
+    }
 }
 
 let filterTimeout;
@@ -851,17 +949,29 @@ async function loadArteQueue() {
                     tipo_envio: item.tipo_envio,
                     transportadora: item.transportadora,
                     observacao: item.observacao,
+                    tags: item.tags || [],
                     items: []
                 };
             }
             ordersMap[item.pedido_id].items.push(item);
         });
         const orders = Object.values(ordersMap);
+        orders.sort((a, b) => {
+            const dateA = a.prazo_entrega;
+            const dateB = b.prazo_entrega;
+            const hasA = dateA && dateA.trim() !== '';
+            const hasB = dateB && dateB.trim() !== '';
+            if (!hasA && !hasB) return a.pedido_id - b.pedido_id;
+            if (!hasA) return 1;
+            if (!hasB) return -1;
+            if (dateA < dateB) return -1;
+            if (dateA > dateB) return 1;
+            return a.pedido_id - b.pedido_id;
+        });
 
         // Segregate orders by status
         const colEntrada = [];
         const colInfo = [];
-        const colPronto = [];
         const colWip = [];
         const colAprovacao = [];
 
@@ -871,9 +981,7 @@ async function loadArteQueue() {
                 colEntrada.push(order);
             } else if (status === 'AGUARDANDO_INFO') {
                 colInfo.push(order);
-            } else if (status === 'PRONTO_PARA_CRIAR') {
-                colPronto.push(order);
-            } else if (status === 'EM_DESENVOLVIMENTO') {
+            } else if (status === 'PRONTO_PARA_CRIAR' || status === 'EM_DESENVOLVIMENTO') {
                 colWip.push(order);
             } else if (status === 'AGUARDANDO_APROVACAO') {
                 colAprovacao.push(order);
@@ -913,18 +1021,7 @@ async function loadArteQueue() {
                     </div>
                 </div>
 
-                <!-- COLUNA 3: PRONTO PARA CRIAR -->
-                <div class="kanban-column" id="col-pronto">
-                    <div class="kanban-column-header">
-                        <div class="kanban-column-title"><i class="ph-check-circle" style="color:var(--accent)"></i> Pronto p/ Criar</div>
-                        <span class="kanban-column-count">${colPronto.length}</span>
-                    </div>
-                    <div class="kanban-cards">
-                        ${colPronto.map(order => renderKanbanCard(order, sectorUsers)).join('') || '<div style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.8rem;">Nenhum pedido</div>'}
-                    </div>
-                </div>
-
-                <!-- COLUNA 4: EM DESENVOLVIMENTO -->
+                <!-- COLUNA 3: EM DESENVOLVIMENTO -->
                 <div class="kanban-column" id="col-wip">
                     <div class="kanban-column-header" style="border-bottom: 2px solid var(--info);">
                         <div class="kanban-column-title"><i class="ph-paint-brush-broad" style="color:var(--info)"></i> Em Desenvolvimento</div>
@@ -935,7 +1032,7 @@ async function loadArteQueue() {
                     </div>
                 </div>
 
-                <!-- COLUNA 5: AGUARDANDO APROVACAO -->
+                <!-- COLUNA 4: AGUARDANDO APROVACAO -->
                 <div class="kanban-column" id="col-aprovacao">
                     <div class="kanban-column-header">
                         <div class="kanban-column-title"><i class="ph-paper-plane-right" style="color:var(--success)"></i> Aguardando Aprovação</div>
@@ -967,7 +1064,7 @@ function getOrderArteStatus(order) {
     const statuses = order.items.map(i => i.arte_status || 'ENTRADA');
     if (statuses.includes('EM_DESENVOLVIMENTO')) return 'EM_DESENVOLVIMENTO';
     if (statuses.includes('AGUARDANDO_APROVACAO')) return 'AGUARDANDO_APROVACAO';
-    if (statuses.includes('PRONTO_PARA_CRIAR')) return 'PRONTO_PARA_CRIAR';
+    if (statuses.includes('PRONTO_PARA_CRIAR')) return 'EM_DESENVOLVIMENTO';
     if (statuses.includes('AGUARDANDO_INFO')) return 'AGUARDANDO_INFO';
     return 'ENTRADA';
 }
@@ -1250,12 +1347,12 @@ function renderKanbanCard(order, sectorUsers) {
         actionButtons = `
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
                 <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_INFO')">Aguardando Info</button>
-                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="iniciarDesenvolvimentoOrderDirect(${order.pedido_id})">Iniciar Arte</button>
             </div>
         `;
     } else if (st === 'AGUARDANDO_INFO') {
         actionButtons = `
-            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--accent-light); color:var(--accent);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--success-bg); color:var(--success);" onclick="iniciarDesenvolvimentoOrderDirect(${order.pedido_id})">Iniciar Arte</button>
         `;
     } else if (st === 'PRONTO_PARA_CRIAR') {
         actionButtons = `
@@ -1266,7 +1363,10 @@ function renderKanbanCard(order, sectorUsers) {
         `;
     } else if (st === 'EM_DESENVOLVIMENTO') {
         actionButtons = `
-            <button class="btn" style="width:100%; padding:0.25rem; font-size:0.7rem; background:var(--warning-bg); color:var(--warning);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.25rem; margin-top:0.5rem;">
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:#f1f5f9; color:#475569;" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_INFO')">Pausar (Info)</button>
+                <button class="btn" style="padding:0.25rem; font-size:0.7rem; background:var(--warning-bg); color:var(--warning);" onclick="updateArteStatusOrderDirect(${order.pedido_id}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovar</button>
+            </div>
         `;
     } else if (st === 'AGUARDANDO_APROVACAO') {
         actionButtons = `
@@ -1287,6 +1387,7 @@ function renderKanbanCard(order, sectorUsers) {
             ${itemsHtml}
 
             <div class="kanban-card-body" style="padding:0; margin-top:0.5rem;">
+                ${renderTagBadges(order.tags)}
                 <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem;">
                     ${priorityBadge}
                     ${tercBadge}
@@ -1402,7 +1503,7 @@ async function loadGenericQueue(statusFiltro, titulo) {
         if (itensExec.length === 0) {
             html += `<div class="card" style="padding:1rem; text-align:center; color:#94a3b8; margin-bottom: 2rem;">Nenhum pedido aguardando ação neste setor.</div>`;
         } else {
-            html += `<div class="card" style="margin-bottom: 2rem;"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Ação</th></tr></thead><tbody>`;
+            html += `<div class="card" style="margin-bottom: 2rem;"><table class="table-dense"><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Ação</th><th>Setor Produção</th></tr></thead><tbody>`;
             html += renderGenericRows(itensExec, statusFiltro, false, sectorUsers, targetSectorCode); // false = Not ReadOnly
             html += `</tbody></table></div>`;
         }
@@ -1413,7 +1514,7 @@ async function loadGenericQueue(statusFiltro, titulo) {
         if (itensFuture.length === 0) {
             html += `<div class="card" style="padding:1rem; text-align:center; color:#94a3b8;">Nenhum pedido futuro previsto.</div>`;
         } else {
-            html += `<div class="card" style="background: #f8fafc;"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Status Atual</th></tr></thead><tbody>`;
+            html += `<div class="card" style="background: #f8fafc;"><table class="table-dense"><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Status Atual</th><th>Setor Produção</th></tr></thead><tbody>`;
             html += renderGenericRows(itensFuture, statusFiltro, true, sectorUsers, targetSectorCode); // true = ReadOnly
             html += `</tbody></table></div>`;
         }
@@ -1429,7 +1530,6 @@ async function loadGenericQueue(statusFiltro, titulo) {
 // Helper para Renderizar Linhas (Shared Logic)
 function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetSectorCode) {
     return itens.map(item => {
-        let actionBtn = '';
         let nextStatus = '';
         let btnLabel = '';
 
@@ -1438,7 +1538,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
             if (statusFiltro === 'AGUARDANDO_SEPARACAO') {
                 if (item.is_terceirizado) {
                     nextStatus = 'AGUARDANDO_EMBALE';
-                    btnLabel = 'Separado (Pular p/ Embale)';
+                    btnLabel = 'Separado (Pular)';
                 } else {
                     nextStatus = 'AGUARDANDO_DESEMBALE';
                     btnLabel = 'Separado OK';
@@ -1453,38 +1553,11 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                 nextStatus = 'CONCLUIDO';
                 btnLabel = 'Despachar';
             }
-
-            if (nextStatus) {
-                if (statusFiltro === 'AGUARDANDO_EMBALE') {
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}', ${item.quantidade})">Conferir Embale</button>`;
-                } else if (statusFiltro === 'AGUARDANDO_ENVIO') {
-                    const itemJson = JSON.stringify(item).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
-                    // Validate before opening label modal
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick='if(validateResponsible(${item.id})) openLabelModal(${itemJson})'> <i class="ph-tag"></i> Etiqueta / Despachar</button>`;
-                } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
-                    if (!item.setor_destino) {
-                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem; background: var(--text-secondary); cursor: not-allowed;" onclick="alert('Defina a forma de impressão na Arte Final antes de concluir o Desembale.')">Liberar Produção</button>`;
-                    } else {
-                        actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="openDesembaleConfirmation(${item.id}, '${nextStatus}', ${item.quantidade})">${btnLabel}</button>`;
-                    }
-                } else {
-                    actionBtn = `<button class="btn" style="width: auto; padding: 0.25rem 0.5rem;" onclick="mudarStatusItem(${item.id}, '${nextStatus}')">${btnLabel}</button>`;
-                }
-
-                // Rollback
-                actionBtn += `<button class="btn" style="background:transparent; color:#666; border:1px solid #ccc; width:auto; padding:0.25rem 0.5rem; margin-top:0.25rem;" onclick="openRollbackModal(${item.id}, '${item.status_atual}', '${item.setor_destino || ''}')" title="Voltar Etapa"><i class="ph-arrow-u-up-left"></i> Voltar</button>`;
-            }
-        } else {
-            // Read Only Placeholder
-            actionBtn = `<span style="font-size:0.8rem; color:#94a3b8;"><i class="ph-lock"></i> Aguardando etapa anterior</span>`;
         }
 
         // Responsible Dropdown
         let respBlock = '';
-        if (targetSectorCode && !isReadOnly) { // Only allow assign in Execution? Or allow assign in Future too? User said "Não pode iniciar ...". Assigning might be useful for planning. Let's allow Assign in future too? 
-            // "Somente o setor correto (na etapa atual) consiga EDITAR / EXECUTAR ações."
-            // Assigning is kind of planning. Let's allowing VIEWING, but maybe keep assignment locked to avoid confusion?
-            // "Campos editáveis ficam ativos... Quando CHEGAR na etapa" -> So Future = Locked fields.
+        if (targetSectorCode && !isReadOnly) {
             const currentResp = item[`responsavel_${targetSectorCode}`] || '';
             let options = `<option value="">-- Selecione --</option>`;
             sectorUsers.forEach(u => {
@@ -1492,36 +1565,34 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                 options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
             });
             respBlock = `
-                 <select class="form-control" id="resp_select_${item.id}" style="padding: 0.25rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1;" 
+                 <select class="form-control" id="resp_select_${item.id}" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1; height: auto;" 
                         onchange="assignItem(${item.id}, '${targetSectorCode}', this.value)">
                     ${options}
                 </select>`;
         } else if (targetSectorCode && isReadOnly) {
-            // Read Only Assign
             const currentResp = item[`responsavel_${targetSectorCode}`] || '--';
-            respBlock = `<span style="color:#64748b; font-size:0.85rem;">${currentResp}</span>`;
+            respBlock = `<span style="color:#64748b; font-size:0.85rem; font-weight:500;">${currentResp}</span>`;
         }
 
         // Layout & Prints
-        const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
-        const colorInfo = item.cor_impressao ? `<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);"><i class="ph-drop"></i> Cor: <strong>${item.cor_impressao}</strong></div>` : '';
-        const tercBadge = item.is_terceirizado ? `<div style="margin-bottom: 0.5rem;"><span class="badge badge-warning" style="font-size:0.75rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c;"><i class="ph-truck"></i> TERCEIRIZADO (Pula Produção)</span></div>` : '';
+        const colorInfo = item.cor_impressao ? `<div style="font-size: 0.75rem; color: #475569; font-weight:500;"><i class="ph-drop"></i> Cor: <strong>${item.cor_impressao}</strong></div>` : '';
+        const tercBadge = item.is_terceirizado ? `<div style="margin-top: 0.25rem;"><span class="badge" style="font-size:0.7rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c; padding: 2px 4px;"><i class="ph-truck"></i> Terceirizado</span></div>` : '';
 
         let printSectorInfo = '';
         if (item.setor_destino) {
-            printSectorInfo = `<div style="margin-bottom: 0.5rem;"><span class="badge badge-blue" style="font-size: 0.75rem;"><i class="ph-printer"></i> ${item.setor_destino.replace(/_/g, ' ')}</span></div>`;
-        } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') { // Warn only in Desembale context
-            printSectorInfo = `<div style="margin-bottom: 0.5rem;"><span class="badge badge-danger" style="font-size: 0.75rem;">IMPRESSÃO NÃO DEFINIDA</span></div>`;
+            printSectorInfo = `<div><span class="badge badge-blue" style="font-size: 0.7rem; padding: 2px 4px;"><i class="ph-printer"></i> ${item.setor_destino.replace(/_/g, ' ')}</span></div>`;
+        } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
+            printSectorInfo = `<div><span class="badge badge-danger" style="font-size: 0.7rem; padding: 2px 4px;">Não definido</span></div>`;
         }
 
         // Obs Arte
         const obsArteContent = item.observacao_arte
-            ? `<div style="margin-top:0.5rem; font-size:0.8rem; color:#c2410c; background:#fff7ed; border:1px solid #fdba74; padding:0.25rem; border-radius:4px;"><i class="ph-warning"></i> ${item.observacao_arte}</div>`
+            ? `<div style="margin-top:0.2rem; font-size:0.75rem; color:#c2410c; background:#fff7ed; border:1px solid #fdba74; padding:2px 4px; border-radius:3px; max-width:250px;"><i class="ph-warning"></i> Obs: ${item.observacao_arte}</div>`
             : '';
 
         // Obs: Bypass Embale
         const volumeWarning = (item.flag_embale_sem_volumes === 1 || item.flag_embale_sem_volumes === true)
-            ? `<div style="margin-top:0.5rem; font-size:0.7rem; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:0.25rem; border-radius:4px;"><i class="ph-warning-octagon"></i> VEIO DO EMBALE S/ VOLUMES</div>`
+            ? `<div style="margin-top:0.2rem; font-size:0.7rem; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:2px 4px; border-radius:3px; max-width:250px;"><i class="ph-warning-octagon"></i> Veio do Embale s/ volumes</div>`
             : '';
 
         // Production Duration (If available)
@@ -1530,7 +1601,6 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
             const startStr = item.inicio_producao_timestamp;
             const endStr = item.fim_producao_timestamp;
 
-            // Parse UTC
             const startTime = startStr.indexOf('Z') === -1 ? new Date(startStr.replace(' ', 'T') + 'Z') : new Date(startStr);
             const endTime = endStr.indexOf('Z') === -1 ? new Date(endStr.replace(' ', 'T') + 'Z') : new Date(endStr);
 
@@ -1543,8 +1613,8 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
             const pad = (n) => n.toString().padStart(2, '0');
 
             productionDurationInfo = `
-                <div style="margin-bottom: 0.25rem; font-family: monospace; font-size: 0.8rem; color: #475569; background: #f1f5f9; padding: 0.1rem 0.4rem; border-radius: 4px; display: inline-block;">
-                    <i class="ph-timer"></i> Tempo Produção: <strong>${pad(hours)}:${pad(minutes)}:${pad(seconds)}</strong>
+                <div style="margin-top: 0.2rem; font-family: monospace; font-size: 0.75rem; color: #475569; background: #f1f5f9; padding: 2px 4px; border-radius: 3px; display: inline-block;">
+                    <i class="ph-timer"></i> <strong>${pad(hours)}:${pad(minutes)}:${pad(seconds)}</strong>
                 </div>
              `;
         }
@@ -1552,60 +1622,106 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
         // Status Bar
         const statusBar = renderFlowStatusBar(item);
 
-
         // Enhanced Status Display for Future Items
         let statusDisplay = item.status_atual;
         if (isReadOnly) {
             if ((item.status_atual === 'AGUARDANDO_PRODUCAO' || item.status_atual === 'EM_PRODUCAO') && item.setor_destino) {
-                // Formatting sector name nicely
                 const prettySector = item.setor_destino
                     .replace('IMPRESSAO_', '')
                     .replace('_', ' ');
-                statusDisplay += ` <br><span style="font-size:0.7em; text-transform:uppercase; color:#0f172a; font-weight:bold;">(${prettySector})</span>`;
+                statusDisplay += ` (${prettySector})`;
             }
         }
 
+        // Action Block Construction
+        let actionBlock = '';
+        if (!isReadOnly) {
+            const rollbackBtn = `<button class="btn" style="background:#ffffff; color:#374151; border:1px solid #cbd5e1; width:100%; padding:0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; gap:0.25rem;" onclick="openRollbackModal(${item.id}, '${item.status_atual}', '${item.setor_destino || ''}')" title="Voltar Etapa"><i class="ph-arrow-u-up-left"></i> Voltar</button>`;
+
+            let mainBtnHtml = '';
+            if (statusFiltro === 'AGUARDANDO_EMBALE') {
+                mainBtnHtml = `<button class="btn" style="width: 100%; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px;" onclick="openEmbaleAction(${item.id}, ${item.pedido_id}, '${item.tipo_envio}', ${item.quantidade})">Conferir Embale</button>`;
+            } else if (statusFiltro === 'AGUARDANDO_ENVIO') {
+                const itemJson = JSON.stringify(item).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+                mainBtnHtml = `<button class="btn" style="width: 100%; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px;" onclick='if(validateResponsible(${item.id})) openLabelModal(${itemJson})'> <i class="ph-tag"></i> Etiqueta</button>`;
+            } else if (statusFiltro === 'AGUARDANDO_DESEMBALE') {
+                if (!item.setor_destino) {
+                    mainBtnHtml = `<button class="btn" style="width: 100%; padding: 0.2rem 0.4rem; font-size:0.75rem; background: var(--text-secondary); cursor: not-allowed; border-radius: 4px;" onclick="alert('Defina a forma de impressão na Arte Final antes de concluir o Desembale.')">Liberar Prod.</button>`;
+                } else {
+                    mainBtnHtml = `<button class="btn" style="width: 100%; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px;" onclick="openDesembaleConfirmation(${item.id}, '${nextStatus}', ${item.quantidade})">${btnLabel}</button>`;
+                }
+            } else {
+                mainBtnHtml = `<button class="btn" style="width: 100%; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px;" onclick="mudarStatusItem(${item.id}, '${nextStatus}')">${btnLabel}</button>`;
+            }
+
+            actionBlock = `
+                <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: stretch; width: 100%; min-width: 110px;">
+                    ${rollbackBtn}
+                    ${mainBtnHtml}
+                </div>
+            `;
+        } else {
+            actionBlock = `<span style="font-size:0.8rem; color:#94a3b8; display:inline-flex; align-items:center; gap:0.25rem;"><i class="ph-lock"></i> Aguardando</span>`;
+        }
+
+        // Setor Produção Column HTML
+        let finalColHtml = '';
+        if (isReadOnly) {
+            finalColHtml = `
+                <div style="display: flex; align-items: center; gap: 0.4rem; justify-content: flex-start;">
+                    <div style="display: flex; flex-direction: column; gap: 0.2rem; min-width: 100px;">
+                        <span class="badge" style="background:#e2e8f0; color:#64748b; font-size:0.7rem; padding: 2px 4px; max-width: fit-content;">${statusDisplay}</span>
+                        ${printSectorInfo}
+                        ${colorInfo}
+                    </div>
+                    ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                </div>
+            `;
+        } else {
+            finalColHtml = `
+                <div style="display: flex; align-items: center; gap: 0.4rem; justify-content: flex-start;">
+                    <div style="display: flex; flex-direction: column; gap: 0.2rem; min-width: 100px;">
+                        ${printSectorInfo}
+                        ${colorInfo}
+                    </div>
+                    ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                </div>
+            `;
+        }
+
         return `
-            <tr style="${isReadOnly ? 'opacity: 0.8;' : ''}">
+            <tr style="${isReadOnly ? 'opacity: 0.75;' : ''}">
                 <td>
-                    ${statusBar}
-                    ${item.numero_pedido}<br><small>${item.cliente}</small>
-                </td>
-                <td>
-                    <strong>${item.produto}</strong>
-                    ${item.referencia ? `<div style="font-size:0.85rem; color:#475569;">Ref: ${item.referencia}</div>` : ''}
-                    <div style="margin-top:0.25rem">${renderShippingBadge(item.tipo_envio)}</div>
-                    ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
-                </td>
-                <td>${renderDeadline(item.prazo_entrega)}</td>
-                <td>${item.quantidade}</td>
-                <td>${respBlock}</td>
-                <td>
-                    <div style="display:flex; gap: 0.75rem; align-items: flex-start;">
-                         <!-- Coluna Esquerda: Thumbnail -->
-                         <div style="flex-shrink:0;">
-                             ${layoutIndicator}
-                         </div>
-                         
-                         <!-- Coluna Direita: Infos -->
-                         <div style="display:flex; flex-direction:column; gap:0.25rem; align-items: flex-start;">
-                            <!-- Linha 1: Badges -->
-                            ${tercBadge}
-                            ${printSectorInfo}
-                            ${productionDurationInfo}
-                            
-                            <!-- Linha 2: Status (se readonly) ou Botao -->
-                            ${!isReadOnly ? `<div>${actionBtn}</div>` : `<div style="margin-top:0.2rem"><span class="badge" style="background:#e2e8f0; color:#64748b;">${statusDisplay}</span></div>`}
-                            
-                            <!-- Linha 3: Cor -->
-                            ${colorInfo}
-                            
-                            <!-- Linha 4: Alerts/Obs -->
-                            ${obsArteContent}
-                            ${volumeWarning}
-                         </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                            <strong style="font-size: 0.95rem; color: #1e293b;">${item.numero_pedido}</strong>
+                            <span style="font-size: 0.85rem; font-weight: 500; color: #334155;">${item.cliente}</span>
+                            ${renderTagBadges(item.tags)}
+                        </div>
+                        ${statusBar}
                     </div>
                 </td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                        <div style="font-weight: 600; color: #1e293b; font-size: 0.85rem;">
+                            ${item.produto}
+                            ${item.referencia ? `<span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(Ref: ${item.referencia})</span>` : ''}
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
+                            ${renderShippingBadge(item.tipo_envio)}
+                            ${item.transportadora ? `<span style="font-size:0.75rem; color:#64748b;">(Transp: <b>${item.transportadora}</b>)</span>` : ''}
+                        </div>
+                        ${tercBadge}
+                        ${obsArteContent}
+                        ${volumeWarning}
+                        ${productionDurationInfo}
+                    </div>
+                </td>
+                <td>${renderDeadline(item.prazo_entrega)}</td>
+                <td style="font-weight: 600; font-size: 0.9rem; color: #1e293b;">${item.quantidade}</td>
+                <td>${respBlock}</td>
+                <td>${actionBlock}</td>
+                <td>${finalColHtml}</td>
             </tr>
         `;
     }).join('');
@@ -1664,7 +1780,7 @@ async function loadProductionQueue(setor) {
     if (itensExec.length === 0) {
         html += `<div class="card" style="padding:1rem; text-align:center; color:#94a3b8; margin-bottom: 2rem;">Nenhum pedido aguardando ação neste setor.</div>`;
     } else {
-        html += `<div class="card" style="margin-bottom: 2rem;"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Status</th><th>Responsável</th><th>Ação</th></tr></thead><tbody>`;
+        html += `<div class="card" style="margin-bottom: 2rem;"><table class="table-dense"><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Ação</th><th>Setor Produção</th></tr></thead><tbody>`;
         html += renderProductionRows(itensExec, setor, false, sectorUsers);
         html += `</tbody></table></div>`;
     }
@@ -1675,7 +1791,7 @@ async function loadProductionQueue(setor) {
     if (itensFuture.length === 0) {
         html += `<div class="card" style="padding:1rem; text-align:center; color:#94a3b8;">Nenhum pedido futuro previsto.</div>`;
     } else {
-        html += `<div class="card" style="background: #f8fafc;"><table><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Status Atual</th></tr></thead><tbody>`;
+        html += `<div class="card" style="background: #f8fafc;"><table class="table-dense"><thead><tr><th>Pedido</th><th>Item</th><th>Prazo</th><th>Qtd</th><th>Responsável</th><th>Status Atual</th><th>Setor Produção</th></tr></thead><tbody>`;
         html += renderProductionRows(itensFuture, setor, true, sectorUsers);
         html += `</tbody></table></div>`;
     }
@@ -1692,232 +1808,210 @@ async function loadProductionQueue(setor) {
 function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
     if (!Array.isArray(itens)) {
         console.error("renderProductionRows received non-array:", itens);
-        return '<tr><td colspan="6">Erro interno: Dados inválidos (não é array).</td></tr>';
+        return '<tr><td colspan="7">Erro interno: Dados inválidos (não é array).</td></tr>';
     }
 
     return itens.map(item => {
         try {
             // --- DROPDOWN RESPONSÁVEL ---
             let respBlock = '';
-            // ... (keep existing logic) ...
             if (!isReadOnly) {
                 const currentResp = item.responsavel_impressao || '';
                 let options = `<option value="">-- Selecione --</option>`;
                 if (Array.isArray(sectorUsers)) {
                     sectorUsers.forEach(u => {
                         const sel = u.nome === currentResp ? 'selected' : '';
-                        // ADDED data-userid to capture ID for reports
                         options += `<option value="${u.nome}" data-userid="${u.id}" ${sel}>${u.nome}</option>`;
                     });
                 }
                 respBlock = `
-                    <select class="form-control" id="resp_select_${item.id}" style="padding: 0.25rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1;" 
+                    <select class="form-control" id="resp_select_${item.id}" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1; height: auto;" 
                             onchange="assignItem(${item.id}, 'impressao', this.value)">
                         ${options}
                     </select>
                 `;
             } else {
                 const currentResp = item.responsavel_impressao || '--';
-                respBlock = `<span style="color:#64748b; font-size:0.85rem;">${currentResp}</span>`;
+                respBlock = `<span style="color:#64748b; font-size:0.85rem; font-weight:500;">${currentResp}</span>`;
             }
 
-            const isRunning = item.status_atual === 'EM_PRODUCAO';
-
-            let actionBtn = '';
-            if (!isReadOnly) {
-                const basicAction = isRunning
-                    ? `<button class="btn" style="background: var(--danger)" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar</button>`
-                    : `<button class="btn" style="background: var(--success)" onclick="registrarEvento(${item.id}, '${setor}', 'INICIO', 0)">Iniciar</button>`;
-
-                const isPaused = item.is_pausado_producao === 1 || item.is_pausado_producao === true;
-                const pauseRequested = item.pausa_solicitada === 1 || item.pausa_solicitada === true;
-
-                // Complex Logic for Start/Check for Digital
-                if (isRunning || isPaused) {
-                    // TIMER BLOCK
-                    let timerHtml = '';
-                    if (item.decorrido_segundos !== null && item.decorrido_segundos !== undefined) {
-                        const isTimerRunning = !isPaused;
-                        const bgColor = isPaused ? '#e0f2fe' : '#e2e8f0';
-                        const borderColor = isPaused ? '#7dd3fc' : '#cbd5e1';
-                        const textColor = isPaused ? '#0284c7' : '#1e293b';
-                        const startAttr = isTimerRunning ? `data-client-start="${Date.now()}"` : '';
-
-                        timerHtml = `
-                            <div class="production-timer" data-elapsed-initial="${item.decorrido_segundos}" ${startAttr}
-                                 style="font-family: monospace; font-size: 1.1rem; font-weight: bold; color: ${textColor}; 
-                                        background: ${bgColor}; padding: 0.25rem 0.5rem; border-radius: 4px; 
-                                        margin-bottom: 0.5rem; display: inline-block; border: 1px solid ${borderColor};">
-                                <i class="ph-clock"></i> <span class="timer-display">00:00:00</span>
-                            </div><br>
-                        `;
-                    }
-
-                    if (isPaused) {
-                        actionBtn = `${timerHtml}<button class="btn" style="background: #0284c7; color: white; border: 1px solid #0369a1; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2); padding: 0.35rem 0.5rem; margin-bottom:0.25rem;" onclick="resumeProducao(${item.id}, '${setor}')"><i class="ph-play"></i> Retomar Produção</button>`;
-                    } else if (pauseRequested) {
-                        actionBtn = `${timerHtml}
-                        <button class="btn" style="background: var(--danger); opacity: 0.5; filter: grayscale(1); margin-bottom: 0.25rem; pointer-events: none;"><i class="ph-check"></i> Finalizar Produção</button><br>
-                        <span style="font-size: 0.8rem; color: #b45309; font-weight: bold; display: inline-flex; align-items: center; gap: 0.3rem; margin-bottom:0.25rem;"><i class="ph-clock-countdown"></i> Solicitação enviada</span>`;
-                    } else {
-                        actionBtn = `${timerHtml}
-                        <button class="btn" style="background: var(--warning); color: #78350f; margin-bottom: 0.3rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar Produção</button><br>
-                        <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; margin-bottom:0.25rem;" onclick="solicitarPausa(${item.id}, '${setor}')"><i class="ph-pause"></i> Solicitar Pausa</button>`;
-                    }
-                } else {
-
-                    // Logic Simplified: Start is always allowed now (File is optional)
-                    actionBtn = `<button class="btn" style="background: var(--success); margin-bottom: 0.25rem;" onclick="openPrintingConfirmation(${item.id}, '${setor}')">Iniciar</button>`;
-
-                    if (setor === 'ESTAMPARIA') {
-                        actionBtn += `<br><button class="btn" style="background: #eab308; color: #713f12; padding: 0.25rem 0.5rem;" onclick="skipProduction(${item.id}, '${setor}')" title="Enviar para o próximo setor sem registrar tempo de produção">Pular Produção (Direto Embalagem)</button>`;
-                    }
-                }
-
-                // Rollback
-                actionBtn += `<button class="btn" style="background:transparent; color:#666; border:1px solid #ccc; width:auto; padding:0.25rem 0.5rem; margin-top:0.25rem;" onclick="openRollbackModal(${item.id}, '${item.status_atual}', '${item.setor_destino || ''}')" title="Voltar Etapa"><i class="ph-arrow-u-up-left"></i> Voltar</button>`;
-
-            } else {
-                actionBtn = `<span style="font-size:0.8rem; color:#94a3b8;"><i class="ph-lock"></i> Aguardando etapa anterior</span>`;
-            }
-
-            const layoutIndicator = typeof renderLayoutIndicator === 'function' ? renderLayoutIndicator(item.layout_path, item.layout_type) : '<!-- Err Layout -->';
-
+            // Layout & Prints
             const colorInfo = item.cor_impressao
-                ? `<div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: #e0f2fe; border-radius: 4px; color: #0369a1; font-weight: bold; border: 1px solid #bae6fd;">
-                     <i class="ph-drop"></i> Cor de Impressão: ${item.cor_impressao}
-                   </div>`
-                : `<div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: #fee2e2; border-radius: 4px; color: #b91c1c; font-weight: bold; border: 1px solid #fecaca;">
-                     <i class="ph-warning"></i> COR NÃO INFORMADA
-                   </div>`;
+                ? `<div style="font-size: 0.75rem; color: #475569; font-weight:500;"><i class="ph-drop"></i> Cor: <strong>${item.cor_impressao}</strong></div>`
+                : `<div style="font-size: 0.725rem; color: #b91c1c; font-weight: 500;"><i class="ph-warning"></i> S/ COR</div>`;
 
-            const tercBadge = item.is_terceirizado ? `<div style="margin-bottom: 0.5rem;"><span class="badge badge-warning" style="font-size:0.75rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c;"><i class="ph-truck"></i> TERCEIRIZADO (Pula Produção)</span></div>` : '';
+            const tercBadge = item.is_terceirizado ? `<div style="margin-top: 0.25rem;"><span class="badge" style="font-size:0.7rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c; padding: 2px 4px;"><i class="ph-truck"></i> Terceirizado</span></div>` : '';
 
             // Obs Arte
-            const obsStyle = item.observacao_arte
-                ? `background: #fff7ed; border: 2px solid #fdba74; color: #c2410c; box-shadow: 0 2px 4px rgba(0,0,0,0.05);`
-                : `background: #f8fafc; border: 2px solid #e2e8f0; color: #94a3b8;`;
+            const obsArteContent = item.observacao_arte
+                ? `<div style="margin-top:0.2rem; font-size:0.75rem; color:#c2410c; background:#fff7ed; border:1px solid #fdba74; padding:2px 4px; border-radius:3px; max-width:250px;"><i class="ph-warning"></i> Obs: ${item.observacao_arte}</div>`
+                : '';
 
-            const obsIcon = item.observacao_arte ? 'ph-warning' : 'ph-info';
-
-            const obsArteContent = `
-                 <div style="${obsStyle} padding: 0.75rem; border-radius: 8px; margin-bottom: 0.75rem; font-weight: bold; font-size: 0.85rem; width: 100%;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid ${item.observacao_arte ? '#fed7aa' : '#cbd5e1'}; padding-bottom: 0.4rem; margin-bottom: 0.4rem;">
-                        <i class="${obsIcon}" style="font-size: 1.1rem;"></i>
-                        <span style="font-size: 0.75rem;">OBSERVAÇÃO DA ARTE FINAL</span>
-                    </div>
-                    <div style="text-transform: uppercase; line-height: 1.4; word-break: break-word;">
-                        ${item.observacao_arte || "SEM OBSERVAÇÕES DA ARTE FINAL"}
-                    </div>
-                </div>`;
-
-            // Digital File
-            let digitalFileBlock = '';
+            // Compact File Badge
+            let fileBadge = '';
             if (setor === 'IMPRESSAO_DIGITAL') {
                 if (item.arquivo_impressao_digital_url) {
-                    digitalFileBlock = `
-                        <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; width: 100%;">
-                            <div style="font-size: 0.75rem; color: #166534; font-weight: bold; margin-bottom: 0.25rem;">ARQUIVO DE IMPRESSÃO (DIGITAL)</div>
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-size: 0.8rem; color: #15803d; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 150px;">
-                                    ${item.arquivo_impressao_digital_nome}
-                                </span>
-                                <a href="${item.arquivo_impressao_digital_url}" download="${item.arquivo_impressao_digital_nome}" target="_blank" class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem; background: #22c55e;">
-                                    <i class="ph-download"></i> Baixar
-                                </a>
-                            </div>
-                        </div>`;
+                    fileBadge = `
+                        <div style="margin-top: 0.2rem;">
+                            <a href="${item.arquivo_impressao_digital_url}" download="${item.arquivo_impressao_digital_nome}" target="_blank" class="btn" style="width:auto; padding:2px 6px; font-size:0.7rem; background:#22c55e; border-radius:4px; display:inline-flex; align-items:center; gap:0.2rem; color:white;">
+                                <i class="ph-download"></i> Arq. Digital
+                            </a>
+                        </div>
+                    `;
                 } else {
-                    digitalFileBlock = `
-                        <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; width: 100%;">
-                            <div style="color: #b91c1c; font-size: 0.75rem; font-weight: bold;">
-                                <i class="ph-warning"></i> ARQUIVO DE IMPRESSÃO PENDENTE
-                            </div>
-                            <div style="font-size: 0.7rem; color: #7f1d1d;">Arte Final não anexou o arquivo.</div>
-                        </div>`;
+                    fileBadge = `<div style="margin-top:0.2rem;"><span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; font-size:0.7rem; padding:2px 4px;"><i class="ph-warning"></i> Arq. Pendente</span></div>`;
                 }
             } else if (setor === 'IMPRESSAO_LASER') {
                 if (item.arquivo_impressao_laser_url) {
-                    digitalFileBlock = `
-                        <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: #fffbe6; border: 1px solid #fde68a; border-radius: 6px; width: 100%;">
-                            <div style="font-size: 0.75rem; color: #b45309; font-weight: bold; margin-bottom: 0.25rem;">ARQUIVO DE CORTE (LASER)</div>
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-size: 0.8rem; color: #92400e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 150px;">
-                                    ${item.arquivo_impressao_laser_nome}
-                                </span>
-                                <a href="${item.arquivo_impressao_laser_url}" download="${item.arquivo_impressao_laser_nome}" target="_blank" class="btn" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem; background: #d97706;">
-                                    <i class="ph-download"></i> Baixar
-                                </a>
-                            </div>
-                        </div>`;
+                    fileBadge = `
+                        <div style="margin-top: 0.2rem;">
+                            <a href="${item.arquivo_impressao_laser_url}" download="${item.arquivo_impressao_laser_nome}" target="_blank" class="btn" style="width:auto; padding:2px 6px; font-size:0.7rem; background:#d97706; border-radius:4px; display:inline-flex; align-items:center; gap:0.2rem; color:white;">
+                                <i class="ph-download"></i> Arq. Laser
+                            </a>
+                        </div>
+                    `;
                 } else {
-                    // Fallback: If no Laser file but Layout exists, offer Layout download
                     let fallbackBtn = '';
                     if (item.layout_path) {
                         fallbackBtn = `
-                            <div style="margin-top:0.4rem; border-top:1px solid #fca5a5; padding-top:0.4rem;">
-                                <div style="font-size:0.7rem; color:#7f1d1d; margin-bottom:0.2rem;">Arquivo específico não encontrado.</div>
-                                <a href="${item.layout_path}" download="Layout_Item_${item.id}" target="_blank" class="btn" style="width:100%; padding:0.25rem; font-size:0.75rem; background:#fff; border:1px solid #b91c1c; color:#b91c1c; font-weight:bold;">
-                                    <i class="ph-download"></i> Baixar Layout (Aprovação)
-                                </a>
-                            </div>
+                            <a href="${item.layout_path}" download="Layout_Item_${item.id}" target="_blank" class="btn" style="width:auto; padding:2px 6px; font-size:0.7rem; background:#fff; border:1px solid #b91c1c; color:#b91c1c; border-radius:4px; display:inline-flex; align-items:center; gap:0.2rem; margin-top:0.2rem;">
+                                <i class="ph-download"></i> Layout
+                            </a>
                         `;
                     }
-
-                    digitalFileBlock = `
-                        <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; width: 100%;">
-                            <div style="color: #b91c1c; font-size: 0.75rem; font-weight: bold;">
-                                <i class="ph-warning"></i> ARQUIVO LASER PENDENTE
-                            </div>
-                            ${fallbackBtn ? fallbackBtn : '<div style="font-size: 0.7rem; color: #7f1d1d;">Arte Final não anexou o arquivo.</div>'}
-                        </div>`;
+                    fileBadge = `
+                        <div style="margin-top:0.2rem; display:flex; flex-direction:column; gap:0.2rem;">
+                            <span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; font-size:0.7rem; padding:2px 4px;"><i class="ph-warning"></i> Arq. Pendente</span>
+                            ${fallbackBtn}
+                        </div>
+                    `;
                 }
             }
 
-            const statusBar = typeof renderFlowStatusBar === 'function' ? renderFlowStatusBar(item) : '<!-- Status Bar Err -->';
+            const statusBar = typeof renderFlowStatusBar === 'function' ? renderFlowStatusBar(item) : '';
+
+            // Action Block Construction
+            let actionBlock = '';
+            if (!isReadOnly) {
+                const isRunning = item.status_atual === 'EM_PRODUCAO';
+                const isPaused = item.is_pausado_producao === 1 || item.is_pausado_producao === true;
+                const pauseRequested = item.pausa_solicitada === 1 || item.pausa_solicitada === true;
+
+                const rollbackBtn = `<button class="btn" style="background:#ffffff; color:#374151; border:1px solid #cbd5e1; width:100%; padding:0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; gap:0.25rem;" onclick="openRollbackModal(${item.id}, '${item.status_atual}', '${item.setor_destino || ''}')" title="Voltar Etapa"><i class="ph-arrow-u-up-left"></i> Voltar</button>`;
+
+                let timerHtml = '';
+                if ((isRunning || isPaused) && item.decorrido_segundos !== null && item.decorrido_segundos !== undefined) {
+                    const isTimerRunning = !isPaused;
+                    const bgColor = isPaused ? '#e0f2fe' : '#e2e8f0';
+                    const borderColor = isPaused ? '#7dd3fc' : '#cbd5e1';
+                    const textColor = isPaused ? '#0284c7' : '#1e293b';
+                    const startAttr = isTimerRunning ? `data-client-start="${Date.now()}"` : '';
+
+                    timerHtml = `
+                        <div class="production-timer" data-elapsed-initial="${item.decorrido_segundos}" ${startAttr}
+                             style="font-family: monospace; font-size: 0.95rem; font-weight: bold; color: ${textColor}; 
+                                    background: ${bgColor}; padding: 0.15rem 0.35rem; border-radius: 4px; 
+                                    margin-bottom: 0.2rem; display: inline-block; border: 1px solid ${borderColor}; text-align:center; width:100%;">
+                            <i class="ph-clock"></i> <span class="timer-display">00:00:00</span>
+                        </div>
+                    `;
+                }
+
+                let mainBtnHtml = '';
+                if (isRunning || isPaused) {
+                    if (isPaused) {
+                        mainBtnHtml = `<button class="btn" style="background: #0284c7; color: white; border: 1px solid #0369a1; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%;" onclick="resumeProducao(${item.id}, '${setor}')"><i class="ph-play"></i> Retomar</button>`;
+                    } else if (pauseRequested) {
+                        mainBtnHtml = `
+                            <button class="btn" style="background: var(--danger); opacity: 0.5; filter: grayscale(1); padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; pointer-events: none;"><i class="ph-check"></i> Finalizar</button>
+                            <span style="font-size: 0.7rem; color: #b45309; font-weight: bold; display: inline-flex; align-items: center; gap: 0.2rem; margin-top:0.25rem;"><i class="ph-clock-countdown"></i> Pausa enviada</span>
+                        `;
+                    } else {
+                        mainBtnHtml = `
+                            <button class="btn" style="background: var(--warning); color: #78350f; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar</button>
+                            <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.15rem 0.35rem; font-size: 0.7rem; width: 100%; border-radius:4px;" onclick="solicitarPausa(${item.id}, '${setor}')"><i class="ph-pause"></i> Solicitar Pausa</button>
+                        `;
+                    }
+                } else {
+                    mainBtnHtml = `<button class="btn" style="background: var(--success); padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%;" onclick="openPrintingConfirmation(${item.id}, '${setor}')">Iniciar</button>`;
+                    if (setor === 'ESTAMPARIA') {
+                        mainBtnHtml += `<button class="btn" style="background: #eab308; color: #713f12; padding: 0.2rem 0.4rem; font-size:0.7rem; border-radius:4px; width:100%; margin-top:0.2rem;" onclick="skipProduction(${item.id}, '${setor}')" title="Pular Produção">Pular Prod.</button>`;
+                    }
+                }
+
+                actionBlock = `
+                    <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: stretch; width: 100%; min-width: 110px;">
+                        ${rollbackBtn}
+                        ${timerHtml}
+                        ${mainBtnHtml}
+                    </div>
+                `;
+            } else {
+                actionBlock = `<span style="font-size:0.8rem; color:#94a3b8; display:inline-flex; align-items:center; gap:0.25rem;"><i class="ph-lock"></i> Aguardando</span>`;
+            }
+
+            // Setor Produção Column HTML
+            let finalColHtml = '';
+            if (isReadOnly) {
+                finalColHtml = `
+                    <div style="display: flex; align-items: center; gap: 0.4rem; justify-content: flex-start;">
+                        <div style="display: flex; flex-direction: column; gap: 0.2rem; min-width: 100px;">
+                            <span class="badge" style="background:#e2e8f0; color:#64748b; font-size:0.7rem; padding: 2px 4px; max-width: fit-content;">${item.status_atual}</span>
+                            <div><span class="badge badge-blue" style="font-size:0.7rem; padding: 2px 4px;"><i class="ph-printer"></i> ${setor.replace('IMPRESSAO_', '').replace(/_/g, ' ')}</span></div>
+                            ${colorInfo}
+                        </div>
+                        ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                    </div>
+                `;
+            } else {
+                finalColHtml = `
+                    <div style="display: flex; align-items: center; gap: 0.4rem; justify-content: flex-start;">
+                        <div style="display: flex; flex-direction: column; gap: 0.2rem; min-width: 100px;">
+                            <div><span class="badge badge-blue" style="font-size:0.7rem; padding: 2px 4px;"><i class="ph-printer"></i> ${setor.replace('IMPRESSAO_', '').replace(/_/g, ' ')}</span></div>
+                            ${colorInfo}
+                        </div>
+                        ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                    </div>
+                `;
+            }
 
             return `
-                <tr style="${isReadOnly ? 'opacity: 0.8;' : ''}">
-                     <td>
-                         ${statusBar}
-                         ${item.numero_pedido}<br><small>${item.cliente}</small>
-                     </td>
-                     <td>
-                        <strong>${item.produto}</strong>
-                        ${item.referencia ? `<div style="font-size:0.85rem; color:#475569; margin-top:0.2rem;">Referência: <strong>${item.referencia}</strong></div>` : ''}
-                        <div style="margin-top:0.25rem">${typeof renderShippingBadge === 'function' ? renderShippingBadge(item.tipo_envio) : ''}</div>
-                        ${item.transportadora ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.15rem;">Transp: <b>${item.transportadora}</b></div>` : ''}
-                     </td>
-                     <td>${typeof renderDeadline === 'function' ? renderDeadline(item.prazo_entrega) : item.prazo_entrega}</td>
-                     <td>${item.quantidade}</td>
-                     <td>${respBlock}</td>
-                     <td>
-                        <div style="display:flex; gap: 0.75rem; align-items: flex-start;">
-                             <!-- Coluna Esquerda: Thumbnail -->
-                             <div style="flex-shrink:0;">
-                                 ${layoutIndicator}
-                             </div>
-                             
-                             <!-- Coluna Direita: Infos -->
-                             <div style="display:flex; flex-direction:column; gap:0.25rem; align-items: flex-start;">
-                                <!-- Linha 1: Badges -->
-                                ${tercBadge}
-                                ${!isReadOnly ? `<div>${actionBtn}</div>` : `<div style="margin-top:0.2rem"><span class="badge" style="background:#e2e8f0; color:#64748b;">${item.status_atual}</span></div>`}
-                                
-                                <!-- Linha 2: Cor / Arquivo Digital -->
-                                ${colorInfo}
-                                ${digitalFileBlock}
-                                
-                                <!-- Linha 3: Alerts/Obs -->
-                                ${obsArteContent}
-                             </div>
+                <tr style="${isReadOnly ? 'opacity: 0.75;' : ''}">
+                    <td>
+                        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                                <strong style="font-size: 0.95rem; color: #1e293b;">${item.numero_pedido}</strong>
+                                <span style="font-size: 0.85rem; font-weight: 500; color: #334155;">${item.cliente}</span>
+                                ${renderTagBadges(item.tags)}
+                            </div>
+                            ${statusBar}
                         </div>
-                     </td>
+                    </td>
+                    <td>
+                        <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                            <div style="font-weight: 600; color: #1e293b; font-size: 0.85rem;">
+                                ${item.produto}
+                                ${item.referencia ? `<span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(Ref: ${item.referencia})</span>` : ''}
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
+                                ${typeof renderShippingBadge === 'function' ? renderShippingBadge(item.tipo_envio) : ''}
+                                ${item.transportadora ? `<span style="font-size:0.75rem; color:#64748b;">(Transp: <b>${item.transportadora}</b>)</span>` : ''}
+                            </div>
+                            ${tercBadge}
+                            ${fileBadge}
+                            ${obsArteContent}
+                        </div>
+                    </td>
+                    <td>${typeof renderDeadline === 'function' ? renderDeadline(item.prazo_entrega) : item.prazo_entrega}</td>
+                    <td style="font-weight: 600; font-size: 0.9rem; color: #1e293b;">${item.quantidade}</td>
+                    <td>${respBlock}</td>
+                    <td>${actionBlock}</td>
+                    <td>${finalColHtml}</td>
                 </tr>
             `;
         } catch (err) {
             console.error("Render Error for Item:", item, err);
-            return `<tr><td colspan="6" style="background:#fee2e2; color:#b91c1c;">Erro ao renderizar item #${item.id || '?'}: ${err.message}</td></tr>`;
+            return `<tr><td colspan="7" style="background:#fee2e2; color:#b91c1c;">Erro ao renderizar item #${item.id || '?'}: ${err.message}</td></tr>`;
         }
     }).join('');
 }
@@ -2054,9 +2148,16 @@ function injectNewOrderModal() {
                     </div>
                 </div>
 
-                 <div class="form-group">
+                <div class="form-group">
                     <label>Observação</label>
                     <textarea name="observacao" class="form-control" rows="3" placeholder="Detalhes adicionais, instruções..."></textarea>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Tags do Pedido (Máximo 3)</label>
+                    <div id="no_tags_container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                        Carregando tags...
+                    </div>
                 </div>
 
                 <h3 style="margin-bottom: 0.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">Itens do Pedido</h3>
@@ -2236,6 +2337,9 @@ async function handleNewOrderSubmit(e) {
         return;
     }
 
+    const tagElements = document.querySelectorAll('#no_tags_container input[type="checkbox"]:checked');
+    const tags = Array.from(tagElements).map(el => parseInt(el.value));
+
     const payload = {
         cliente: formData.get('cliente'),
         numero_pedido: formData.get('numero_pedido'),
@@ -2243,7 +2347,8 @@ async function handleNewOrderSubmit(e) {
         tipo_envio: formData.get('tipo_envio'),
         transportadora: formData.get('transportadora'),
         observacao: formData.get('observacao'),
-        itens: itens
+        itens: itens,
+        tags: tags
     };
 
     try {
@@ -2273,6 +2378,7 @@ async function handleNewOrderSubmit(e) {
 function openNewOrderModal() {
     // Garantir que existe
     injectNewOrderModal();
+    populateTagSelectors('no_tags_container');
     document.getElementById('newOrderModal').classList.add('show');
 }
 
@@ -2280,8 +2386,8 @@ async function viewOrderDetails(id) {
     const res = await fetch(`/api/orders/${id}`);
     const order = await res.json();
 
-    const canEdit = currentUser.perfil === 'admin' || currentUser.perfil === 'financeiro';
-    const isAdmin = currentUser.perfil === 'admin';
+    const canEdit = hasProfile('financeiro');
+    const isAdmin = currentUser.perfil && currentUser.perfil.toLowerCase() === 'admin';
 
     const isFinalized = order.status_oficial === 'FINALIZADO';
 
@@ -2293,7 +2399,10 @@ async function viewOrderDetails(id) {
     let html = `
                         < div class="card" >
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <h3>Pedido ${order.numero_pedido} - ${order.cliente}</h3>
+                <div>
+                    <h3 style="margin-bottom:0.25rem;">Pedido ${order.numero_pedido} - ${order.cliente}</h3>
+                    ${renderTagBadges(order.tags)}
+                </div>
                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.5rem">
                     ${renderOrderStatusBadge(order.status_oficial, order.setor_detalhe)}
                     <div style="display:flex; gap:0.5rem">
@@ -2319,13 +2428,13 @@ async function viewOrderDetails(id) {
         // Ações contextuais baseadas no perfil e estado do item
         // Se finalizado, não mostra ações de transição
         if (!isFinalized) {
-            if (currentUser.perfil === 'separacao' && item.status_atual === 'AGUARDANDO_SEPARACAO') {
+            if (hasProfile('separacao') && item.status_atual === 'AGUARDANDO_SEPARACAO') {
                 action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_DESEMBALE')">Separado OK</button>`;
             }
-            else if (currentUser.perfil === 'desembale' && item.status_atual === 'AGUARDANDO_DESEMBALE') {
+            else if (hasProfile('desembale') && item.status_atual === 'AGUARDANDO_DESEMBALE') {
                 action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_PRODUCAO')">Liberar p/ Produção</button>`;
             }
-            else if (currentUser.perfil === 'embale' && item.status_atual === 'AGUARDANDO_EMBALE') {
+            else if (hasProfile('embale') && item.status_atual === 'AGUARDANDO_EMBALE') {
                 action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_ENVIO')">Embalado OK</button>`;
             }
         }
@@ -2350,13 +2459,13 @@ async function viewOrderDetails(id) {
     });
 
     let deleteBtn = '';
-    if (currentUser.perfil === 'admin' && !isFinalized) {
+    if (isAdmin && !isFinalized) {
         // Botão de deletar (perigoso) - Bloqueado se finalizado
         deleteBtn = `<button class="btn" style="width: auto; background: var(--danger); margin-left: 1rem;" onclick="deleteOrder(${order.id})"> <i class="ph-trash"></i> Excluir Pedido</button>`;
     }
 
     let reverterArteBtn = '';
-    const canRevertToArt = !isFinalized && (currentUser.perfil === 'admin' || currentUser.perfil === 'arte');
+    const canRevertToArt = !isFinalized && hasProfile('arte');
     if (canRevertToArt) {
         reverterArteBtn = `<button class="btn" style="width: auto; background: var(--warning); color: #78350f; margin-left: 1rem;" onclick="reverterPedidoParaArte(${order.id})"><i class="ph-arrow-u-up-left"></i> Reverter para Fila de Arte</button>`;
     }
@@ -2433,7 +2542,7 @@ async function openArteAction(pedidoId) {
                 </div>
                 <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
                     <button class="btn btn-sm" style="background:#e2e8f0; color:#475569;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_INFO')">Aguardando Info</button>
-                    <button class="btn btn-sm" style="background:var(--accent); color:white;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+                    <button class="btn btn-sm" style="background:var(--success); color:white;" onclick="iniciarDesenvolvimentoOrderDirect(${pedidoId})">Iniciar Arte</button>
                 </div>
             </div>
         `;
@@ -2444,7 +2553,7 @@ async function openArteAction(pedidoId) {
                     <i class="ph-clock" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
                     Aguardando informações do cliente. O tempo de SLA está pausado.
                 </div>
-                <button class="btn btn-sm" style="background:var(--accent); color:white; flex-shrink: 0;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'PRONTO_PARA_CRIAR')">Pronto p/ Criar</button>
+                <button class="btn btn-sm" style="background:var(--success); color:white; flex-shrink: 0;" onclick="iniciarDesenvolvimentoOrderDirect(${pedidoId})">Iniciar Arte</button>
             </div>
         `;
     } else if (status === 'PRONTO_PARA_CRIAR') {
@@ -2467,7 +2576,10 @@ async function openArteAction(pedidoId) {
                     <i class="ph-play-circle" style="font-size: 1.2rem; vertical-align: middle; margin-right: 0.5rem;"></i>
                     Arte em desenvolvimento. Quando concluir, envie para aprovação do cliente.
                 </div>
-                <button class="btn btn-sm" style="background:var(--warning); color:#92400e; flex-shrink: 0;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
+                <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
+                    <button class="btn btn-sm" style="background:#e2e8f0; color:#475569;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_INFO')">Pausar (Info)</button>
+                    <button class="btn btn-sm" style="background:var(--warning); color:#92400e;" onclick="updateArteStatusOrderDirect(${pedidoId}, 'AGUARDANDO_APROVACAO')">Enviar p/ Aprovação</button>
+                </div>
             </div>
         `;
     } else if (status === 'AGUARDANDO_APROVACAO') {
@@ -2565,16 +2677,16 @@ async function openArteAction(pedidoId) {
 
                             <!-- Laser File Section -->
                             ${isAprovacao || item.arquivo_impressao_laser_url ? `
-                            <div id="laserFileSection_${item.id}" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${(isAprovacao ? isLaser : item.arquivo_impressao_laser_url) ? 'block' : 'none'};">
-                                <div style="font-weight: bold; font-size: 0.85rem; color: #92400e; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <div id="laserFileSection_${item.id}" style="background: ${item.arquivo_impressao_laser_url ? '#f0fdf4' : '#fffbeb'}; border: 1px solid ${item.arquivo_impressao_laser_url ? '#bbf7d0' : '#fde68a'}; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${(isAprovacao ? isLaser : item.arquivo_impressao_laser_url) ? 'block' : 'none'};">
+                                <div style="font-weight: bold; font-size: 0.85rem; color: ${item.arquivo_impressao_laser_url ? '#166534' : '#92400e'}; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
                                     <i class="ph-lightning"></i> Arquivo Laser
                                 </div>
                                 <div id="laserContainer_${item.id}" style="margin-bottom: 0.75rem;">
                                     ${item.arquivo_impressao_laser_url
-                                        ? `<div style="color:#92400e; font-size: 0.85rem;">
+                                        ? `<div style="color:#166534; font-size: 0.85rem;">
                                                <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
                                                <strong>${item.arquivo_impressao_laser_nome}</strong> <br>
-                                               <small style="color: #b45309;">Enviado por: ${item.arquivo_impressao_laser_enviado_por || '?'} em ${new Date(item.arquivo_impressao_laser_enviado_em).toLocaleDateString()}</small>
+                                               <small style="color: #15803d;">Enviado por: ${item.arquivo_impressao_laser_enviado_por || '?'} em ${new Date(item.arquivo_impressao_laser_enviado_em).toLocaleDateString()}</small>
                                            </div>`
                                         : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo laser anexado</div>`
                                     }
@@ -2798,12 +2910,19 @@ async function uploadItemFile(itemId, fileType, pedidoId) {
                     `;
                 } else if (fileType === 'laser') {
                     container.innerHTML = `
-                        <div style="color:#92400e; font-size: 0.85rem;">
+                        <div style="color:#166534; font-size: 0.85rem;">
                             <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
                             <strong>${file.name}</strong> <br>
-                            <small style="color: #b45309;">Enviado agora mesmo</small>
+                            <small style="color: #15803d;">Enviado agora mesmo</small>
                         </div>
                     `;
+                    const section = document.getElementById(`laserFileSection_${itemId}`);
+                    if (section) {
+                        section.style.background = '#f0fdf4';
+                        section.style.borderColor = '#bbf7d0';
+                        const title = section.querySelector('div');
+                        if (title) title.style.color = '#166534';
+                    }
                 }
             }
             fileInput.value = '';
@@ -2851,6 +2970,27 @@ function renderLayoutIndicator(path, type) {
         </div>
     `;
 }
+
+function renderLayoutIndicatorSm(path, type) {
+    if (!path) return '<span style="color: #cbd5e1; font-size: 0.8rem;">-</span>';
+
+    if (type === 'image') {
+        return `
+            <div class="layout-thumb-container" onclick="viewLayout('${path}', '${type}')" title="Ver layout">
+                <img src="${path}" loading="lazy" decoding="async" alt="Layout">
+                <div class="layout-thumb-overlay">Ver</div>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="layout-thumb-container" onclick="viewLayout('${path}', '${type}')" title="Ver PDF" style="display: flex; align-items: center; justify-content: center;">
+                <i class="ph-file-pdf" style="font-size: 1.5rem; color: var(--danger);"></i>
+                <div class="layout-thumb-overlay">Ver</div>
+            </div>
+        `;
+    }
+}
+
 
 function viewLayout(path, type) {
     injectLightbox();
@@ -3467,7 +3607,7 @@ async function resumeProducao(itemId, setor) {
 // --- EDITAR PEDIDO ---
 
 async function openEditOrderModal(id) {
-    if (currentUser.perfil !== 'admin' && currentUser.perfil !== 'financeiro') {
+    if (!hasProfile('financeiro')) {
         return alert('Sem permissão para editar.');
     }
 
@@ -3539,6 +3679,13 @@ async function openEditOrderModal(id) {
                         <textarea name="observacao" class="form-control" rows="2">${order.observacao || ''}</textarea>
                     </div>
 
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Tags do Pedido (Máximo 3)</label>
+                        <div id="edit_tags_container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;">
+                            Carregando tags...
+                        </div>
+                    </div>
+
                     <h4 style="margin-top:1rem">Itens ${lockIcon}</h4>
                     <div id="editItemsContainer">${itemsHtml}</div>
                     
@@ -3556,6 +3703,7 @@ async function openEditOrderModal(id) {
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', html);
+        populateTagSelectors('edit_tags_container', (order.tags || []).map(t => t.id));
 
         document.getElementById('editOrderForm').onsubmit = (e) => handleEditSubmit(e, id, isRestricted);
 
@@ -3597,17 +3745,19 @@ async function handleEditSubmit(e, id, isRestricted) {
         });
     }
 
+    const tagElements = document.querySelectorAll('#edit_tags_container input[type="checkbox"]:checked');
+    const tags = Array.from(tagElements).map(el => parseInt(el.value));
+
     const payload = {
         usuario_id: currentUser.id,
-        // motivo removido
         prazo_entrega: formData.get('prazo_entrega'),
         tipo_envio: formData.get('tipo_envio'),
         transportadora: formData.get('transportadora'),
         observacao: formData.get('observacao'),
-        // Campos restritos só enviam se !isRestricted (mas backend valida igual)
         cliente: formData.get('cliente'),
         numero_pedido: formData.get('numero_pedido'),
-        itens: isRestricted ? null : itens
+        itens: isRestricted ? null : itens,
+        tags: tags
     };
 
     try {
@@ -3853,6 +4003,7 @@ function renderFinishedOrderDossier(order) {
                 <div>
                     <h2 style="margin:0; font-size:1.5rem;">${order.cliente}</h2>
                     <div style="color:var(--text-secondary); margin-top:0.25rem;">Pedido: <strong>${order.numero_pedido}</strong></div>
+                    ${renderTagBadges(order.tags)}
                 </div>
                  <div style="text-align:right">
                     <span class="badge badge-success" style="font-size:1rem; padding:0.5rem 1rem;">FINALIZADO</span>
@@ -3866,6 +4017,7 @@ function renderFinishedOrderDossier(order) {
                 <div><strong>Transp:</strong> ${order.transportadora || '-'}</div>
                 <div><strong>Prazo Original:</strong> ${new Date(order.prazo_entrega).toLocaleDateString()}</div>
                 <div><strong>Expedição:</strong> ${formatDateTime(order.itens?.[0]?.data_envio)}</div>
+                ${order.retirado === 1 ? `<div style="grid-column: span 2; color:#16a34a; font-weight:600;"><i class="ph-check-square"></i> Retirada Confirmada: ${formatDateTime(order.data_retirada)}</div>` : ''}
             </div>
              ${order.observacao ? `<div style="margin-top:1rem; background:#f8fafc; padding:0.5rem; border-radius:4px;"><strong>Obs:</strong> ${order.observacao}</div>` : ''}
         </div>

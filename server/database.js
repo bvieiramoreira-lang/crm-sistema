@@ -21,8 +21,10 @@ db.serialize(() => {
         nome TEXT NOT NULL,
         username TEXT UNIQUE NOT NULL,
         senha TEXT NOT NULL,
-        perfil TEXT NOT NULL, -- financeiro, arte, separacao, desembale, impressao, embale, logistica, admin
-        setor_impressao TEXT -- Apenas para usuários de impressão (SILK_CILINDRICA, etc.)
+        perfil TEXT NOT NULL, -- financeiro, arte, separacao, desembale, impressao, embale, logistica, admin, vendedor
+        setor_impressao TEXT, -- Apenas para usuários de impressão (SILK_CILINDRICA, etc.)
+        ativo INTEGER DEFAULT 1,
+        setores_secundarios TEXT
     )`);
 
     // Tabela de Pedidos
@@ -106,6 +108,8 @@ db.serialize(() => {
     };
 
     addColumn('pedidos', 'observacao', 'TEXT');
+    addColumn('usuarios', 'ativo', 'INTEGER DEFAULT 1');
+    addColumn('usuarios', 'setores_secundarios', 'TEXT');
     addColumn('pedidos', 'quantidade_volumes', 'INTEGER');
     addColumn('pedidos', 'peso', 'REAL');
     addColumn('pedidos', 'altura', 'REAL');
@@ -113,6 +117,8 @@ db.serialize(() => {
     addColumn('pedidos', 'comprimento', 'REAL');
     addColumn('pedidos', 'finalizado_em', 'DATETIME');
     addColumn('pedidos', 'finalizado_por', 'TEXT');
+    addColumn('pedidos', 'retirado', 'INTEGER DEFAULT 0');
+    addColumn('pedidos', 'data_retirada', 'DATETIME');
 
     addColumn('itens_pedido', 'layout_path', 'TEXT');
     addColumn('itens_pedido', 'layout_type', 'TEXT');
@@ -244,6 +250,33 @@ db.serialize(() => {
         arquivo_url TEXT NOT NULL,
         data_upload DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    // Tabela de Tags (Novo Recurso)
+    db.run(`CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT UNIQUE NOT NULL,
+        cor TEXT NOT NULL
+    )`);
+
+    // Tabela de Associação Pedidos <-> Tags
+    db.run(`CREATE TABLE IF NOT EXISTS pedido_tags (
+        pedido_id INTEGER,
+        tag_id INTEGER,
+        PRIMARY KEY(pedido_id, tag_id),
+        FOREIGN KEY(pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+        FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    )`);
+
+    // Índices de performance para tags
+    db.run(`CREATE INDEX IF NOT EXISTS idx_pedido_tags_pedido_id ON pedido_tags(pedido_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_pedido_tags_tag_id ON pedido_tags(tag_id)`);
+
+    // Garantir tag padrão MERCADO LIVRE
+    db.get("SELECT * FROM tags WHERE nome = 'MERCADO LIVRE'", [], (err, row) => {
+        if (!row) {
+            db.run("INSERT INTO tags (nome, cor) VALUES ('MERCADO LIVRE', '#f59e0b')");
+        }
+    });
 });
 
 module.exports = db;

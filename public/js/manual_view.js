@@ -23,7 +23,7 @@ async function loadManuals() {
 }
 
 function renderManualsView(manuais) {
-    const isAdmin = currentUser && currentUser.perfil === 'admin';
+    const isAdmin = currentUser && currentUser.perfil && currentUser.perfil.toLowerCase() === 'admin';
 
     // Group manuals by category
     const grouped = manuais.reduce((acc, manual) => {

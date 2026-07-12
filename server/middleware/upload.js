@@ -23,16 +23,16 @@ const upload = multer({
     storage: storage,
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     fileFilter: (req, file, cb) => {
-        // Updated to allow CDR and ZIP for Digital Printing
-        const filetypes = /jpeg|jpg|png|pdf|cdr|zip/;
-        // Mime check can be unreliable for CDR, rely mostly on extension
+        // Updated to allow CDR, ZIP, DXF and AI for Digital/Laser Printing
+        const filetypes = /jpeg|jpg|png|pdf|cdr|zip|dxf|ai/;
+        // Mime check can be unreliable for CDR/DXF/AI, rely mostly on extension
         const extname = filetypes.test(path.extname(file.originalname).toLowerCase().replace('.', ''));
 
-        // Relax strict mime check for CDR/ZIP as they vary wildly
+        // Relax strict mime check for CDR/ZIP/DXF/AI as they vary wildly
         if (extname) {
             return cb(null, true);
         }
-        cb(new Error('Apenas arquivos de Imagem, PDF, CDR ou ZIP são permitidos!'));
+        cb(new Error('Apenas arquivos de Imagem, PDF, CDR, ZIP, DXF ou AI são permitidos!'));
     }
 });
 

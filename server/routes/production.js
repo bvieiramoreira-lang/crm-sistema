@@ -72,7 +72,7 @@ router.get('/itens/:contexto', (req, res) => {
         // Arte não tem "Full Flow" visivel de outros setores ainda, 
         // e nada vem "antes" da Arte a não ser Financeiro (que não é setor de produção listado aqui)
         // Mantemos lógica original
-        query = `${baseSelect} WHERE i.arte_status != 'APROVADO' AND i.status_atual != 'CANCELADO' ORDER BY p.prazo_entrega ASC`;
+        query = `${baseSelect} WHERE i.arte_status != 'APROVADO' AND i.status_atual != 'CANCELADO' ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
     }
     else if (isFuture) {
         // LOGICA DE VISUALIZAÇÃO FUTURA
@@ -120,24 +120,53 @@ router.get('/itens/:contexto', (req, res) => {
         }
 
         const placeholders = allowedStatuses.map(() => '?').join(',');
-        query = `${baseSelect} WHERE i.status_atual IN (${placeholders}) ${extraCondition} ORDER BY p.prazo_entrega ASC`;
+        query = `${baseSelect} WHERE i.status_atual IN (${placeholders}) ${extraCondition} ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
         params = allowedStatuses;
 
     } else {
         // LOGICA PADRÃO (EXECUÇÃO)
         if (['AGUARDANDO_SEPARACAO', 'AGUARDANDO_DESEMBALE', 'AGUARDANDO_EMBALE', 'AGUARDANDO_ENVIO'].includes(contexto)) {
-            query = `${baseSelect} WHERE i.status_atual = ? ORDER BY p.prazo_entrega ASC`;
+            query = `${baseSelect} WHERE i.status_atual = ? ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
             params = [contexto];
         } else {
             // Filas de Setor de Produção
-            query = `${baseSelect} WHERE i.setor_destino = ? AND (i.status_atual = 'AGUARDANDO_PRODUCAO' OR i.status_atual = 'EM_PRODUCAO') ORDER BY p.prazo_entrega ASC`;
+            query = `${baseSelect} WHERE i.setor_destino = ? AND (i.status_atual = 'AGUARDANDO_PRODUCAO' OR i.status_atual = 'EM_PRODUCAO') ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
             params = [contexto];
         }
     }
 
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+        
+        if (rows.length === 0) {
+            return res.json([]);
+        }
+
+        const orderIds = [...new Set(rows.map(r => r.pedido_id))];
+        const placeholders = orderIds.map(() => '?').join(',');
+        
+        db.all(`SELECT pt.pedido_id, t.id, t.nome, t.cor 
+                FROM pedido_tags pt 
+                JOIN tags t ON pt.tag_id = t.id 
+                WHERE pt.pedido_id IN (${placeholders})`, orderIds, (errTags, tagRows) => {
+            if (errTags) {
+                console.error("Erro ao carregar tags de itens de produção:", errTags);
+                return res.json(rows);
+            }
+
+            const tagsByOrder = new Map();
+            tagRows.forEach(tag => {
+                if (!tagsByOrder.has(tag.pedido_id)) tagsByOrder.set(tag.pedido_id, []);
+                tagsByOrder.get(tag.pedido_id).push({ id: tag.id, nome: tag.nome, cor: tag.cor });
+            });
+
+            const rowsWithTags = rows.map(row => ({
+                ...row,
+                tags: tagsByOrder.get(row.pedido_id) || []
+            }));
+
+            res.json(rowsWithTags);
+        });
     });
 });
 
@@ -152,7 +181,22 @@ router.get('/pedido/:pedidoId/itens', (req, res) => {
     `;
     db.all(query, [pedidoId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
+        if (rows.length === 0) return res.json([]);
+
+        db.all(`SELECT t.id, t.nome, t.cor 
+                FROM pedido_tags pt 
+                JOIN tags t ON pt.tag_id = t.id 
+                WHERE pt.pedido_id = ?`, [pedidoId], (errTags, tagRows) => {
+            if (errTags) {
+                console.error("Erro ao carregar tags do pedido:", errTags);
+                return res.json(rows);
+            }
+            const rowsWithTags = rows.map(row => ({
+                ...row,
+                tags: tagRows || []
+            }));
+            res.json(rowsWithTags);
+        });
     });
 });
 
@@ -168,7 +212,18 @@ router.get('/item/:id', (req, res) => {
     db.get(query, [id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Item não encontrado' });
-        res.json(row);
+        
+        db.all(`SELECT t.id, t.nome, t.cor 
+                FROM pedido_tags pt 
+                JOIN tags t ON pt.tag_id = t.id 
+                WHERE pt.pedido_id = ?`, [row.pedido_id], (errTags, tagRows) => {
+            if (errTags) {
+                console.error("Erro ao carregar tags do item:", errTags);
+                return res.json(row);
+            }
+            row.tags = tagRows || [];
+            res.json(row);
+        });
     });
 });
 
@@ -1071,7 +1126,32 @@ router.get('/pausas/pendentes', (req, res) => {
     const query = "SELECT i.*, p.numero_pedido, p.cliente FROM itens_pedido i JOIN pedidos p ON i.pedido_id = p.id WHERE i.pausa_solicitada = 1";
     db.all(query, [], (err, rows) => {
         if(err) return res.status(500).json({error: err.message});
-        res.json(rows);
+        
+        db.all(`
+            SELECT pt.pedido_id, t.id, t.nome, t.cor
+            FROM pedido_tags pt
+            JOIN tags t ON pt.tag_id = t.id
+        `, [], (tagsErr, tagRows) => {
+            if (tagsErr) return res.status(500).json({ error: tagsErr.message });
+            
+            const tagsByPedido = {};
+            tagRows.forEach(tr => {
+                if (!tagsByPedido[tr.pedido_id]) {
+                    tagsByPedido[tr.pedido_id] = [];
+                }
+                tagsByPedido[tr.pedido_id].push({
+                    id: tr.id,
+                    nome: tr.nome,
+                    cor: tr.cor
+                });
+            });
+
+            rows.forEach(item => {
+                item.tags = tagsByPedido[item.pedido_id] || [];
+            });
+
+            res.json(rows);
+        });
     });
 });
 

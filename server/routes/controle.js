@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
     // A query também retorna informações de métrica para uso no front
     let baseQuery = `
         SELECT 
-            i.id, i.produto, i.quantidade, i.setor_destino, i.status_atual, i.arte_status,
+            i.id, i.produto, i.quantidade, i.setor_destino, i.status_atual, i.arte_status, i.pedido_id,
             p.numero_pedido, p.cliente, p.prazo_entrega, p.tipo_envio, p.status_geral
         FROM itens_pedido i
         JOIN pedidos p ON i.pedido_id = p.id
@@ -38,27 +38,50 @@ router.get('/', (req, res) => {
         baseQuery += ` WHERE ` + conditions.join(' AND ');
     }
 
-    baseQuery += ` ORDER BY p.prazo_entrega ASC, p.numero_pedido ASC`;
+    baseQuery += ` ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC, p.numero_pedido ASC`;
 
     db.all(baseQuery, queryParams, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         
-        // Calcular métricas
-        let totalPedidosSet = new Set();
-        let totalUnidadesItens = 0;
+        // Fetch all order tags
+        db.all(`
+            SELECT pt.pedido_id, t.id, t.nome, t.cor
+            FROM pedido_tags pt
+            JOIN tags t ON pt.tag_id = t.id
+        `, [], (tagsErr, tagRows) => {
+            if (tagsErr) return res.status(500).json({ error: tagsErr.message });
+            
+            // Map tags by pedido_id
+            const tagsByPedido = {};
+            tagRows.forEach(tr => {
+                if (!tagsByPedido[tr.pedido_id]) {
+                    tagsByPedido[tr.pedido_id] = [];
+                }
+                tagsByPedido[tr.pedido_id].push({
+                    id: tr.id,
+                    nome: tr.nome,
+                    cor: tr.cor
+                });
+            });
 
-        rows.forEach(item => {
-            totalPedidosSet.add(item.numero_pedido);
-            totalUnidadesItens += parseInt(item.quantidade) || 0;
-        });
+            // Calcular métricas
+            let totalPedidosSet = new Set();
+            let totalUnidadesItens = 0;
 
-        res.json({
-            meta: {
-                totalPedidos: totalPedidosSet.size,
-                totalProdutos: rows.length,
-                totalUnidadesVolume: totalUnidadesItens
-            },
-            data: rows
+            rows.forEach(item => {
+                totalPedidosSet.add(item.numero_pedido);
+                totalUnidadesItens += parseInt(item.quantidade) || 0;
+                item.tags = tagsByPedido[item.pedido_id] || [];
+            });
+
+            res.json({
+                meta: {
+                    totalPedidos: totalPedidosSet.size,
+                    totalProdutos: rows.length,
+                    totalUnidadesVolume: totalUnidadesItens
+                },
+                data: rows
+            });
         });
     });
 });

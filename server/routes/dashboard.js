@@ -202,7 +202,7 @@ router.get('/history', (req, res) => {
             ep.setor,
             COUNT(DISTINCT i.pedido_id) as pedidos_concluidos,
             COUNT(ep.id) as itens_concluidos,
-            SUM(ep.quantidade_produzida) as total_pecas,
+            SUM(COALESCE(ep.quantidade_produzida, i.quantidade)) as total_pecas,
             SUM((julianday(ep.timestamp) - julianday(prev_ev.timestamp)) * 24 * 60) as tempo_total_min
         FROM eventos_producao ep
         JOIN eventos_producao prev_ev ON 
@@ -211,7 +211,7 @@ router.get('/history', (req, res) => {
             prev_ev.id = (SELECT MAX(id) FROM eventos_producao WHERE item_id = ep.item_id AND acao = 'INICIO' AND id < ep.id)
         JOIN itens_pedido i ON ep.item_id = i.id
         LEFT JOIN usuarios u ON ep.operador_id = u.id
-        WHERE ep.timestamp BETWEEN ? AND ?
+        WHERE datetime(ep.timestamp, 'localtime') BETWEEN ? AND ?
         AND ep.acao = 'FIM'
         ${whereClause}
         GROUP BY COALESCE(ep.operador_nome, u.nome), ep.setor
@@ -219,17 +219,14 @@ router.get('/history', (req, res) => {
 
     // QUERY 2: Non-Timer Sectors (Timestamp Based)
     // We need to Union different sectors. 
-    // This is a bit complex in one query due to different column names.
     // Let's do a UNION ALL of subqueries for each sector.
 
     const sectorsConfig = [
         { name: 'ARTE_FINAL', dateCol: 'data_arte_aprovacao', respCol: 'responsavel_arte' },
         { name: 'SEPARACAO', dateCol: 'data_separacao', respCol: 'responsavel_separacao' },
-        { name: 'DESEMBALE', dateCol: 'data_desembale', respCol: 'responsavel_desembale' }, // Check if resp exists, likely yes if logic mirrors others
-        { name: 'EMBALE', dateCol: 'data_embale', respCol: 'responsavel_embale' }, // Using responsavel_embale?
-        { name: 'LOGISTICA', dateCol: 'data_envio', respCol: 'responsavel_logistica' } // Using responsavel_logistica?
-        // Note: Responsavel columns might be null if not captured.
-        // Also: data_envio is when it goes to FINISHED.
+        { name: 'DESEMBALE', dateCol: 'data_desembale', respCol: 'responsavel_desembale' },
+        { name: 'EMBALE', dateCol: 'data_embale', respCol: 'responsavel_embale' },
+        { name: 'LOGISTICA', dateCol: 'data_envio', respCol: 'responsavel_logistica' }
     ];
 
     // Build Union Query
@@ -287,20 +284,44 @@ router.get('/history', (req, res) => {
             // Flatten results
             const allRows = results.flat();
 
+            // Consolidate rows by operador and setor
+            const consolidated = {};
+            allRows.forEach(r => {
+                const op = r.operador || 'Desconhecido';
+                const set = r.setor || 'Desconhecido';
+                const key = `${op}_${set}`;
+                if (!consolidated[key]) {
+                    consolidated[key] = {
+                        operador: op,
+                        setor: set,
+                        pedidos_concluidos: r.pedidos_concluidos || 0,
+                        itens_concluidos: r.itens_concluidos || 0,
+                        total_pecas: r.total_pecas || 0,
+                        tempo_total_min: r.tempo_total_min || 0
+                    };
+                } else {
+                    consolidated[key].pedidos_concluidos = Math.max(consolidated[key].pedidos_concluidos, r.pedidos_concluidos || 0);
+                    consolidated[key].itens_concluidos = Math.max(consolidated[key].itens_concluidos, r.itens_concluidos || 0);
+                    consolidated[key].total_pecas = Math.max(consolidated[key].total_pecas, r.total_pecas || 0);
+                    consolidated[key].tempo_total_min = Math.max(consolidated[key].tempo_total_min, r.tempo_total_min || 0);
+                }
+            });
+
+            const consolidatedRows = Object.values(consolidated);
+
             // Map to Report Format
-            const report = allRows.map(r => ({
+            const report = consolidatedRows.map(r => ({
                 operador: r.operador,
                 setor: r.setor,
                 pedidos_concluidos: r.pedidos_concluidos,
                 itens_concluidos: r.itens_concluidos,
                 total_pecas: r.total_pecas,
-                // Time only relevant if > 0
                 tempo_total_h: (r.tempo_total_min / 60).toFixed(2),
                 tempo_medio_item_min: (r.tempo_total_min > 0 && r.itens_concluidos) ? (r.tempo_total_min / r.itens_concluidos).toFixed(1) : 0,
                 pecas_por_hora: r.tempo_total_min > 0 ? (r.total_pecas / (r.tempo_total_min / 60)).toFixed(0) : 0
             }));
 
-            // Optional: Sort by Sector then Operator
+            // Sort by Sector then Operator
             report.sort((a, b) => a.setor.localeCompare(b.setor) || a.operador.localeCompare(b.operador));
 
             res.json(report);
