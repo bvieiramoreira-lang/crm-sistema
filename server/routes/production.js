@@ -812,11 +812,17 @@ router.post('/item/:id/layout', (req, res) => {
         }
 
         // Verificar permissão
-        db.get('SELECT perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
+        db.get('SELECT perfil, setores_secundarios FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
             if (err) return res.status(500).json({ error: 'Erro ao verificar permissão.' });
             if (!user) return res.status(403).json({ error: 'Usuário não encontrado.' });
 
-            if (user.perfil !== 'arte' && user.perfil !== 'admin') {
+            const setoresSecundarios = user.setores_secundarios
+                ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
+                : [];
+            const isArte = user.perfil === 'arte' || setoresSecundarios.includes('arte');
+            const isAdmin = user.perfil === 'admin' || setoresSecundarios.includes('admin');
+
+            if (!isArte && !isAdmin) {
                 return res.status(403).json({ error: 'Sem permissão. Apenas Arte e Admin podem enviar layouts.' });
             }
 
@@ -889,10 +895,16 @@ router.post('/item/:id/digital', (req, res) => {
                 const fileType = file.mimetype;
                 const timestamp = new Date().toISOString();
 
-                db.get('SELECT nome, perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
+                db.get('SELECT nome, perfil, setores_secundarios FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
                     if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
 
-                    if (user.perfil !== 'arte' && user.perfil !== 'admin') {
+                    const setoresSecundarios = user.setores_secundarios
+                        ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
+                        : [];
+                    const isArte = user.perfil === 'arte' || setoresSecundarios.includes('arte');
+                    const isAdmin = user.perfil === 'admin' || setoresSecundarios.includes('admin');
+
+                    if (!isArte && !isAdmin) {
                         return res.status(403).json({ error: 'Sem permissão.' });
                     }
 
@@ -950,9 +962,16 @@ router.post('/item/:id/laser', (req, res) => {
                 const fileType = file.mimetype;
                 const timestamp = new Date().toISOString();
 
-                db.get('SELECT nome, perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
+                db.get('SELECT nome, perfil, setores_secundarios FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
                     if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
-                    if (user.perfil !== 'arte' && user.perfil !== 'admin') {
+
+                    const setoresSecundarios = user.setores_secundarios
+                        ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
+                        : [];
+                    const isArte = user.perfil === 'arte' || setoresSecundarios.includes('arte');
+                    const isAdmin = user.perfil === 'admin' || setoresSecundarios.includes('admin');
+
+                    if (!isArte && !isAdmin) {
                         return res.status(403).json({ error: 'Sem permissão.' });
                     }
 
