@@ -81,16 +81,50 @@ function openUserModal(user = null) {
 
     // Checkboxes para setores secundários
     const userSec = user && user.setores_secundarios ? user.setores_secundarios.toLowerCase().split(',') : [];
-    const secOptions = setores.map(s => `
-        <div style="display:flex; align-items:center; gap:0.25rem; margin-bottom:0.25rem;">
-            <input type="checkbox" name="sec_sector" value="${s}" id="sec_u_${s}" ${userSec.includes(s) ? 'checked' : ''}> 
-            <label for="sec_u_${s}" style="font-weight:normal; margin:0; cursor:pointer;">${s.toUpperCase()}</label>
+
+    // Setores / Perfis
+    const perfisList = [
+        { value: 'financeiro', label: 'Financeiro' },
+        { value: 'arte', label: 'Arte Final' },
+        { value: 'separacao', label: 'Separação' },
+        { value: 'desembale', label: 'Desembale' },
+        { value: 'impressao', label: 'Impressão' },
+        { value: 'embale', label: 'Embale' },
+        { value: 'logistica', label: 'Logística' },
+        { value: 'vendedor', label: 'Vendedor' }
+    ];
+
+    // Filas de Impressão Específicas
+    const printSectorsList = [
+        { value: 'SILK_CILINDRICA', label: 'Silk Cilíndrica' },
+        { value: 'SILK_PLANO', label: 'Silk Plano' },
+        { value: 'TAMPOGRAFIA', label: 'Tampografia' },
+        { value: 'IMPRESSAO_LASER', label: 'Impressão Laser' },
+        { value: 'IMPRESSAO_DIGITAL', label: 'Impressão Digital' },
+        { value: 'ESTAMPARIA', label: 'Estamparia' }
+    ];
+
+    // Telas / Permissões Especiais
+    const specialPermsList = [
+        { value: 'controle', label: 'Controle' },
+        { value: 'orders', label: 'Todos os Pedidos' },
+        { value: 'finalizados', label: 'Finalizados' }
+    ];
+
+    const buildCheckboxes = (list) => list.map(item => `
+        <div style="display:flex; align-items:center; gap:0.35rem; margin-bottom:0.35rem;">
+            <input type="checkbox" name="sec_sector" value="${item.value}" id="sec_u_${item.value.toLowerCase()}" ${userSec.includes(item.value.toLowerCase()) ? 'checked' : ''} style="width: auto; margin: 0; cursor: pointer;"> 
+            <label for="sec_u_${item.value.toLowerCase()}" style="font-weight:normal; margin:0; cursor:pointer; font-size:0.85rem;">${item.label}</label>
         </div>
     `).join('');
 
+    const perfisCheckboxes = buildCheckboxes(perfisList);
+    const printCheckboxes = buildCheckboxes(printSectorsList);
+    const specialCheckboxes = buildCheckboxes(specialPermsList);
+
     const modalHtml = `
         <div id="userModal" class="modal show">
-            <div class="modal-content" style="max-width: 500px; padding: 1.5rem;">
+            <div class="modal-content" style="max-width: 580px; padding: 1.5rem;">
                 <h3 style="margin-top:0; margin-bottom:1.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">${title}</h3>
                 
                 <div class="form-group" style="margin-bottom: 1rem;">
@@ -114,7 +148,7 @@ function openUserModal(user = null) {
                 </div>
 
                 <div class="form-group" id="setorImpressaoGroup" style="margin-bottom: 1rem; display: ${user && user.perfil.toLowerCase() === 'impressao' ? 'block' : 'none'};">
-                    <label style="font-weight:600;">Setor de Impressão (Fila)</label>
+                    <label style="font-weight:600;">Setor de Impressão Principal</label>
                     <select id="userSetorImpressao" class="form-control">
                         <option value="">Nenhum</option>
                         <option value="SILK_CILINDRICA" ${user && user.setor_impressao === 'SILK_CILINDRICA' ? 'selected' : ''}>Silk Cilíndrica</option>
@@ -126,10 +160,19 @@ function openUserModal(user = null) {
                     </select>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label style="font-weight:600;">Setores Secundários (Atua também em:)</label>
-                    <div style="padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; max-height: 120px; overflow-y: auto;">
-                        ${secOptions}
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight:600; display:block; margin-bottom:0.5rem;">Permissões / Acessos Adicionais (Setores Secundários)</label>
+                    <div style="display:grid; grid-template-columns: 1fr 1.1fr; gap: 16px; padding: 0.75rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; max-height: 250px; overflow-y: auto;">
+                        <div>
+                            <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; display:block; margin-bottom:0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">Perfis Gerais</span>
+                            ${perfisCheckboxes}
+                        </div>
+                        <div>
+                            <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; display:block; margin-bottom:0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">Filas / Telas Extras</span>
+                            ${printCheckboxes}
+                            <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; display:block; margin-top:0.75rem; margin-bottom:0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">Telas do Sistema</span>
+                            ${specialCheckboxes}
+                        </div>
                     </div>
                 </div>
 

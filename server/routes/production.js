@@ -820,18 +820,36 @@ router.post('/item/:id/layout', (req, res) => {
                 return res.status(403).json({ error: 'Sem permissão. Apenas Arte e Admin podem enviar layouts.' });
             }
 
-            const layoutPath = '/uploads/' + file.filename;
-            const layoutType = file.mimetype.startsWith('image/') ? 'image' : 'pdf';
-            const timestamp = new Date().toISOString();
+            const { optimizeImage } = require('../utils/imageOptimizer');
 
-            db.run(
-                `UPDATE itens_pedido SET layout_path = ?, layout_type = ?, layout_uploaded_by = ?, layout_uploaded_at = ? WHERE id = ? `,
-                [layoutPath, layoutType, operadorId, timestamp, itemId],
-                function (err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ message: 'Layout enviado com sucesso', path: layoutPath, type: layoutType });
-                }
-            );
+            db.get('SELECT layout_path FROM itens_pedido WHERE id = ?', [itemId], (errQuery, rowOld) => {
+                const oldLayoutPath = rowOld ? rowOld.layout_path : null;
+
+                optimizeImage(file).catch(err => {
+                    console.error("Erro na otimização da imagem:", err);
+                }).finally(() => {
+                    const layoutPath = '/uploads/' + file.filename;
+                    const layoutType = file.mimetype.startsWith('image/') ? 'image' : 'pdf';
+                    const timestamp = new Date().toISOString();
+
+                    db.run(
+                        `UPDATE itens_pedido SET layout_path = ?, layout_type = ?, layout_uploaded_by = ?, layout_uploaded_at = ? WHERE id = ? `,
+                        [layoutPath, layoutType, operadorId, timestamp, itemId],
+                        function (err) {
+                            if (err) return res.status(500).json({ error: err.message });
+
+                            if (oldLayoutPath && oldLayoutPath !== layoutPath) {
+                                const { deleteUploadedFile } = require('../utils/fileCleanup');
+                                deleteUploadedFile(oldLayoutPath).catch(errCleanup => {
+                                    console.error("Erro ao deletar arquivo de layout antigo:", errCleanup);
+                                });
+                            }
+
+                            res.json({ message: 'Layout enviado com sucesso', path: layoutPath, type: layoutType });
+                        }
+                    );
+                });
+            });
         });
     });
 });
@@ -859,34 +877,46 @@ router.post('/item/:id/digital', (req, res) => {
         if (!file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
         if (!operadorId) return res.status(403).json({ error: 'ID do operador ausente.' });
 
-        const filePath = '/uploads/' + file.filename;
-        const fileType = file.mimetype; // ou pegar extensao
-        const timestamp = new Date().toISOString();
+        const { optimizeImage } = require('../utils/imageOptimizer');
 
-        // Buscar nome do operador para salvar no registro (opcional, ou salvar ID e join depois)
-        // O schema pede 'arquivo_impressao_digital_enviado_por' (TEXT). Vamos salvar ID ou Nome? 
-        // Vamos salvar Nome para facilitar leitura rápida, ou ID se quisermos consistencia. Schema parece TEXT.
-        // Vamos pegar o usuário.
+        db.get('SELECT arquivo_impressao_digital_url FROM itens_pedido WHERE id = ?', [itemId], (errQuery, rowOld) => {
+            const oldFilePath = rowOld ? rowOld.arquivo_impressao_digital_url : null;
 
-        db.get('SELECT nome, perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
-            if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
+            optimizeImage(file).catch(err => {
+                console.error("Erro na otimização do arquivo digital:", err);
+            }).finally(() => {
+                const filePath = '/uploads/' + file.filename;
+                const fileType = file.mimetype;
+                const timestamp = new Date().toISOString();
 
-            // Permitir Arte e Admin
-            if (user.perfil !== 'arte' && user.perfil !== 'admin') {
-                return res.status(403).json({ error: 'Sem permissão.' });
-            }
+                db.get('SELECT nome, perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
+                    if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
 
-            const sql = `UPDATE itens_pedido SET 
-                arquivo_impressao_digital_url = ?, 
-                arquivo_impressao_digital_nome = ?, 
-                arquivo_impressao_digital_tipo = ?, 
-                arquivo_impressao_digital_enviado_por = ?, 
-                arquivo_impressao_digital_enviado_em = ? 
-                WHERE id = ?`;
+                    if (user.perfil !== 'arte' && user.perfil !== 'admin') {
+                        return res.status(403).json({ error: 'Sem permissão.' });
+                    }
 
-            db.run(sql, [filePath, file.originalname, fileType, user.nome, timestamp, itemId], function (err2) {
-                if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ message: 'Arquivo Digital salvo com sucesso', path: filePath });
+                    const sql = `UPDATE itens_pedido SET 
+                        arquivo_impressao_digital_url = ?, 
+                        arquivo_impressao_digital_nome = ?, 
+                        arquivo_impressao_digital_tipo = ?, 
+                        arquivo_impressao_digital_enviado_por = ?, 
+                        arquivo_impressao_digital_enviado_em = ? 
+                        WHERE id = ?`;
+
+                    db.run(sql, [filePath, file.originalname, fileType, user.nome, timestamp, itemId], function (err2) {
+                        if (err2) return res.status(500).json({ error: err2.message });
+
+                        if (oldFilePath && oldFilePath !== filePath) {
+                            const { deleteUploadedFile } = require('../utils/fileCleanup');
+                            deleteUploadedFile(oldFilePath).catch(errCleanup => {
+                                console.error("Erro ao deletar arquivo digital antigo:", errCleanup);
+                            });
+                        }
+
+                        res.json({ message: 'Arquivo Digital salvo com sucesso', path: filePath });
+                    });
+                });
             });
         });
     });
@@ -908,27 +938,45 @@ router.post('/item/:id/laser', (req, res) => {
         if (!file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
         if (!operadorId) return res.status(403).json({ error: 'ID do operador ausente.' });
 
-        const filePath = '/uploads/' + file.filename;
-        const fileType = file.mimetype;
-        const timestamp = new Date().toISOString();
+        const { optimizeImage } = require('../utils/imageOptimizer');
 
-        db.get('SELECT nome, perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
-            if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
-            if (user.perfil !== 'arte' && user.perfil !== 'admin') {
-                return res.status(403).json({ error: 'Sem permissão.' });
-            }
+        db.get('SELECT arquivo_impressao_laser_url FROM itens_pedido WHERE id = ?', [itemId], (errQuery, rowOld) => {
+            const oldFilePath = rowOld ? rowOld.arquivo_impressao_laser_url : null;
 
-            const sql = `UPDATE itens_pedido SET 
-                arquivo_impressao_laser_url = ?, 
-                arquivo_impressao_laser_nome = ?, 
-                arquivo_impressao_laser_tipo = ?, 
-                arquivo_impressao_laser_enviado_por = ?, 
-                arquivo_impressao_laser_enviado_em = ? 
-                WHERE id = ?`;
+            optimizeImage(file).catch(err => {
+                console.error("Erro na otimização do arquivo laser:", err);
+            }).finally(() => {
+                const filePath = '/uploads/' + file.filename;
+                const fileType = file.mimetype;
+                const timestamp = new Date().toISOString();
 
-            db.run(sql, [filePath, file.originalname, fileType, user.nome, timestamp, itemId], function (err2) {
-                if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ message: 'Arquivo Laser salvo com sucesso', path: filePath });
+                db.get('SELECT nome, perfil FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
+                    if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
+                    if (user.perfil !== 'arte' && user.perfil !== 'admin') {
+                        return res.status(403).json({ error: 'Sem permissão.' });
+                    }
+
+                    const sql = `UPDATE itens_pedido SET 
+                        arquivo_impressao_laser_url = ?, 
+                        arquivo_impressao_laser_nome = ?, 
+                        arquivo_impressao_laser_tipo = ?, 
+                        arquivo_impressao_laser_enviado_por = ?, 
+                        arquivo_impressao_laser_enviado_em = ? 
+                        WHERE id = ?`;
+
+                    db.run(sql, [filePath, file.originalname, fileType, user.nome, timestamp, itemId], function (err2) {
+                        if (err2) return res.status(500).json({ error: err2.message });
+
+                        if (oldFilePath && oldFilePath !== filePath) {
+                            const { deleteUploadedFile } = require('../utils/fileCleanup');
+                            deleteUploadedFile(oldFilePath).catch(errCleanup => {
+                                console.error("Erro ao deletar arquivo laser antigo:", errCleanup);
+                            });
+                        }
+
+                        res.json({ message: 'Arquivo Laser salvo com sucesso', path: filePath });
+                    });
+                });
             });
         });
     });

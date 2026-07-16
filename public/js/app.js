@@ -9,7 +9,15 @@ function hasProfile(profileName) {
     const sec = currentUser.setores_secundarios 
         ? currentUser.setores_secundarios.toLowerCase().split(',').map(s => s.trim()) 
         : [];
-    return sec.includes(profileName.toLowerCase());
+    if (sec.includes(profileName.toLowerCase())) return true;
+    
+    // Se estiver checando 'impressao', e o usuário tiver algum subsetor de impressão nos secundários
+    if (profileName.toLowerCase() === 'impressao') {
+        const printSectors = ['silk_cilindrica', 'silk_plano', 'tampografia', 'impressao_laser', 'impressao_digital', 'estamparia'];
+        if (sec.some(s => printSectors.includes(s))) return true;
+    }
+    
+    return false;
 }
 
 // Inicialização
@@ -273,12 +281,12 @@ function setupNavigation() {
             {
                 id: 'impressao', label: 'Impressão', icon: 'ph-printer', profiles: ['admin', 'impressao'],
                 children: [
-                    { label: 'Silk Cilíndrica', icon: 'ph-cylinder', action: () => loadProductionQueue('SILK_CILINDRICA') },
-                    { label: 'Silk Plano', icon: 'ph-square', action: () => loadProductionQueue('SILK_PLANO') },
-                    { label: 'Tampografia', icon: 'ph-pen-nib', action: () => loadProductionQueue('TAMPOGRAFIA') },
-                    { label: 'Impressão Laser', icon: 'ph-lightning', action: () => loadProductionQueue('IMPRESSAO_LASER') },
-                    { label: 'Impressão Digital', icon: 'ph-printer', action: () => loadProductionQueue('IMPRESSAO_DIGITAL') },
-                    { label: 'Estamparia', icon: 'ph-t-shirt', action: () => loadProductionQueue('ESTAMPARIA') }
+                    { label: 'Silk Cilíndrica', icon: 'ph-cylinder', sector: 'SILK_CILINDRICA', action: () => loadProductionQueue('SILK_CILINDRICA') },
+                    { label: 'Silk Plano', icon: 'ph-square', sector: 'SILK_PLANO', action: () => loadProductionQueue('SILK_PLANO') },
+                    { label: 'Tampografia', icon: 'ph-pen-nib', sector: 'TAMPOGRAFIA', action: () => loadProductionQueue('TAMPOGRAFIA') },
+                    { label: 'Impressão Laser', icon: 'ph-lightning', sector: 'IMPRESSAO_LASER', action: () => loadProductionQueue('IMPRESSAO_LASER') },
+                    { label: 'Impressão Digital', icon: 'ph-printer', sector: 'IMPRESSAO_DIGITAL', action: () => loadProductionQueue('IMPRESSAO_DIGITAL') },
+                    { label: 'Estamparia', icon: 'ph-t-shirt', sector: 'ESTAMPARIA', action: () => loadProductionQueue('ESTAMPARIA') }
                 ],
                 // For 'impressao' profile (non-admin), logic handles single item below
             },
@@ -306,6 +314,8 @@ function setupNavigation() {
         // Filter visible items
         const visibleItems = sectionItems.filter(item => {
             if (userProfile === 'admin') return true;
+            // Check if user has explicit access to this screen ID in their secondary profiles list
+            if (userSecProfiles.includes(item.id)) return true;
             // Check main profile
             if (item.profiles.includes(userProfile)) return true;
             // Check secondary profiles
@@ -313,20 +323,51 @@ function setupNavigation() {
             return false;
         });
 
-        // Special Case: 'impressao' profile sees 'Produção (Setor)' instead of full submenu
+        // Special Case: 'impressao' profile sees 'Produção (Setor)' or filtered subsectors instead of full submenu
         if (hasProfile('impressao') && !hasProfile('admin') && sectionName === 'PRODUÇÃO') {
-            const setor = currentUser.setor_impressao || 'SILK_PLANO';
-            // Remove the admin 'Impressão' submenu item from list if present (it fits profile 'impressao', but we want specific behaviour)
-            // Actually, simplest is to inject the specific item if profile is impressao
+            const printSectors = ['SILK_CILINDRICA', 'SILK_PLANO', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'];
+            const userPrintSectors = [];
+            if (currentUser.setor_impressao) {
+                userPrintSectors.push(currentUser.setor_impressao.toUpperCase());
+            }
+            userSecProfiles.forEach(sec => {
+                const upperSec = sec.toUpperCase();
+                if (printSectors.includes(upperSec) && !userPrintSectors.includes(upperSec)) {
+                    userPrintSectors.push(upperSec);
+                }
+            });
+
             const impIndex = visibleItems.findIndex(i => i.id === 'impressao');
             if (impIndex >= 0) {
-                visibleItems[impIndex] = {
-                    id: 'impressao_user',
-                    label: `Produção (${setor})`,
-                    icon: 'ph-printer',
-                    profiles: ['impressao'],
-                    action: () => loadProductionQueue(setor)
-                };
+                if (userPrintSectors.length === 1) {
+                    const sector = userPrintSectors[0];
+                    const formatPrintSectorName = (s) => {
+                        const names = {
+                            'SILK_CILINDRICA': 'Silk Cilíndrica',
+                            'SILK_PLANO': 'Silk Plano',
+                            'TAMPOGRAFIA': 'Tampografia',
+                            'IMPRESSAO_LASER': 'Impressão Laser',
+                            'IMPRESSAO_DIGITAL': 'Impressão Digital',
+                            'ESTAMPARIA': 'Estamparia'
+                        };
+                        return names[s] || s;
+                    };
+                    visibleItems[impIndex] = {
+                        id: 'impressao_user',
+                        label: `Produção (${formatPrintSectorName(sector)})`,
+                        icon: 'ph-printer',
+                        profiles: ['impressao'],
+                        action: () => loadProductionQueue(sector)
+                    };
+                } else if (userPrintSectors.length > 1) {
+                    const baseItem = visibleItems[impIndex];
+                    visibleItems[impIndex] = {
+                        ...baseItem,
+                        children: baseItem.children.filter(child => child.sector && userPrintSectors.includes(child.sector.toUpperCase()))
+                    };
+                } else {
+                    visibleItems.splice(impIndex, 1);
+                }
             }
         }
 
@@ -338,8 +379,8 @@ function setupNavigation() {
             nav.appendChild(header);
 
             visibleItems.forEach(item => {
-                if (item.children && userProfile === 'admin') {
-                    // RENDER SUBMENU (Admin only usually)
+                if (item.children) {
+                    // RENDER SUBMENU (Admin and users with multiple sectors)
                     const container = document.createElement('div');
 
                     const toggle = document.createElement('div');
