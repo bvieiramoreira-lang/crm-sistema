@@ -493,10 +493,8 @@ tr:hover td {
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(4px);
-    overflow: auto;
-    /* Enable scrolling for large images */
+    overflow: hidden;
     padding: 2rem;
-    /* Buffer for scrolling */
 }
 
 .lightbox.show {

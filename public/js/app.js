@@ -2938,27 +2938,185 @@ async function uploadItemFile(itemId, fileType, pedidoId) {
     }
 }
 
+// --- LIGHTBOX ZOOM & PAN SYSTEM ---
+let lightboxZoom = 1;
+let lightboxPanX = 0;
+let lightboxPanY = 0;
+let isDraggingLightbox = false;
+let startDragX = 0;
+let startDragY = 0;
+
+function resetZoomState() {
+    lightboxZoom = 1;
+    lightboxPanX = 0;
+    lightboxPanY = 0;
+    isDraggingLightbox = false;
+    updateLightboxTransform();
+}
+
+function updateLightboxTransform() {
+    const img = document.getElementById('lightboxImage');
+    if (!img) return;
+    img.style.transform = `translate(${lightboxPanX}px, ${lightboxPanY}px) scale(${lightboxZoom})`;
+    
+    const wrapper = document.getElementById('lightboxImageWrapper');
+    if (wrapper) {
+        if (isDraggingLightbox) {
+            wrapper.style.cursor = 'grabbing';
+        } else if (lightboxZoom > 1) {
+            wrapper.style.cursor = 'grab';
+        } else {
+            wrapper.style.cursor = 'zoom-in';
+        }
+    }
+}
+
+function adjustLightboxZoom(amount) {
+    const prevZoom = lightboxZoom;
+    lightboxZoom = Math.max(0.5, Math.min(6, lightboxZoom + amount));
+    
+    // Smooth reset when going back to standard scale
+    if (lightboxZoom === 1) {
+        lightboxPanX = 0;
+        lightboxPanY = 0;
+    }
+    updateLightboxTransform();
+}
+
+function resetLightboxZoom() {
+    resetZoomState();
+}
+
+function initLightboxZoomEvents() {
+    const wrapper = document.getElementById('lightboxImageWrapper');
+    const img = document.getElementById('lightboxImage');
+    if (!wrapper || !img) return;
+
+    // 1. Wheel Zoom
+    wrapper.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.15 : 0.15;
+        adjustLightboxZoom(delta);
+    }, { passive: false });
+
+    // 2. Dragging/Panning
+    const startDrag = (clientX, clientY) => {
+        isDraggingLightbox = true;
+        startDragX = clientX - lightboxPanX;
+        startDragY = clientY - lightboxPanY;
+        updateLightboxTransform();
+    };
+
+    const moveDrag = (clientX, clientY) => {
+        if (!isDraggingLightbox) return;
+        lightboxPanX = clientX - startDragX;
+        lightboxPanY = clientY - startDragY;
+        updateLightboxTransform();
+    };
+
+    const endDrag = () => {
+        isDraggingLightbox = false;
+        updateLightboxTransform();
+    };
+
+    // Mouse Events
+    wrapper.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // Only left click
+        if (e.target.closest('.lightbox-controls')) return;
+        // If clicking the wrapper background, let click-to-close handler handle it
+        if (e.target === wrapper) return;
+        e.preventDefault();
+        startDrag(e.clientX, e.clientY);
+    });
+
+    // Register move/up globally to handle quick mouse movements outside image bounds
+    const handleGlobalMouseMove = (e) => {
+        moveDrag(e.clientX, e.clientY);
+    };
+    const handleGlobalMouseUp = () => {
+        endDrag();
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+
+    // Touch Events for Mobile/Tablets
+    wrapper.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            if (e.target.closest('.lightbox-controls')) return;
+            if (e.target === wrapper) return;
+            startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }, { passive: true });
+
+    wrapper.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1) {
+            moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }, { passive: true });
+
+    wrapper.addEventListener('touchend', () => {
+        endDrag();
+    });
+
+    // Double click/tap toggle zoom
+    let lastTap = 0;
+    wrapper.addEventListener('click', (e) => {
+        if (e.target.closest('.lightbox-controls')) return;
+        if (e.target === wrapper) return; // Background click is for close
+
+        const now = Date.now();
+        const DOUBLE_PRESS_DELAY = 300;
+        if (now - lastTap < DOUBLE_PRESS_DELAY) {
+            if (lightboxZoom > 1) {
+                resetZoomState();
+            } else {
+                lightboxZoom = 2.0;
+                updateLightboxTransform();
+            }
+        }
+        lastTap = now;
+    });
+
+    // Auto cleanup listeners when lightbox is closed
+    const observer = new MutationObserver(() => {
+        const lightbox = document.getElementById('lightbox');
+        if (lightbox && !lightbox.classList.contains('show')) {
+            window.removeEventListener('mousemove', handleGlobalMouseMove);
+            window.removeEventListener('mouseup', handleGlobalMouseUp);
+            observer.disconnect();
+        }
+    });
+    const lightboxNode = document.getElementById('lightbox');
+    if (lightboxNode) {
+        observer.observe(lightboxNode, { attributes: true, attributeFilter: ['class'] });
+    }
+}
+
 function injectLightbox() {
     if (document.getElementById('lightbox')) return;
     const html = `
-        <div id="lightbox" class="lightbox" onclick="if(event.target === this) this.classList.remove('show')">
-            <span class="lightbox-close" onclick="this.parentElement.classList.remove('show')">&times;</span>
-            <div id="lightboxContent"></div>
+        <div id="lightbox" class="lightbox" onclick="if(event.target === this) closeLightbox()">
+            <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+            <div id="lightboxContent" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"></div>
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeLightbox() {
+    const box = document.getElementById('lightbox');
+    if (box) box.classList.remove('show');
+    resetZoomState();
 }
 
 function renderLayoutIndicator(path, type) {
     if (!path) return '<span style="color: #cbd5e1; font-size: 0.8rem;">-</span>';
 
     let thumb = '';
-    // Check if type is 'image' or 'image/png' etc (backend saves 'image' or 'pdf' short string in some places, 
-    // but code says 'image' or 'pdf'. Let's handle safe check.
-    // Migration said 'image' or 'pdf'. File upload route saves: file.mimetype.startsWith('image/') ? 'image' : 'pdf';
-
     if (type === 'image') {
-        thumb = `<img src="${path}" class="layout-thumb" onclick="viewLayout('${path}', '${type}')" title="Ver layout">`;
+        const thumbPath = path.replace('/uploads/', '/uploads/thumb-');
+        thumb = `<img src="${thumbPath}" class="layout-thumb" onclick="viewLayout('${path}', '${type}')" title="Ver layout" onerror="this.onerror=null; this.src='${path}';">`;
     } else {
         thumb = `<div class="layout-thumb pdf-thumb" onclick="viewLayout('${path}', '${type}')" title="Ver PDF"><i class="ph-file-pdf"></i></div>`;
     }
@@ -2975,9 +3133,10 @@ function renderLayoutIndicatorSm(path, type) {
     if (!path) return '<span style="color: #cbd5e1; font-size: 0.8rem;">-</span>';
 
     if (type === 'image') {
+        const thumbPath = path.replace('/uploads/', '/uploads/thumb-');
         return `
             <div class="layout-thumb-container" onclick="viewLayout('${path}', '${type}')" title="Ver layout">
-                <img src="${path}" loading="lazy" decoding="async" alt="Layout">
+                <img src="${thumbPath}" loading="lazy" decoding="async" alt="Layout" onerror="this.onerror=null; this.src='${path}';">
                 <div class="layout-thumb-overlay">Ver</div>
             </div>
         `;
@@ -2991,22 +3150,54 @@ function renderLayoutIndicatorSm(path, type) {
     }
 }
 
-
 function viewLayout(path, type) {
     injectLightbox();
     const box = document.getElementById('lightbox');
     const content = document.getElementById('lightboxContent');
 
-    // Path comes from DB, usually relative or absolute URL. 
-    // Since we serve /uploads, we might need to fix path if it's stored as local path
-    // DB stores '/uploads/filename.ext' based on my backend code, so it is correct for src.
-
-    if (type && type.startsWith('image')) {
-        content.innerHTML = `<img src="${path}" class="lightbox-content" onclick="this.classList.toggle('zoomed')" title="Clique para Zoom">`;
+    if (type && (type.startsWith('image') || type === 'image')) {
+        content.innerHTML = `
+            <div class="lightbox-zoom-wrapper" id="lightboxImageWrapper" onclick="if(event.target === this) closeLightbox()" style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: zoom-in;">
+                <img id="lightboxImage" src="${path}" class="lightbox-content-custom" style="max-width: 90%; max-height: 90%; transform-origin: center center; transition: transform 0.1s ease-out; user-select: none; pointer-events: auto; border-radius: var(--radius); box-shadow: var(--shadow-lg); border: 1px solid var(--border); background: var(--bg-surface);" draggable="false">
+                
+                <!-- Controls overlay -->
+                <div class="lightbox-controls" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(24, 24, 27, 0.85); padding: 8px 16px; border-radius: 30px; z-index: 2002; backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.15); pointer-events: auto;">
+                    <style>
+                        .lightbox-btn-ctrl {
+                            background: none;
+                            border: none;
+                            color: rgba(255, 255, 255, 0.85);
+                            cursor: pointer;
+                            font-size: 1.4rem;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            width: 38px;
+                            height: 38px;
+                            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                            border-radius: 50%;
+                        }
+                        .lightbox-btn-ctrl:hover {
+                            color: #ffffff;
+                            background: rgba(255, 255, 255, 0.15);
+                            transform: scale(1.1);
+                        }
+                        .lightbox-btn-ctrl:active {
+                            transform: scale(0.95);
+                        }
+                    </style>
+                    <button class="lightbox-btn-ctrl" onclick="adjustLightboxZoom(0.25)" title="Aumentar Zoom"><i class="ph-plus-circle"></i></button>
+                    <button class="lightbox-btn-ctrl" onclick="adjustLightboxZoom(-0.25)" title="Diminuir Zoom"><i class="ph-minus-circle"></i></button>
+                    <button class="lightbox-btn-ctrl" onclick="resetLightboxZoom()" title="Resetar"><i class="ph-arrows-counter-clockwise"></i></button>
+                </div>
+            </div>
+        `;
+        resetZoomState();
+        setTimeout(initLightboxZoomEvents, 50);
     } else if (type && type === 'application/pdf') {
         content.innerHTML = `<iframe src="${path}" style="width: 80vw; height: 80vh; border: none; background: white;"></iframe>`;
     } else {
-        content.innerHTML = `<p>Tipo de arquivo não suportado para visualização direta.</p><a href="${path}" target="_blank" class="btn">Abrir em nova aba</a>`;
+        content.innerHTML = `<p style="color: white; margin-bottom: 1rem;">Tipo de arquivo não suportado para visualização direta.</p><a href="${path}" target="_blank" class="btn">Abrir em nova aba</a>`;
     }
 
     box.classList.add('show');
@@ -4047,7 +4238,8 @@ function renderItemTimeline(item) {
     let layoutThumb = '<div style="background:#eee; width:80px; height:80px; display:flex; align-items:center; justify-content:center; border-radius:4px; color:#999; font-size:0.8rem;">S/ Layout</div>';
     if (item.layout_path) {
         if (item.layout_type === 'image') {
-            layoutThumb = `<img src="${item.layout_path}" style="width:100px; height:100px; object-fit:cover; border-radius:4px; border:1px solid #ddd; cursor:pointer;" onclick="viewLayout('${item.layout_path}', 'image')">`;
+            const thumbPath = item.layout_path.replace('/uploads/', '/uploads/thumb-');
+            layoutThumb = `<img src="${thumbPath}" style="width:100px; height:100px; object-fit:cover; border-radius:4px; border:1px solid #ddd; cursor:pointer;" onclick="viewLayout('${item.layout_path}', 'image')" onerror="this.onerror=null; this.src='${item.layout_path}';">`;
         } else {
             layoutThumb = `<div style="width:100px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f1f5f9; border-radius:4px; cursor:pointer;" onclick="viewLayout('${item.layout_path}', 'pdf')"><i class="ph-file-pdf" style="font-size:2rem; color:#ef4444"></i><span style="font-size:0.7rem;">PDF</span></div>`;
         }
@@ -4181,7 +4373,8 @@ function renderLayoutThumbnail(order) {
     if (!itemWithLayout) return '<span style="color:#ccc; font-size:0.8rem">S/ Layout</span>';
 
     if (itemWithLayout.layout_type === 'image') {
-        return `<img src="${itemWithLayout.layout_path}" style="width:40px; height:40px; object-fit:cover; border-radius:4px;">`;
+        const thumbPath = itemWithLayout.layout_path.replace('/uploads/', '/uploads/thumb-');
+        return `<img src="${thumbPath}" style="width:40px; height:40px; object-fit:cover; border-radius:4px;" onerror="this.onerror=null; this.src='${itemWithLayout.layout_path}';">`;
     } else {
         return `<i class="ph-file-pdf" style="font-size:1.5rem; color:#ef4444"></i>`;
     }
