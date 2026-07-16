@@ -3151,56 +3151,7 @@ function renderLayoutIndicatorSm(path, type) {
 }
 
 function viewLayout(path, type) {
-    injectLightbox();
-    const box = document.getElementById('lightbox');
-    const content = document.getElementById('lightboxContent');
-
-    if (type && (type.startsWith('image') || type === 'image')) {
-        content.innerHTML = `
-            <div class="lightbox-zoom-wrapper" id="lightboxImageWrapper" onclick="if(event.target === this) closeLightbox()" style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: zoom-in;">
-                <img id="lightboxImage" src="${path}" class="lightbox-content-custom" style="max-width: 90%; max-height: 90%; transform-origin: center center; transition: transform 0.1s ease-out; user-select: none; pointer-events: auto; border-radius: var(--radius); box-shadow: var(--shadow-lg); border: 1px solid var(--border); background: var(--bg-surface);" draggable="false">
-                
-                <!-- Controls overlay -->
-                <div class="lightbox-controls" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(24, 24, 27, 0.85); padding: 8px 16px; border-radius: 30px; z-index: 2002; backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.15); pointer-events: auto;">
-                    <style>
-                        .lightbox-btn-ctrl {
-                            background: none;
-                            border: none;
-                            color: rgba(255, 255, 255, 0.85);
-                            cursor: pointer;
-                            font-size: 1.4rem;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            width: 38px;
-                            height: 38px;
-                            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-                            border-radius: 50%;
-                        }
-                        .lightbox-btn-ctrl:hover {
-                            color: #ffffff;
-                            background: rgba(255, 255, 255, 0.15);
-                            transform: scale(1.1);
-                        }
-                        .lightbox-btn-ctrl:active {
-                            transform: scale(0.95);
-                        }
-                    </style>
-                    <button class="lightbox-btn-ctrl" onclick="adjustLightboxZoom(0.25)" title="Aumentar Zoom"><i class="ph-plus-circle"></i></button>
-                    <button class="lightbox-btn-ctrl" onclick="adjustLightboxZoom(-0.25)" title="Diminuir Zoom"><i class="ph-minus-circle"></i></button>
-                    <button class="lightbox-btn-ctrl" onclick="resetLightboxZoom()" title="Resetar"><i class="ph-arrows-counter-clockwise"></i></button>
-                </div>
-            </div>
-        `;
-        resetZoomState();
-        setTimeout(initLightboxZoomEvents, 50);
-    } else if (type && type === 'application/pdf') {
-        content.innerHTML = `<iframe src="${path}" style="width: 80vw; height: 80vh; border: none; background: white;"></iframe>`;
-    } else {
-        content.innerHTML = `<p style="color: white; margin-bottom: 1rem;">Tipo de arquivo não suportado para visualização direta.</p><a href="${path}" target="_blank" class="btn">Abrir em nova aba</a>`;
-    }
-
-    box.classList.add('show');
+    window.open(`/viewer.html?file=${encodeURIComponent(path)}&type=${encodeURIComponent(type)}`, '_blank');
 }
 
 // --- VALIDATION HELPER ---
