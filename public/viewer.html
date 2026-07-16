@@ -91,6 +91,7 @@
         .btn-ctrl {
             background: none;
             border: none;
+            outline: none;
             color: rgba(255, 255, 255, 0.85);
             cursor: pointer;
             font-size: 1.4rem;
@@ -226,10 +227,10 @@
                 contentArea.innerHTML = `
                     <img id="viewerImage" src="${filePath}" draggable="false">
                     <div class="controls-overlay">
-                        <button class="btn-ctrl" onclick="adjustZoom(0.25)" title="Aumentar Zoom"><i class="ph-plus-circle"></i></button>
+                        <button class="btn-ctrl" onclick="adjustZoom(0.25)" title="Aumentar Zoom"><i class="ph ph-plus-circle"></i></button>
                         <span class="zoom-label" id="zoomLabel">100%</span>
-                        <button class="btn-ctrl" onclick="adjustZoom(-0.25)" title="Diminuir Zoom"><i class="ph-minus-circle"></i></button>
-                        <button class="btn-ctrl" onclick="resetZoom()" title="Resetar"><i class="ph-arrows-counter-clockwise"></i></button>
+                        <button class="btn-ctrl" onclick="adjustZoom(-0.25)" title="Diminuir Zoom"><i class="ph ph-minus-circle"></i></button>
+                        <button class="btn-ctrl" onclick="resetZoom()" title="Resetar"><i class="ph ph-arrows-counter-clockwise"></i></button>
                     </div>
                 `;
                 
