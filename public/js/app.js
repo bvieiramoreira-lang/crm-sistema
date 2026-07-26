@@ -2763,7 +2763,7 @@ async function openArteAction(pedidoId) {
                                     <option value="IMPRESSAO_LASER" ${item.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
                                     <option value="IMPRESSAO_DIGITAL" ${item.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
                                     <option value="ESTAMPARIA" ${item.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
-                                    <option value="TERCEIRIZADO" ${item.is_terceirizado || item.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''} ${item.is_terceirizado ? '' : 'style="display:none;"'}>Terceirizado</option>
+                                    <option value="TERCEIRIZADO" ${item.is_terceirizado || item.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''}>Terceirizado</option>
                                 </select>
                             </div>
 
@@ -4247,7 +4247,7 @@ function renderItemTimeline(item) {
 
     // Desembale
     const desSection = renderTimelineStep('Desembale', item.responsavel_desembale, item.data_desembale, 'ph-box-open', '#8b5cf6',
-        item.setor_destino ? `Destino: ${item.setor_destino}` : null);
+        item.setor_destino ? `Destino: ${item.setor_destino}` : null, !!item.is_terceirizado);
 
     // Produção
     // Calculate Prod Time from events
@@ -4267,12 +4267,12 @@ function renderItemTimeline(item) {
             prodDuration = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
         }
     }
-    const prodDetails = `
+    const prodDetails = item.is_terceirizado ? 'Impressão Externa' : `
         ${prodStart ? `<div>Início: ${formatDateTime(prodStart)}</div>` : ''}
         ${prodEnd ? `<div>Fim: ${formatDateTime(prodEnd)}</div>` : ''}
         ${prodDuration ? `<div style="font-weight:bold; color:#059669">Duração: ${prodDuration}</div>` : ''}
     `;
-    const prodSection = renderTimelineStep('Impressão', item.responsavel_impressao, prodEnd, 'ph-printer', '#ec4899', prodDetails);
+    const prodSection = renderTimelineStep('Impressão', item.responsavel_impressao, prodEnd, 'ph-printer', '#ec4899', prodDetails, !!item.is_terceirizado);
 
     // Embale
     let embaleDetails = null;
@@ -4342,20 +4342,20 @@ function renderDeadline(dateStr) {
     return `<span style="color:${color}; font-weight:bold">${d.toLocaleDateString()} (${days > 0 ? days + ' dias' : 'Atrasado'})</span>`;
 }
 
-function renderTimelineStep(title, user, date, icon, color, extraHtml) {
-    const isDone = !!date || !!user;
-    const opacity = isDone ? '1' : '0.4';
-    const dateStr = formatDateTime(date);
+function renderTimelineStep(title, user, date, icon, color, extraHtml, isBypassed = false) {
+    const isDone = (!!date || !!user) && !isBypassed;
+    const opacity = isBypassed ? '0.6' : (isDone ? '1' : '0.4');
+    const dateStr = isBypassed ? '-' : formatDateTime(date);
 
     return `
         <div style="position:relative; padding:0.5rem; text-align:center; opacity:${opacity}">
-            <div style="width:40px; height:40px; background:${isDone ? color : '#e2e8f0'}; color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto;">
+            <div style="width:40px; height:40px; background:${isBypassed ? '#f1f5f9' : (isDone ? color : '#e2e8f0')}; color:${isBypassed ? '#94a3b8' : 'white'}; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto; border:${isBypassed ? '2px dashed #cbd5e1' : 'none'};">
                 <i class="${icon}" style="font-size:1.2rem"></i>
             </div>
-            <div style="font-weight:bold; font-size:0.9rem; color:${color}">${title}</div>
-            <div style="font-size:0.8rem; margin-top:0.25rem;">${user || '-'}</div>
+            <div style="font-weight:bold; font-size:0.9rem; color:${isBypassed ? '#94a3b8' : color}">${title}</div>
+            <div style="font-size:0.8rem; margin-top:0.25rem;">${isBypassed ? 'Pulado (Terc.)' : (user || '-')}</div>
             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.25rem;">${dateStr || '-'}</div>
-            ${extraHtml ? `<div style="font-size:0.75rem; color:#475569; margin-top:0.25rem; background:#f1f5f9; padding:2px 4px; border-radius:4px; display:inline-block;">${extraHtml}</div>` : ''}
+            ${extraHtml ? `<div style="font-size:0.75rem; color:${isBypassed ? '#94a3b8' : '#475569'}; margin-top:0.25rem; background:#f1f5f9; padding:2px 4px; border-radius:4px; display:inline-block;">${extraHtml}</div>` : ''}
         </div>
     `;
 }

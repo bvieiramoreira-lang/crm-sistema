@@ -321,11 +321,12 @@ router.put('/item/:id/arte', (req, res) => {
             cor_impressao = ?, 
             observacao_arte = ?, 
             status_atual = 'AGUARDANDO_SEPARACAO', 
+            is_terceirizado = CASE WHEN ? = 'TERCEIRIZADO' THEN 1 ELSE 0 END,
             data_arte_aprovacao = DATETIME('now', 'localtime') 
             ${respSQL} 
             WHERE id = ?`;
 
-        const params = [setor_destino, cor_impressao, observacao_arte || null];
+        const params = [setor_destino, cor_impressao, observacao_arte || null, setor_destino];
         if (responsavel) params.push(responsavel);
         params.push(itemId);
 
@@ -515,11 +516,12 @@ router.put('/pedido/:pedidoId/aprovar', (req, res) => {
                 cor_impressao = ?, 
                 observacao_arte = ?, 
                 status_atual = 'AGUARDANDO_SEPARACAO', 
+                is_terceirizado = CASE WHEN ? = 'TERCEIRIZADO' THEN 1 ELSE 0 END,
                 data_arte_aprovacao = DATETIME('now', 'localtime') 
                 ${respSQL} 
                 WHERE id = ? AND pedido_id = ?`;
 
-            const params = [item.setor_destino, item.cor_impressao, item.observacao_arte || null];
+            const params = [item.setor_destino, item.cor_impressao, item.observacao_arte || null, item.setor_destino];
             if (item.responsavel) params.push(item.responsavel);
             params.push(item.id, pedidoId);
 
@@ -556,7 +558,9 @@ router.put('/pedido/:pedidoId/reverter-arte', (req, res) => {
                 status_atual = 'AGUARDANDO_ARTE',
                 arte_status = 'AGUARDANDO_APROVACAO',
                 is_alteracao = 1,
-                data_arte_aprovacao = NULL
+                data_arte_aprovacao = NULL,
+                setor_destino = NULL,
+                is_terceirizado = 0
             WHERE pedido_id = ? AND status_atual != 'CANCELADO'
         `;
 
@@ -593,6 +597,7 @@ router.put('/item/:id/status', (req, res) => {
 
     if (novo_status_item === 'AGUARDANDO_DESEMBALE') timestampCol = 'data_separacao';
     else if (novo_status_item === 'AGUARDANDO_PRODUCAO') timestampCol = 'data_desembale';
+    else if (novo_status_item === 'AGUARDANDO_EMBALE') timestampCol = 'data_separacao';
     else if (novo_status_item === 'CONCLUIDO') {
         timestampCol = 'data_envio';
     }
@@ -1106,7 +1111,7 @@ router.put('/item/:id/return', (req, res) => {
         // CORRECTION: If returning to Art/Start, reset art approval and clear sector
         if (target_status === 'NOVO' || target_status === 'AGUARDANDO_ARTE' || target_status.includes('ARTE')) {
             console.log(`[ROLLBACK-RESET] Reseting Art Status for Item ${itemId}. Target: ${target_status}`);
-            sqlUpdate = `UPDATE itens_pedido SET status_atual = ?, arte_status = 'AGUARDANDO_APROVACAO', is_alteracao = 1, responsavel_arte = NULL, data_inicio_arte = NULL, data_entrada_arte = DATETIME('now', 'localtime'), setor_destino = NULL WHERE id = ?`;
+            sqlUpdate = `UPDATE itens_pedido SET status_atual = ?, arte_status = 'AGUARDANDO_APROVACAO', is_alteracao = 1, responsavel_arte = NULL, data_inicio_arte = NULL, data_entrada_arte = DATETIME('now', 'localtime'), setor_destino = NULL, is_terceirizado = 0 WHERE id = ?`;
         } else {
             console.log(`[ROLLBACK-NORMAL] Item ${itemId} Target: ${target_status} (No Art Reset)`);
         }
