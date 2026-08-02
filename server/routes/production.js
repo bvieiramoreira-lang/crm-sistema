@@ -3,6 +3,35 @@ const router = express.Router();
 const db = require('../database');
 const multer = require('multer');
 
+// Função auxiliar para sincronizar o status do Kit Pai de acordo com o status dos seus filhos
+function checkAndSyncKitParent(db, childItemId) {
+    db.get('SELECT parent_item_id FROM itens_pedido WHERE id = ?', [childItemId], (err, itemRow) => {
+        if (!err && itemRow && itemRow.parent_item_id) {
+            const parentId = itemRow.parent_item_id;
+            
+            // Verificar se todos os filhos desse pai estão prontos (AGUARDANDO_EMBALE, AGUARDANDO_ENVIO, CONCLUIDO, CANCELADO)
+            db.get(`SELECT COUNT(*) as pending_count 
+                    FROM itens_pedido 
+                    WHERE parent_item_id = ? 
+                      AND status_atual NOT IN ('AGUARDANDO_EMBALE', 'AGUARDANDO_ENVIO', 'CONCLUIDO', 'CANCELADO')`,
+                [parentId],
+                (errCheck, countRow) => {
+                    if (errCheck) return;
+                    
+                    if (countRow.pending_count === 0) {
+                        // Todos os filhos estão prontos! Mover o pai para AGUARDANDO_EMBALE
+                        db.run(`UPDATE itens_pedido SET status_atual = 'AGUARDANDO_EMBALE' WHERE id = ? AND status_atual != 'AGUARDANDO_EMBALE'`, [parentId]);
+                    } else {
+                        // Pelo menos um filho não está pronto. Se o pai estiver em AGUARDANDO_EMBALE, tirar do Embale (volta para AGUARDANDO_DESEMBALE)
+                        db.run(`UPDATE itens_pedido SET status_atual = 'AGUARDANDO_DESEMBALE' WHERE id = ? AND status_atual = 'AGUARDANDO_EMBALE'`, [parentId]);
+                    }
+                }
+            );
+        }
+    });
+}
+
+
 // Listar Itens por Contexto (Setor ou Status)
 // GET /api/production/itens/:contexto
 // Query param: ?future=true (para buscar itens que virão para este setor)
@@ -68,11 +97,16 @@ router.get('/itens/:contexto', (req, res) => {
         )
     `;
 
+    let kitFilter = "AND i.is_kit_component = 0";
+    if (contexto === 'AGUARDANDO_DESEMBALE' || ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(contexto)) {
+        kitFilter = "AND i.is_kit = 0";
+    }
+
     if (contexto === 'ARTE') {
         // Arte não tem "Full Flow" visivel de outros setores ainda, 
         // e nada vem "antes" da Arte a não ser Financeiro (que não é setor de produção listado aqui)
         // Mantemos lógica original
-        query = `${baseSelect} WHERE i.arte_status != 'APROVADO' AND i.status_atual != 'CANCELADO' ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
+        query = `${baseSelect} WHERE i.is_kit_component = 0 AND i.arte_status != 'APROVADO' AND i.status_atual != 'CANCELADO' ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
     }
     else if (isFuture) {
         // LOGICA DE VISUALIZAÇÃO FUTURA
@@ -120,17 +154,17 @@ router.get('/itens/:contexto', (req, res) => {
         }
 
         const placeholders = allowedStatuses.map(() => '?').join(',');
-        query = `${baseSelect} WHERE i.status_atual IN (${placeholders}) ${extraCondition} ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
+        query = `${baseSelect} WHERE i.status_atual IN (${placeholders}) ${kitFilter} ${extraCondition} ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
         params = allowedStatuses;
 
     } else {
         // LOGICA PADRÃO (EXECUÇÃO)
         if (['AGUARDANDO_SEPARACAO', 'AGUARDANDO_DESEMBALE', 'AGUARDANDO_EMBALE', 'AGUARDANDO_ENVIO'].includes(contexto)) {
-            query = `${baseSelect} WHERE i.status_atual = ? ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
+            query = `${baseSelect} WHERE i.status_atual = ? ${kitFilter} ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
             params = [contexto];
         } else {
             // Filas de Setor de Produção
-            query = `${baseSelect} WHERE i.setor_destino = ? AND (i.status_atual = 'AGUARDANDO_PRODUCAO' OR i.status_atual = 'EM_PRODUCAO') ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
+            query = `${baseSelect} WHERE i.setor_destino = ? AND (i.status_atual = 'AGUARDANDO_PRODUCAO' OR i.status_atual = 'EM_PRODUCAO') ${kitFilter} ORDER BY CASE WHEN p.prazo_entrega IS NULL OR p.prazo_entrega = '' THEN 1 ELSE 0 END, p.prazo_entrega ASC`;
             params = [contexto];
         }
     }
@@ -199,6 +233,105 @@ router.get('/pedido/:pedidoId/itens', (req, res) => {
         });
     });
 });
+
+// GET todos os componentes de um item pai do tipo Kit
+router.get('/item/:id/children', (req, res) => {
+    const parentId = req.params.id;
+    db.all(`SELECT * FROM itens_pedido WHERE parent_item_id = ? AND status_atual != 'CANCELADO'`, [parentId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// POST Desmembrar Kit (Arte)
+router.post('/item/:id/desmembrar-kit', (req, res) => {
+    const parentId = req.params.id;
+    const { components } = req.body; // array of { id, produto, setor_destino, cor_impressao, observacao_arte }
+
+    if (!components || !Array.isArray(components)) {
+        return res.status(400).json({ error: 'Lista de componentes inválida' });
+    }
+
+    // 1. Obter o item pai
+    db.get('SELECT * FROM itens_pedido WHERE id = ?', [parentId], (err, parent) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!parent) return res.status(404).json({ error: 'Item pai não encontrado' });
+
+        const isKitVal = components.length > 0 ? 1 : 0;
+        // 2. Marcar o pai como is_kit correspondente
+        db.run('UPDATE itens_pedido SET is_kit = ? WHERE id = ?', [isKitVal, parentId], (errUpdate) => {
+            if (errUpdate) return res.status(500).json({ error: errUpdate.message });
+
+            // 3. Obter os filhos existentes no banco
+            db.all('SELECT id, layout_path, arquivo_impressao_digital_url, arquivo_impressao_laser_url, arquivo_impressao_tampografia_url FROM itens_pedido WHERE parent_item_id = ?', [parentId], (errChildren, currentChildren) => {
+                if (errChildren) return res.status(500).json({ error: errChildren.message });
+
+                const payloadIds = components.filter(c => c.id).map(c => Number(c.id));
+                const childrenToDelete = currentChildren.filter(c => !payloadIds.includes(c.id));
+
+                const performDatabaseOps = () => {
+                    // Inserir ou atualizar os que vieram no payload
+                    const promises = components.map(c => {
+                        return new Promise((resolve, reject) => {
+                            if (c.id) {
+                                // Atualizar existente
+                                db.run(`UPDATE itens_pedido 
+                                        SET produto = ?, setor_destino = ?, cor_impressao = ?, observacao_arte = ?, quantidade = ?
+                                        WHERE id = ?`,
+                                    [c.produto, c.setor_destino, c.cor_impressao, c.observacao_arte, parent.quantidade, c.id],
+                                    function(errUp) {
+                                        if (errUp) reject(errUp);
+                                        else resolve();
+                                    }
+                                );
+                            } else {
+                                // Inserir novo
+                                db.run(`INSERT INTO itens_pedido 
+                                        (pedido_id, produto, quantidade, status_atual, arte_status, is_kit, parent_item_id, is_kit_component, setor_destino, cor_impressao, observacao_arte, responsavel_arte)
+                                        VALUES (?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)`,
+                                    [parent.pedido_id, c.produto, parent.quantidade, parent.status_atual, parent.arte_status, parentId, c.setor_destino, c.cor_impressao, c.observacao_arte, parent.responsavel_arte],
+                                    function(errIns) {
+                                        if (errIns) reject(errIns);
+                                        else resolve();
+                                    }
+                                );
+                            }
+                        });
+                    });
+
+                    Promise.all(promises)
+                        .then(() => {
+                            res.json({ message: 'Kit desmembrado/atualizado com sucesso!' });
+                        })
+                        .catch(errPromises => {
+                            res.status(500).json({ error: 'Erro ao desmembrar componentes: ' + errPromises.message });
+                        });
+                };
+
+                // Excluir os removidos e seus arquivos
+                if (childrenToDelete.length > 0) {
+                    const { deleteFilesForItems } = require('../utils/fileCleanup');
+                    deleteFilesForItems(childrenToDelete)
+                        .catch(errClean => console.error("Erro ao limpar arquivos de componentes removidos:", errClean))
+                        .finally(() => {
+                            const idsToDelete = childrenToDelete.map(c => c.id);
+                            // Deletar também eventos associados a esses componentes
+                            db.run(`DELETE FROM eventos_producao WHERE item_id IN (${idsToDelete.join(',')})`, (errEv) => {
+                                if (errEv) console.error("Erro ao deletar eventos de componentes:", errEv);
+                                db.run(`DELETE FROM itens_pedido WHERE id IN (${idsToDelete.join(',')})`, (errDel) => {
+                                    if (errDel) return res.status(500).json({ error: errDel.message });
+                                    performDatabaseOps();
+                                });
+                            });
+                        });
+                } else {
+                    performDatabaseOps();
+                }
+            });
+        });
+    });
+});
+
 
 // GET Single Item (Detalhes completos)
 router.get('/item/:id', (req, res) => {
@@ -488,7 +621,7 @@ router.put('/pedido/:pedidoId/reprovar', (req, res) => {
 
 // Aprovar Arte do Pedido em Lote (Roteamento Individual por Item)
 router.put('/pedido/:pedidoId/aprovar', (req, res) => {
-    const { itens } = req.body; // Array de { id, setor_destino, cor_impressao, observacao_arte, responsavel }
+    const { itens } = req.body; // Array de { id, setor_destino, cor_impressao, observacao_arte, responsavel, is_kit }
     const pedidoId = req.params.pedidoId;
 
     if (!itens || !Array.isArray(itens) || itens.length === 0) {
@@ -500,7 +633,8 @@ router.put('/pedido/:pedidoId/aprovar', (req, res) => {
         let completed = 0;
 
         itens.forEach(item => {
-            if (!item.cor_impressao || item.cor_impressao.trim() === '') {
+            const isKit = item.is_kit === 1 || item.is_kit === true;
+            if (!isKit && (!item.cor_impressao || item.cor_impressao.trim() === '')) {
                 errors.push({ id: item.id, error: 'Preencha a Cor de Impressão antes de aprovar.' });
                 completed++;
                 if (completed === itens.length) {
@@ -521,13 +655,28 @@ router.put('/pedido/:pedidoId/aprovar', (req, res) => {
                 ${respSQL} 
                 WHERE id = ? AND pedido_id = ?`;
 
-            const params = [item.setor_destino, item.cor_impressao, item.observacao_arte || null, item.setor_destino];
+            const corVal = isKit ? 'KIT' : item.cor_impressao;
+            const setorVal = isKit ? 'KIT' : item.setor_destino;
+            const params = [setorVal, corVal, item.observacao_arte || null, setorVal];
             if (item.responsavel) params.push(item.responsavel);
             params.push(item.id, pedidoId);
 
             db.run(query, params, function (err) {
                 if (err) {
                     errors.push({ id: item.id, error: err.message });
+                } else {
+                    if (isKit) {
+                        const childQuery = `UPDATE itens_pedido SET 
+                            arte_status = 'APROVADO',
+                            status_atual = 'AGUARDANDO_SEPARACAO',
+                            data_arte_aprovacao = DATETIME('now', 'localtime'),
+                            responsavel_arte = ?
+                            WHERE parent_item_id = ?`;
+                        
+                        db.run(childQuery, [item.responsavel, item.id], (errChild) => {
+                            if (errChild) console.error("[KIT-APPROVE-SYNC] Erro ao aprovar filhos:", errChild);
+                        });
+                    }
                 }
                 completed++;
                 if (completed === itens.length) {
@@ -614,6 +763,22 @@ router.put('/item/:id/status', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
 
             const changes = this.changes;
+
+            // Se for Kit Pai, sincronizar o status para todos os seus filhos
+            db.get('SELECT is_kit FROM itens_pedido WHERE id = ?', [itemId], (errKit, itemRow) => {
+                if (!errKit && itemRow && itemRow.is_kit === 1) {
+                    let childQuery = `UPDATE itens_pedido SET status_atual = ? WHERE parent_item_id = ?`;
+                    if (timestampCol) {
+                        childQuery = `UPDATE itens_pedido SET status_atual = ?, ${timestampCol} = DATETIME('now', 'localtime') ${extraCols} WHERE parent_item_id = ?`;
+                    }
+                    db.run(childQuery, [novo_status_item, itemId], (errChildUpdate) => {
+                        if (errChildUpdate) console.error('[KIT-SYNC] Erro ao sincronizar status dos filhos:', errChildUpdate);
+                    });
+                }
+            });
+
+            // Se for Filho de Kit (is_kit_component = 1), checar se sincroniza o pai
+            checkAndSyncKitParent(db, itemId);
 
             // 2. ONLY if marking as CONCLUIDO, check if whole order is finished
             if (novo_status_item === 'CONCLUIDO') {
@@ -824,8 +989,9 @@ router.post('/item/:id/layout', (req, res) => {
             const setoresSecundarios = user.setores_secundarios
                 ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
                 : [];
-            const isArte = user.perfil === 'arte' || setoresSecundarios.includes('arte');
-            const isAdmin = user.perfil === 'admin' || setoresSecundarios.includes('admin');
+            const userPerfil = (user.perfil || '').toLowerCase();
+            const isArte = userPerfil === 'arte' || setoresSecundarios.includes('arte');
+            const isAdmin = userPerfil === 'admin' || setoresSecundarios.includes('admin');
 
             if (!isArte && !isAdmin) {
                 return res.status(403).json({ error: 'Sem permissão. Apenas Arte e Admin podem enviar layouts.' });
@@ -906,8 +1072,9 @@ router.post('/item/:id/digital', (req, res) => {
                     const setoresSecundarios = user.setores_secundarios
                         ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
                         : [];
-                    const isArte = user.perfil === 'arte' || setoresSecundarios.includes('arte');
-                    const isAdmin = user.perfil === 'admin' || setoresSecundarios.includes('admin');
+                    const userPerfil = (user.perfil || '').toLowerCase();
+                    const isArte = userPerfil === 'arte' || setoresSecundarios.includes('arte');
+                    const isAdmin = userPerfil === 'admin' || setoresSecundarios.includes('admin');
 
                     if (!isArte && !isAdmin) {
                         return res.status(403).json({ error: 'Sem permissão.' });
@@ -973,8 +1140,9 @@ router.post('/item/:id/laser', (req, res) => {
                     const setoresSecundarios = user.setores_secundarios
                         ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
                         : [];
-                    const isArte = user.perfil === 'arte' || setoresSecundarios.includes('arte');
-                    const isAdmin = user.perfil === 'admin' || setoresSecundarios.includes('admin');
+                    const userPerfil = (user.perfil || '').toLowerCase();
+                    const isArte = userPerfil === 'arte' || setoresSecundarios.includes('arte');
+                    const isAdmin = userPerfil === 'admin' || setoresSecundarios.includes('admin');
 
                     if (!isArte && !isAdmin) {
                         return res.status(403).json({ error: 'Sem permissão.' });
@@ -1005,6 +1173,75 @@ router.post('/item/:id/laser', (req, res) => {
         });
     });
 });
+
+// Upload de Arquivo de Impressão TAMPOGRAFIA (Novo)
+router.post('/item/:id/tampografia', (req, res) => {
+    upload.single('tampografia_file')(req, res, function (err) {
+        if (err instanceof multer.MulterError) {
+            return res.status(400).json({ error: `Erro no upload: ${err.message}` });
+        } else if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+
+        const itemId = req.params.id;
+        const file = req.file;
+        const operadorId = req.body.operador_id;
+
+        if (!file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+        if (!operadorId) return res.status(403).json({ error: 'ID do operador ausente.' });
+
+        const { optimizeImage } = require('../utils/imageOptimizer');
+
+        db.get('SELECT arquivo_impressao_tampografia_url FROM itens_pedido WHERE id = ?', [itemId], (errQuery, rowOld) => {
+            const oldFilePath = rowOld ? rowOld.arquivo_impressao_tampografia_url : null;
+
+            optimizeImage(file).catch(err => {
+                console.error("Erro na otimização do arquivo de tampografia:", err);
+            }).finally(() => {
+                const filePath = '/uploads/' + file.filename;
+                const fileType = file.mimetype;
+                const timestamp = new Date().toISOString();
+
+                db.get('SELECT nome, perfil, setores_secundarios FROM usuarios WHERE id = ?', [operadorId], (err, user) => {
+                    if (err || !user) return res.status(403).json({ error: 'Usuário inválido.' });
+
+                    const setoresSecundarios = user.setores_secundarios
+                        ? user.setores_secundarios.toLowerCase().split(',').map(s => s.trim())
+                        : [];
+                    const userPerfil = (user.perfil || '').toLowerCase();
+                    const isArte = userPerfil === 'arte' || setoresSecundarios.includes('arte');
+                    const isAdmin = userPerfil === 'admin' || setoresSecundarios.includes('admin');
+
+                    if (!isArte && !isAdmin) {
+                        return res.status(403).json({ error: 'Sem permissão.' });
+                    }
+
+                    const sql = `UPDATE itens_pedido SET 
+                        arquivo_impressao_tampografia_url = ?, 
+                        arquivo_impressao_tampografia_nome = ?, 
+                        arquivo_impressao_tampografia_tipo = ?, 
+                        arquivo_impressao_tampografia_enviado_por = ?, 
+                        arquivo_impressao_tampografia_enviado_em = ? 
+                        WHERE id = ?`;
+
+                    db.run(sql, [filePath, file.originalname, fileType, user.nome, timestamp, itemId], function (err2) {
+                        if (err2) return res.status(500).json({ error: err2.message });
+
+                        if (oldFilePath && oldFilePath !== filePath) {
+                            const { deleteUploadedFile } = require('../utils/fileCleanup');
+                            deleteUploadedFile(oldFilePath).catch(errCleanup => {
+                                console.error("Erro ao deletar arquivo de tampografia antigo:", errCleanup);
+                            });
+                        }
+
+                        res.json({ message: 'Arquivo Tampografia salvo com sucesso', path: filePath });
+                    });
+                });
+            });
+        });
+    });
+});
+
 
 // Atualizar Dados de Embale (Logística)
 // Atualizar Dados de Embale (Logística)

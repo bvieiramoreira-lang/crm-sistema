@@ -342,5 +342,69 @@
     "notnull": 0,
     "dflt_value": null,
     "pk": 0
+  },
+  {
+    "cid": 43,
+    "name": "arquivo_impressao_tampografia_url",
+    "type": "TEXT",
+    "notnull": 0,
+    "dflt_value": null,
+    "pk": 0
+  },
+  {
+    "cid": 44,
+    "name": "arquivo_impressao_tampografia_nome",
+    "type": "TEXT",
+    "notnull": 0,
+    "dflt_value": null,
+    "pk": 0
+  },
+  {
+    "cid": 45,
+    "name": "arquivo_impressao_tampografia_tipo",
+    "type": "TEXT",
+    "notnull": 0,
+    "dflt_value": null,
+    "pk": 0
+  },
+  {
+    "cid": 46,
+    "name": "arquivo_impressao_tampografia_enviado_por",
+    "type": "TEXT",
+    "notnull": 0,
+    "dflt_value": null,
+    "pk": 0
+  },
+  {
+    "cid": 47,
+    "name": "arquivo_impressao_tampografia_enviado_em",
+    "type": "DATETIME",
+    "notnull": 0,
+    "dflt_value": null,
+    "pk": 0
+  },
+  {
+    "cid": 48,
+    "name": "is_kit",
+    "type": "INTEGER",
+    "notnull": 0,
+    "dflt_value": "0",
+    "pk": 0
+  },
+  {
+    "cid": 49,
+    "name": "parent_item_id",
+    "type": "INTEGER",
+    "notnull": 0,
+    "dflt_value": null,
+    "pk": 0
+  },
+  {
+    "cid": 50,
+    "name": "is_kit_component",
+    "type": "INTEGER",
+    "notnull": 0,
+    "dflt_value": "0",
+    "pk": 0
   }
 ]

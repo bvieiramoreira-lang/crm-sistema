@@ -511,17 +511,22 @@ router.put('/:id', async (req, res) => {
                 // 1. Delete removed
                 const toDelete = dbIds.filter(id => !payloadIds.includes(id));
                 if (toDelete.length > 0) {
-                    db.all(`SELECT layout_path, arquivo_impressao_digital_url, arquivo_impressao_laser_url FROM itens_pedido WHERE id IN (${toDelete.join(',')})`, (errFetch, rowsToDelete) => {
+                    db.all(`SELECT id, layout_path, arquivo_impressao_digital_url, arquivo_impressao_laser_url, arquivo_impressao_tampografia_url FROM itens_pedido WHERE id IN (${toDelete.join(',')}) OR parent_item_id IN (${toDelete.join(',')})`, (errFetch, rowsToDelete) => {
                         if (!errFetch && rowsToDelete && rowsToDelete.length > 0) {
                             const { deleteFilesForItems } = require('../utils/fileCleanup');
                             deleteFilesForItems(rowsToDelete).catch(errCleanup => {
                                 console.error("Erro na limpeza de arquivos dos itens removidos:", errCleanup);
                             });
-                        }
 
-                        db.run(`DELETE FROM itens_pedido WHERE id IN (${toDelete.join(',')})`, (err) => {
-                            if (err) console.error("Erro ao deletar itens removidos:", err);
-                        });
+                            const allIdsToDelete = rowsToDelete.map(r => r.id);
+                            db.run(`DELETE FROM itens_pedido WHERE id IN (${allIdsToDelete.join(',')})`, (err) => {
+                                if (err) console.error("Erro ao deletar itens removidos:", err);
+                            });
+                        } else {
+                            db.run(`DELETE FROM itens_pedido WHERE id IN (${toDelete.join(',')})`, (err) => {
+                                if (err) console.error("Erro ao deletar itens removidos:", err);
+                            });
+                        }
                     });
                     // Passando db explicitamente
                     logHistory(db, pedidoId, usuario_id, 'Itens', 'Vários', `Removido ${toDelete.length} itens`, motivo);
@@ -599,7 +604,7 @@ router.delete('/:id', (req, res) => {
 
     // Sequência de deleção manual para SQLite
     // 1. Pegar itens e seus caminhos de arquivos para limpeza
-    db.all(`SELECT id, layout_path, arquivo_impressao_digital_url, arquivo_impressao_laser_url FROM itens_pedido WHERE pedido_id = ?`, [pedidoId], (err, rows) => {
+    db.all(`SELECT id, layout_path, arquivo_impressao_digital_url, arquivo_impressao_laser_url, arquivo_impressao_tampografia_url FROM itens_pedido WHERE pedido_id = ?`, [pedidoId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
         if (rows && rows.length > 0) {

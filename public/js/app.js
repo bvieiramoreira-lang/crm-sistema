@@ -1282,6 +1282,10 @@ function renderKanbanCard(order, sectorUsers) {
     const tercBadge = hasTerc 
         ? `<span class="badge" style="background:#fef08a; color:#854d0e; border:1px solid #fce71c; font-size:0.7rem; padding: 2px 6px;"><i class="ph-truck"></i> TERCEIRIZADO</span>` 
         : '';
+    const hasKit = order.items.some(i => i.is_kit === 1 || i.is_kit_component === 1);
+    const kitBadge = hasKit 
+        ? `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.7rem; padding: 2px 6px;"><i class="ph-squares-four"></i> KIT</span>` 
+        : '';
 
     const prazoStr = order.prazo_entrega ? new Date(order.prazo_entrega).toLocaleDateString('pt-BR') : 'N/A';
 
@@ -1350,6 +1354,7 @@ function renderKanbanCard(order, sectorUsers) {
         itemsHtml += `
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; border-bottom:1px dashed #e2e8f0; padding-bottom:0.25rem; margin-bottom:0.25rem;">
                 <div style="flex-grow:1; padding-right:0.5rem;">
+                    ${item.is_kit === 1 || item.is_kit_component === 1 ? `<span class="badge" style="font-size:0.65rem; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding: 1px 3px; margin-right: 0.2rem; vertical-align: middle;">KIT</span>` : ''}
                     <strong>${item.produto}</strong> (x${item.quantidade})
                     ${item.referencia ? `<div style="font-size:0.7rem; color:#64748b;">Ref: <b>${item.referencia}</b></div>` : ''}
                     ${item.cor_impressao ? `<div style="font-size:0.7rem; color:#64748b;">Cor: <b>${item.cor_impressao}</b></div>` : ''}
@@ -1366,6 +1371,7 @@ function renderKanbanCard(order, sectorUsers) {
             itemsHtml += `
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; border-bottom:1px dashed #e2e8f0; padding-bottom:0.25rem; margin-bottom:0.25rem;">
                     <div style="flex-grow:1; padding-right:0.5rem;">
+                        ${item.is_kit === 1 || item.is_kit_component === 1 ? `<span class="badge" style="font-size:0.65rem; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding: 1px 3px; margin-right: 0.2rem; vertical-align: middle;">KIT</span>` : ''}
                         <strong>${item.produto}</strong> (x${item.quantidade})
                         ${item.referencia ? `<div style="font-size:0.7rem; color:#64748b;">Ref: <b>${item.referencia}</b></div>` : ''}
                         ${item.cor_impressao ? `<div style="font-size:0.7rem; color:#64748b;">Cor: <b>${item.cor_impressao}</b></div>` : ''}
@@ -1432,6 +1438,7 @@ function renderKanbanCard(order, sectorUsers) {
                 <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem;">
                     ${priorityBadge}
                     ${tercBadge}
+                    ${kitBadge}
                     ${shipBadge}
                 </div>
             </div>
@@ -1745,6 +1752,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                 <td>
                     <div style="display: flex; flex-direction: column; gap: 0.15rem;">
                         <div style="font-weight: 600; color: #1e293b; font-size: 0.85rem;">
+                            ${item.is_kit === 1 || item.is_kit_component === 1 ? `<span class="badge" style="font-size:0.65rem; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding: 1px 3px; margin-right: 0.2rem; vertical-align: middle;">KIT</span>` : ''}
                             ${item.produto}
                             ${item.referencia ? `<span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(Ref: ${item.referencia})</span>` : ''}
                         </div>
@@ -1926,6 +1934,18 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                             ${fallbackBtn}
                         </div>
                     `;
+                }
+            } else if (setor === 'TAMPOGRAFIA') {
+                if (item.arquivo_impressao_tampografia_url) {
+                    fileBadge = `
+                        <div style="margin-top: 0.2rem;">
+                            <a href="${item.arquivo_impressao_tampografia_url}" download="${item.arquivo_impressao_tampografia_nome}" target="_blank" class="btn" style="width:auto; padding:2px 6px; font-size:0.7rem; background:#2563eb; border-radius:4px; display:inline-flex; align-items:center; gap:0.2rem; color:white;">
+                                <i class="ph-download"></i> Arq. Tampo
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    fileBadge = `<div style="margin-top:0.2rem;"><span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; font-size:0.7rem; padding:2px 4px;"><i class="ph-warning"></i> Arq. Pendente</span></div>`;
                 }
             }
 
@@ -2638,10 +2658,15 @@ async function openArteAction(pedidoId) {
     let itemsHtml = '';
     const isAprovacao = (status === 'AGUARDANDO_APROVACAO');
 
-    items.forEach(item => {
+    const parentItems = items.filter(i => !i.is_kit_component);
+    const childItems = items.filter(i => i.is_kit_component);
+
+    parentItems.forEach(item => {
         const layoutIndicator = renderLayoutIndicator(item.layout_path, item.layout_type);
         const isDigitalOrEstamparia = item.setor_destino === 'IMPRESSAO_DIGITAL' || item.setor_destino === 'ESTAMPARIA';
         const isLaser = item.setor_destino === 'IMPRESSAO_LASER';
+        const isTampografia = item.setor_destino === 'TAMPOGRAFIA';
+        const components = childItems.filter(c => c.parent_item_id === item.id);
 
         itemsHtml += `
             <div class="step-card" id="item_card_${item.id}" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm); position: relative;">
@@ -2652,13 +2677,23 @@ async function openArteAction(pedidoId) {
                     </div>
                     <span style="background: var(--primary-light); color: var(--primary); font-weight: bold; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.85rem;">Qtd: ${item.quantidade}</span>
                 </div>
+
+                ${isAprovacao ? `
+                    <div style="margin-bottom: 1.5rem; background: #f8fafc; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+                        <label style="font-weight: bold; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none; margin: 0;">
+                            <input type="checkbox" id="isKit_${item.id}" onchange="toggleKitMode(${item.id}, ${pedidoId})" ${item.is_kit === 1 ? 'checked' : ''} style="width: 1.1rem; height: 1.1rem; accent-color: var(--primary);">
+                            <span>Este produto é um Kit (Será desmembrado em múltiplos componentes)</span>
+                        </label>
+                    </div>
+                ` : ''}
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <!-- Standard Specs Section -->
+                <div id="standardSpecs_${item.id}" style="display: ${item.is_kit === 1 ? 'none' : 'grid'}; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
                     <!-- Coluna Esquerda: Arquivos -->
                     <div>
                         <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Layout & Arquivos</h4>
                         
-                        ${!isAprovacao && !item.layout_path && !item.arquivo_impressao_digital_url && !item.arquivo_impressao_laser_url ? `
+                        ${!isAprovacao && !item.layout_path && !item.arquivo_impressao_digital_url && !item.arquivo_impressao_laser_url && !item.arquivo_impressao_tampografia_url ? `
                             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
                                 <i class="ph-info" style="vertical-align: middle; margin-right: 0.25rem;"></i> Nenhum arquivo ou layout anexado. Os arquivos serão vinculados na etapa de aprovação.
                             </div>
@@ -2740,6 +2775,31 @@ async function openArteAction(pedidoId) {
                                 ` : ''}
                             </div>
                             ` : ''}
+
+                            <!-- Tampografia File Section -->
+                            ${isAprovacao || item.arquivo_impressao_tampografia_url ? `
+                            <div id="tampografiaFileSection_${item.id}" style="background: ${item.arquivo_impressao_tampografia_url ? '#f0fdf4' : '#eff6ff'}; border: 1px solid ${item.arquivo_impressao_tampografia_url ? '#bbf7d0' : '#bfdbfe'}; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; display: ${(isAprovacao ? isTampografia : item.arquivo_impressao_tampografia_url) ? 'block' : 'none'};">
+                                <div style="font-weight: bold; font-size: 0.85rem; color: ${item.arquivo_impressao_tampografia_url ? '#166534' : '#1e3a8a'}; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <i class="ph-pen-nib"></i> Arquivo Tampografia
+                                </div>
+                                <div id="tampografiaContainer_${item.id}" style="margin-bottom: 0.75rem;">
+                                    ${item.arquivo_impressao_tampografia_url
+                                        ? `<div style="color:#166534; font-size: 0.85rem;">
+                                               <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                                               <strong>${item.arquivo_impressao_tampografia_nome}</strong> <br>
+                                               <small style="color: #15803d;">Enviado por: ${item.arquivo_impressao_tampografia_enviado_por || '?'} em ${new Date(item.arquivo_impressao_tampografia_enviado_em).toLocaleDateString()}</small>
+                                           </div>`
+                                        : `<div style="color:#991b1b; font-size: 0.85rem;"><i class="ph-warning-circle"></i> Nenhum arquivo de tampografia anexado</div>`
+                                    }
+                                </div>
+                                ${isAprovacao ? `
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="file" id="tampografiaFile_${item.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.8rem; flex-grow: 1;">
+                                    <button class="btn btn-sm" onclick="uploadItemFile(${item.id}, 'tampografia', ${pedidoId})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #2563eb; color: white;"><i class="ph-upload-simple"></i> Enviar</button>
+                                </div>
+                                ` : ''}
+                            </div>
+                            ` : ''}
                         `}
                     </div>
 
@@ -2788,6 +2848,64 @@ async function openArteAction(pedidoId) {
                             </div>
                             <div style="margin-top: 1rem; color: var(--text-tertiary); font-size: 0.8rem; text-align: center; border: 1px dashed #e2e8f0; padding: 0.5rem; border-radius: 6px;">
                                 <i class="ph-info"></i> As especificações serão preenchidas na etapa de aprovação.
+                            </div>
+                        `}
+                    </div>
+                </div>
+
+                <!-- Kit Specs Section -->
+                <div id="kitSpecs_${item.id}" style="display: ${item.is_kit === 1 ? 'block' : 'none'};">
+                    <div style="background: #f0fdf4; border: 1px solid #5eead4; border-radius: 12px; padding: 1.5rem; margin-top: 1rem;">
+                        <h4 style="margin: 0 0 1rem 0; font-size: 1rem; color: #0f766e; display: flex; align-items: center; gap: 0.5rem; font-weight: bold;">
+                            <i class="ph-squares-four" style="font-size: 1.25rem;"></i> Componentes do Kit para Impressão
+                        </h4>
+                        
+                        ${!isAprovacao ? `
+                            <!-- Read Only Kit Components list -->
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                ${components.length === 0 ? `
+                                    <div style="color: #64748b; font-style: italic; font-size: 0.85rem; text-align: center; padding: 1rem; background: white; border: 1px dashed #cbd5e1; border-radius: 8px;">
+                                        Nenhum componente cadastrado.
+                                    </div>
+                                ` : components.map(comp => {
+                                    const compLayout = renderLayoutIndicatorSm(comp.layout_path, comp.layout_type);
+                                    const digitalUrl = comp.arquivo_impressao_digital_url 
+                                        ? `<a href="${comp.arquivo_impressao_digital_url}" target="_blank" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem; background: #f0fdf4; border-color: #bbf7d0; color: #166534; text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem;"><i class="ph-download"></i> Digital</a>` 
+                                        : '';
+                                    const laserUrl = comp.arquivo_impressao_laser_url 
+                                        ? `<a href="${comp.arquivo_impressao_laser_url}" target="_blank" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem; background: #fffbeb; border-color: #fde68a; color: #b45309; text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem;"><i class="ph-download"></i> Laser</a>` 
+                                        : '';
+                                    const tampografiaUrl = comp.arquivo_impressao_tampografia_url 
+                                        ? `<a href="${comp.arquivo_impressao_tampografia_url}" target="_blank" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem; background: #eff6ff; border-color: #bfdbfe; color: #1e3a8a; text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem;"><i class="ph-download"></i> Tampo</a>` 
+                                        : '';
+                                    return `
+                                        <div style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr auto; gap: 1rem; align-items: center; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem;">
+                                            <div><strong>${comp.produto}</strong></div>
+                                            <div><span class="badge badge-blue" style="font-size: 0.75rem; padding: 2px 4px;">${comp.setor_destino.replace(/_/g, ' ')}</span></div>
+                                            <div>Cor: <b>${comp.cor_impressao}</b></div>
+                                            <div>Obs: <span style="font-style: italic; color: #64748b; font-size: 0.8rem;">${comp.observacao_arte || '-'}</span></div>
+                                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                                ${compLayout}
+                                                ${digitalUrl}
+                                                ${laserUrl}
+                                                ${tampografiaUrl}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <!-- Component editor -->
+                            <div id="kitComponentsContainer_${item.id}" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem;">
+                                ${components.map(comp => renderComponentRow(item.id, comp)).join('')}
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 1rem; margin-top: 1rem;">
+                                <button type="button" class="btn btn-sm" onclick="addKitComponentRow(${item.id})" style="background: #0f766e; color: white; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                    <i class="ph-plus-circle"></i> Adicionar Componente
+                                </button>
+                                <button type="button" class="btn btn-sm" onclick="saveKitComponents(${item.id}, ${pedidoId})" style="background: var(--success); color: white; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                    <i class="ph-floppy-disk"></i> Salvar Componentes
+                                </button>
                             </div>
                         `}
                     </div>
@@ -2852,12 +2970,16 @@ function toggleItemFileSections(itemId) {
     const val = document.getElementById(`setorDestino_${itemId}`).value;
     const digitalSec = document.getElementById(`digitalFileSection_${itemId}`);
     const laserSec = document.getElementById(`laserFileSection_${itemId}`);
+    const tampografiaSec = document.getElementById(`tampografiaFileSection_${itemId}`);
     
     if (digitalSec) {
         digitalSec.style.display = (val === 'IMPRESSAO_DIGITAL' || val === 'ESTAMPARIA') ? 'block' : 'none';
     }
     if (laserSec) {
         laserSec.style.display = (val === 'IMPRESSAO_LASER') ? 'block' : 'none';
+    }
+    if (tampografiaSec) {
+        tampografiaSec.style.display = (val === 'TAMPOGRAFIA') ? 'block' : 'none';
     }
 }
 
@@ -2882,6 +3004,11 @@ async function uploadItemFile(itemId, fileType, pedidoId) {
         endpoint = `/api/production/item/${itemId}/laser`;
         bodyFieldName = 'laser_file';
         containerId = `laserContainer_${itemId}`;
+    } else if (fileType === 'tampografia') {
+        fileInputId = `tampografiaFile_${itemId}`;
+        endpoint = `/api/production/item/${itemId}/tampografia`;
+        bodyFieldName = 'tampografia_file';
+        containerId = `tampografiaContainer_${itemId}`;
     }
 
     const fileInput = document.getElementById(fileInputId);
@@ -2958,6 +3085,21 @@ async function uploadItemFile(itemId, fileType, pedidoId) {
                         </div>
                     `;
                     const section = document.getElementById(`laserFileSection_${itemId}`);
+                    if (section) {
+                        section.style.background = '#f0fdf4';
+                        section.style.borderColor = '#bbf7d0';
+                        const title = section.querySelector('div');
+                        if (title) title.style.color = '#166534';
+                    }
+                } else if (fileType === 'tampografia') {
+                    container.innerHTML = `
+                        <div style="color:#166534; font-size: 0.85rem;">
+                            <i class="ph-check-circle" style="font-size: 1.1rem; vertical-align: middle;"></i> 
+                            <strong>${file.name}</strong> <br>
+                            <small style="color: #15803d;">Enviado agora mesmo</small>
+                        </div>
+                    `;
+                    const section = document.getElementById(`tampografiaFileSection_${itemId}`);
                     if (section) {
                         section.style.background = '#f0fdf4';
                         section.style.borderColor = '#bbf7d0';
@@ -4886,31 +5028,62 @@ async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
     const payloadItens = [];
 
     for (const item of items) {
-        const corInput = document.getElementById(`corImpressao_${item.id}`);
-        const setorSelect = document.getElementById(`setorDestino_${item.id}`);
-        const obsTextarea = document.getElementById(`obsArte_${item.id}`);
-
-        const corImpressao = corInput ? corInput.value.trim() : '';
-        const setorDestino = setorSelect ? setorSelect.value : '';
-        const observacaoArte = obsTextarea ? obsTextarea.value.trim() : '';
-
-        if (!corImpressao) {
-            if (corInput) corInput.focus();
-            return alert(`Por favor, preencha a Cor de Impressão para o item "${item.produto}".`);
+        if (item.is_kit_component === 1) {
+            payloadItens.push({
+                id: item.id,
+                cor_impressao: item.cor_impressao,
+                setor_destino: item.setor_destino,
+                observacao_arte: item.observacao_arte,
+                responsavel: responsavel
+            });
+            continue;
         }
 
-        if (!setorDestino) {
-            if (setorSelect) setorSelect.focus();
-            return alert(`Por favor, selecione o Setor Destino para o item "${item.produto}".`);
-        }
+        const isKitCheckbox = document.getElementById(`isKit_${item.id}`);
+        const isKit = isKitCheckbox ? isKitCheckbox.checked : (item.is_kit === 1);
 
-        payloadItens.push({
-            id: item.id,
-            cor_impressao: corImpressao,
-            setor_destino: setorDestino,
-            observacao_arte: observacaoArte,
-            responsavel: responsavel
-        });
+        if (isKit) {
+            const components = items.filter(c => c.parent_item_id === item.id);
+            if (components.length === 0) {
+                return alert(`Você marcou o produto "${item.produto}" como Kit, mas não salvou nenhum componente. Adicione e salve os componentes primeiro.`);
+            }
+
+            payloadItens.push({
+                id: item.id,
+                is_kit: 1,
+                cor_impressao: 'KIT',
+                setor_destino: 'KIT',
+                observacao_arte: item.observacao_arte || '',
+                responsavel: responsavel
+            });
+        } else {
+            const corInput = document.getElementById(`corImpressao_${item.id}`);
+            const setorSelect = document.getElementById(`setorDestino_${item.id}`);
+            const obsTextarea = document.getElementById(`obsArte_${item.id}`);
+
+            const corImpressao = corInput ? corInput.value.trim() : '';
+            const setorDestino = setorSelect ? setorSelect.value : '';
+            const observacaoArte = obsTextarea ? obsTextarea.value.trim() : '';
+
+            if (!corImpressao) {
+                if (corInput) corInput.focus();
+                return alert(`Por favor, preencha a Cor de Impressão para o item "${item.produto}".`);
+            }
+
+            if (!setorDestino) {
+                if (setorSelect) setorSelect.focus();
+                return alert(`Por favor, selecione o Setor Destino para o item "${item.produto}".`);
+            }
+
+            payloadItens.push({
+                id: item.id,
+                is_kit: 0,
+                cor_impressao: corImpressao,
+                setor_destino: setorDestino,
+                observacao_arte: observacaoArte,
+                responsavel: responsavel
+            });
+        }
     }
 
     if (!confirm('Deseja realmente finalizar e aprovar a arte deste pedido inteiro?')) return;
@@ -4936,5 +5109,258 @@ async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
         console.error(e);
         alert('Erro de conexão ao aprovar pedido.');
     }
+}
+
+window.toggleKitMode = function(itemId, pedidoId) {
+    const isChecked = document.getElementById(`isKit_${itemId}`).checked;
+    const stdSpecs = document.getElementById(`standardSpecs_${itemId}`);
+    const kitSpecs = document.getElementById(`kitSpecs_${itemId}`);
+    if (isChecked) {
+        stdSpecs.style.display = 'none';
+        kitSpecs.style.display = 'block';
+    } else {
+        if (confirm('Ao desmarcar a opção de Kit, todos os componentes salvos serão removidos. Deseja prosseguir?')) {
+            fetch(`/api/production/item/${itemId}/desmembrar-kit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ components: [] })
+            }).then(res => {
+                if (res.ok) {
+                    stdSpecs.style.display = 'grid';
+                    kitSpecs.style.display = 'none';
+                    openArteAction(pedidoId);
+                } else {
+                    alert('Erro ao limpar componentes do kit.');
+                    document.getElementById(`isKit_${itemId}`).checked = true;
+                }
+            }).catch(e => {
+                console.error(e);
+                alert('Erro de conexão ao limpar componentes.');
+                document.getElementById(`isKit_${itemId}`).checked = true;
+            });
+        } else {
+            document.getElementById(`isKit_${itemId}`).checked = true;
+        }
+    }
+};
+
+window.addKitComponentRow = function(itemId) {
+    const container = document.getElementById(`kitComponentsContainer_${itemId}`);
+    if (!container) return;
+    
+    const newRowHtml = renderComponentRow(itemId, null);
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = newRowHtml.trim();
+    container.appendChild(tempDiv.firstChild);
+};
+
+window.saveKitComponents = async function(parentId, pedidoId) {
+    const container = document.getElementById(`kitComponentsContainer_${parentId}`);
+    if (!container) return;
+    
+    const componentCards = container.querySelectorAll('.kit-component-card');
+    const components = [];
+    
+    for (const card of componentCards) {
+        const id = card.getAttribute('data-comp-id') || null;
+        const produto = card.querySelector('.comp-produto').value.trim();
+        const setor_destino = card.querySelector('.comp-setor').value;
+        const cor_impressao = card.querySelector('.comp-cor').value.trim();
+        const observacao_arte = card.querySelector('.comp-obs').value.trim();
+        
+        if (!produto) {
+            card.querySelector('.comp-produto').focus();
+            return alert('Preencha o Nome do Item de todos os componentes.');
+        }
+        if (!setor_destino) {
+            card.querySelector('.comp-setor').focus();
+            return alert('Selecione o Setor Destino de todos os componentes.');
+        }
+        if (!cor_impressao) {
+            card.querySelector('.comp-cor').focus();
+            return alert('Preencha a Cor de Impressão de todos os componentes.');
+        }
+        
+        components.push({
+            id: id ? Number(id) : null,
+            produto,
+            setor_destino,
+            cor_impressao,
+            observacao_arte
+        });
+    }
+    
+    try {
+        const res = await fetch(`/api/production/item/${parentId}/desmembrar-kit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ components })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            alert('Componentes do Kit salvos com sucesso!');
+            await openArteAction(pedidoId);
+        } else {
+            alert('Erro ao salvar componentes: ' + (data.error || 'Erro desconhecido.'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão ao salvar componentes.');
+    }
+};
+
+window.removeComponentRow = function(btn, compId, parentId) {
+    const card = btn.closest('.kit-component-card');
+    if (!card) return;
+    
+    if (!compId) {
+        card.remove();
+        return;
+    }
+    
+    if (!confirm('Deseja realmente remover este componente e apagar todos os seus arquivos?')) return;
+    
+    card.remove();
+    alert('Componente removido temporariamente. Para salvar as alterações no banco de dados, clique em "Salvar Componentes".');
+};
+
+window.toggleCompFileSections = function(uniqueId, sector) {
+    const digitalSec = document.getElementById(`digitalFileSection_${uniqueId}`);
+    const laserSec = document.getElementById(`laserFileSection_${uniqueId}`);
+    const tampografiaSec = document.getElementById(`tampografiaFileSection_${uniqueId}`);
+    
+    if (digitalSec) digitalSec.style.display = (sector === 'IMPRESSAO_DIGITAL' || sector === 'ESTAMPARIA') ? 'block' : 'none';
+    if (laserSec) laserSec.style.display = (sector === 'IMPRESSAO_LASER') ? 'block' : 'none';
+    if (tampografiaSec) tampografiaSec.style.display = (sector === 'TAMPOGRAFIA') ? 'block' : 'none';
+};
+
+function renderComponentRow(parentId, comp) {
+    const compId = comp ? comp.id : '';
+    const uniqueId = compId || 'temp_' + Math.random().toString(36).substr(2, 9);
+    
+    return `
+        <div class="kit-component-card" id="comp_card_${uniqueId}" data-comp-id="${compId}" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1rem; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <h5 style="margin: 0; font-size: 0.9rem; color: #0f766e; font-weight: bold; display: flex; align-items: center; gap: 0.25rem;">
+                    <i class="ph-puzzle-piece"></i> Componente
+                </h5>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeComponentRow(this, ${compId ? compId : 'null'}, ${parentId})" style="padding: 2px 8px; font-size: 0.75rem; background: #ef4444; color: white; border: none; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;">
+                    <i class="ph-trash"></i> Remover
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr; gap: 1rem; margin-bottom: 0.75rem;">
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Nome do Item (Ex: Faca) <span style="color:var(--danger)">*</span></label>
+                    <input type="text" class="form-control comp-produto" value="${comp ? comp.produto : ''}" style="margin: 0; padding: 0.35rem 0.5rem; font-size: 0.85rem;" placeholder="Nome do componente">
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Setor Destino <span style="color:var(--danger)">*</span></label>
+                    <select class="form-control comp-setor" onchange="toggleCompFileSections('${uniqueId}', this.value)" style="margin: 0; padding: 0.35rem 0.5rem; font-size: 0.85rem;">
+                        <option value="">Selecione...</option>
+                        <option value="SILK_PLANO" ${comp && comp.setor_destino === 'SILK_PLANO' ? 'selected' : ''}>Silk Plano</option>
+                        <option value="SILK_CILINDRICA" ${comp && comp.setor_destino === 'SILK_CILINDRICA' ? 'selected' : ''}>Silk Cilíndrica</option>
+                        <option value="TAMPOGRAFIA" ${comp && comp.setor_destino === 'TAMPOGRAFIA' ? 'selected' : ''}>Tampografia</option>
+                        <option value="IMPRESSAO_LASER" ${comp && comp.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
+                        <option value="IMPRESSAO_DIGITAL" ${comp && comp.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
+                        <option value="ESTAMPARIA" ${comp && comp.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
+                        <option value="TERCEIRIZADO" ${comp && comp.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''}>Terceirizado</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Cor de Impressão <span style="color:var(--danger)">*</span></label>
+                    <input type="text" class="form-control comp-cor" value="${comp ? comp.cor_impressao || '' : ''}" style="margin: 0; padding: 0.35rem 0.5rem; font-size: 0.85rem;" placeholder="Cor">
+                </div>
+            </div>
+            <div style="margin-bottom: 0.75rem;">
+                <label style="font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Observação da Arte</label>
+                <textarea class="form-control comp-obs" rows="1" style="margin: 0; padding: 0.35rem 0.5rem; font-size: 0.85rem; height: auto;" placeholder="Observação técnica">${comp ? comp.observacao_arte || '' : ''}</textarea>
+            </div>
+
+            ${comp ? `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; border-top: 1px dashed #e2e8f0; padding-top: 0.75rem; margin-top: 0.75rem;">
+                    <div style="background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.5rem;">
+                        <div style="font-weight: bold; font-size: 0.8rem; color: var(--text-primary); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+                            <i class="ph-image" style="color: var(--primary);"></i> Layout
+                        </div>
+                        <div id="layoutContainer_${comp.id}" style="margin-bottom: 0.5rem;">
+                            ${comp.layout_path 
+                                ? `<div style="color:var(--success); font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem;">
+                                       <i class="ph-check-circle" style="font-size: 1rem;"></i> Presente
+                                       <div style="margin-left: auto;">${renderLayoutIndicatorSm(comp.layout_path, comp.layout_type)}</div>
+                                   </div>`
+                                : `<div style="color:var(--text-tertiary); font-size: 0.75rem;"><i class="ph-info"></i> Nenhum layout</div>`
+                            }
+                        </div>
+                        <div style="display: flex; gap: 0.25rem; align-items: center;">
+                            <input type="file" id="layoutFile_${comp.id}" accept="image/*,application/pdf" style="font-size: 0.7rem; flex-grow: 1;">
+                            <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'layout', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem;"><i class="ph-upload-simple"></i></button>
+                        </div>
+                    </div>
+
+                    <div style="flex-grow: 1;">
+                        <div id="digitalFileSection_${uniqueId}" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.5rem; display: ${comp.setor_destino === 'IMPRESSAO_DIGITAL' || comp.setor_destino === 'ESTAMPARIA' ? 'block' : 'none'};">
+                            <div style="font-weight: bold; font-size: 0.8rem; color: #166534; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="ph-printer"></i> Arq. Digital/Estamp.
+                            </div>
+                            <div id="digitalContainer_${comp.id}" style="margin-bottom: 0.5rem;">
+                                ${comp.arquivo_impressao_digital_url
+                                    ? `<div style="color:#166534; font-size: 0.75rem;">
+                                           <i class="ph-check-circle" style="font-size: 1rem;"></i> Presente
+                                       </div>`
+                                    : `<div style="color:#991b1b; font-size: 0.75rem;">Ausente</div>`
+                                }
+                            </div>
+                            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                <input type="file" id="digitalFile_${comp.id}" accept=".pdf,.cdr,.zip" style="font-size: 0.7rem; flex-grow: 1;">
+                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'digital', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #166534; color: white; display: inline-flex; align-items: center; justify-content: center;"><i class="ph-upload-simple"></i></button>
+                            </div>
+                        </div>
+
+                        <div id="laserFileSection_${uniqueId}" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 0.5rem; display: ${comp.setor_destino === 'IMPRESSAO_LASER' ? 'block' : 'none'};">
+                            <div style="font-weight: bold; font-size: 0.8rem; color: #92400e; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="ph-lightning"></i> Arq. Laser
+                            </div>
+                            <div id="laserContainer_${comp.id}" style="margin-bottom: 0.5rem;">
+                                ${comp.arquivo_impressao_laser_url
+                                    ? `<div style="color:#166534; font-size: 0.75rem;">
+                                           <i class="ph-check-circle" style="font-size: 1rem;"></i> Presente
+                                       </div>`
+                                    : `<div style="color:#991b1b; font-size: 0.75rem;">Ausente</div>`
+                                }
+                            </div>
+                            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                <input type="file" id="laserFile_${comp.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.7rem; flex-grow: 1;">
+                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'laser', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #d97706; color: white; display: inline-flex; align-items: center; justify-content: center;"><i class="ph-upload-simple"></i></button>
+                            </div>
+                        </div>
+
+                        <div id="tampografiaFileSection_${uniqueId}" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.5rem; display: ${comp.setor_destino === 'TAMPOGRAFIA' ? 'block' : 'none'};">
+                            <div style="font-weight: bold; font-size: 0.8rem; color: #1e3a8a; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="ph-pen-nib"></i> Arq. Tampografia
+                            </div>
+                            <div id="tampografiaContainer_${comp.id}" style="margin-bottom: 0.5rem;">
+                                ${comp.arquivo_impressao_tampografia_url
+                                    ? `<div style="color:#166534; font-size: 0.75rem;">
+                                           <i class="ph-check-circle" style="font-size: 1rem;"></i> Presente
+                                       </div>`
+                                    : `<div style="color:#991b1b; font-size: 0.75rem;">Ausente</div>`
+                                }
+                            </div>
+                            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                <input type="file" id="tampografiaFile_${comp.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.7rem; flex-grow: 1;">
+                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'tampografia', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #2563eb; color: white; display: inline-flex; align-items: center; justify-content: center;"><i class="ph-upload-simple"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ` : `
+                <div style="background: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 0.5rem; font-size: 0.75rem; text-align: center; color: #64748b; margin-top: 0.5rem;">
+                    Salve o componente antes de anexar arquivos de layout e impressão.
+                </div>
+            `}
+        </div>
+    `;
 }
 

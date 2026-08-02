@@ -58,6 +58,9 @@ async function deleteFilesForItems(items) {
         if (item.arquivo_impressao_laser_url) {
             await deleteUploadedFile(item.arquivo_impressao_laser_url);
         }
+        if (item.arquivo_impressao_tampografia_url) {
+            await deleteUploadedFile(item.arquivo_impressao_tampografia_url);
+        }
     }
 }
 

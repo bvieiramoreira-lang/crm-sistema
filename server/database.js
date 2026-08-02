@@ -160,6 +160,18 @@ db.serialize(() => {
     addColumn('itens_pedido', 'arquivo_impressao_laser_enviado_em', 'DATETIME');
     addColumn('itens_pedido', 'arquivo_impressao_laser_enviado_por', 'TEXT');
 
+    // New Columns for Tampografia Print File
+    addColumn('itens_pedido', 'arquivo_impressao_tampografia_url', 'TEXT');
+    addColumn('itens_pedido', 'arquivo_impressao_tampografia_nome', 'TEXT');
+    addColumn('itens_pedido', 'arquivo_impressao_tampografia_tipo', 'TEXT');
+    addColumn('itens_pedido', 'arquivo_impressao_tampografia_enviado_em', 'DATETIME');
+    addColumn('itens_pedido', 'arquivo_impressao_tampografia_enviado_por', 'TEXT');
+
+    // Colunas para Gerenciamento de Kits e Sub-itens
+    addColumn('itens_pedido', 'is_kit', 'INTEGER DEFAULT 0');
+    addColumn('itens_pedido', 'parent_item_id', 'INTEGER');
+    addColumn('itens_pedido', 'is_kit_component', 'INTEGER DEFAULT 0');
+
     // Colunas de Tracking de Produção (Responsáveis e Datas)
     addColumn('itens_pedido', 'observacao_arte', 'TEXT');
     addColumn('itens_pedido', 'responsavel_arte', 'TEXT');
