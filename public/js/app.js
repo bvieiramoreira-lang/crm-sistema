@@ -1238,6 +1238,7 @@ async function reprovarArteOrderDirect(pedidoId) {
 
 async function assignOrder(pedidoId, responsavel) {
     try {
+        await window.saveNormalItemSpecsSilently(pedidoId);
         const res = await fetch(`/api/production/pedido/${pedidoId}/assign`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -2531,8 +2532,9 @@ async function viewOrderDetails(id) {
         reverterArteBtn = `<button class="btn" style="width: auto; background: var(--warning); color: #78350f; margin-left: 1rem;" onclick="reverterPedidoParaArte(${order.id})"><i class="ph-arrow-u-up-left"></i> Reverter para Fila de Arte</button>`;
     }
 
+    const backFn = (typeof currentViewMode !== 'undefined' && currentViewMode === 'controle') ? 'loadControleQueue()' : 'loadDashboard()';
     html += '</tbody></table>' + `<div style="margin-top:1rem; display:flex;">
-        <button class="btn" style="width: auto; background: var(--text-secondary)" onclick="loadDashboard()">Voltar</button>
+        <button class="btn" style="width: auto; background: var(--text-secondary)" onclick="${backFn}">Voltar</button>
         ${reverterArteBtn}
         ${deleteBtn}
     </div></div>`;
@@ -2900,7 +2902,7 @@ async function openArteAction(pedidoId) {
                                 ${components.map(comp => renderComponentRow(item.id, comp)).join('')}
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 1rem; margin-top: 1rem;">
-                                <button type="button" class="btn btn-sm" onclick="addKitComponentRow(${item.id})" style="background: #0f766e; color: white; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                <button type="button" class="btn btn-sm" onclick="addKitComponentRow(${item.id}, ${pedidoId})" style="background: #0f766e; color: white; display: inline-flex; align-items: center; gap: 0.25rem;">
                                     <i class="ph-plus-circle"></i> Adicionar Componente
                                 </button>
                                 <button type="button" class="btn btn-sm" onclick="saveKitComponents(${item.id}, ${pedidoId})" style="background: var(--success); color: white; display: inline-flex; align-items: center; gap: 0.25rem;">
@@ -2964,6 +2966,16 @@ async function openArteAction(pedidoId) {
     `;
 
     document.getElementById('contentArea').innerHTML = html;
+
+    // Salvar rascunho de forma silenciosa e automática sempre que um campo for alterado
+    const inputsToWatch = document.querySelectorAll(
+        `input[id^="corImpressao_"], select[id^="setorDestino_"], textarea[id^="obsArte_"]`
+    );
+    inputsToWatch.forEach(input => {
+        input.addEventListener('change', () => {
+            window.saveNormalItemSpecsSilently(pedidoId);
+        });
+    });
 }
 
 function toggleItemFileSections(itemId) {
@@ -3054,7 +3066,6 @@ async function uploadItemFile(itemId, fileType, pedidoId) {
         }
 
         if (res.ok) {
-            alert('Arquivo enviado com sucesso!');
             const container = document.getElementById(containerId);
             if (container) {
                 if (fileType === 'layout') {
@@ -5086,8 +5097,6 @@ async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
         }
     }
 
-    if (!confirm('Deseja realmente finalizar e aprovar a arte deste pedido inteiro?')) return;
-
     try {
         const res = await fetch(`/api/production/pedido/${pedidoId}/aprovar`, {
             method: 'PUT',
@@ -5100,7 +5109,6 @@ async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
         const data = await res.json();
 
         if (res.ok) {
-            alert('Pedido finalizado e aprovado com sucesso!');
             loadArteQueue();
         } else {
             alert('Erro ao aprovar pedido: ' + (data.error || 'Erro desconhecido.'));
@@ -5111,13 +5119,29 @@ async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
     }
 }
 
-window.toggleKitMode = function(itemId, pedidoId) {
+window.toggleKitMode = async function(itemId, pedidoId) {
+    await window.saveNormalItemSpecsSilently(pedidoId);
     const isChecked = document.getElementById(`isKit_${itemId}`).checked;
     const stdSpecs = document.getElementById(`standardSpecs_${itemId}`);
     const kitSpecs = document.getElementById(`kitSpecs_${itemId}`);
     if (isChecked) {
-        stdSpecs.style.display = 'none';
-        kitSpecs.style.display = 'block';
+        fetch(`/api/production/item/${itemId}/enable-kit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        }).then(res => {
+            if (res.ok) {
+                stdSpecs.style.display = 'none';
+                kitSpecs.style.display = 'block';
+                openArteAction(pedidoId);
+            } else {
+                alert('Erro ao ativar modo Kit.');
+                document.getElementById(`isKit_${itemId}`).checked = false;
+            }
+        }).catch(e => {
+            console.error(e);
+            alert('Erro de conexão ao ativar modo Kit.');
+            document.getElementById(`isKit_${itemId}`).checked = false;
+        });
     } else {
         if (confirm('Ao desmarcar a opção de Kit, todos os componentes salvos serão removidos. Deseja prosseguir?')) {
             fetch(`/api/production/item/${itemId}/desmembrar-kit`, {
@@ -5144,15 +5168,106 @@ window.toggleKitMode = function(itemId, pedidoId) {
     }
 };
 
-window.addKitComponentRow = function(itemId) {
-    const container = document.getElementById(`kitComponentsContainer_${itemId}`);
+window.saveNormalItemSpecsSilently = async function(pedidoId) {
+    const cardEls = document.querySelectorAll('div[id^="item_card_"]');
+    if (cardEls.length === 0) return;
+
+    const payloadItens = [];
+
+    cardEls.forEach(card => {
+        const itemId = card.id.replace('item_card_', '');
+        
+        const isKitCheckbox = document.getElementById(`isKit_${itemId}`);
+        const isKit = isKitCheckbox ? isKitCheckbox.checked : false;
+
+        if (isKit) {
+            payloadItens.push({
+                id: parseInt(itemId),
+                is_kit: 1,
+                cor_impressao: 'KIT',
+                setor_destino: 'KIT',
+                observacao_arte: ''
+            });
+        } else {
+            const corInput = document.getElementById(`corImpressao_${itemId}`);
+            const setorSelect = document.getElementById(`setorDestino_${itemId}`);
+            const obsTextarea = document.getElementById(`obsArte_${itemId}`);
+
+            if (corInput || setorSelect || obsTextarea) {
+                payloadItens.push({
+                    id: parseInt(itemId),
+                    is_kit: 0,
+                    cor_impressao: corInput ? corInput.value.trim() : '',
+                    setor_destino: setorSelect ? setorSelect.value : '',
+                    observacao_arte: obsTextarea ? obsTextarea.value.trim() : ''
+                });
+            }
+        }
+    });
+
+    if (payloadItens.length === 0) return;
+
+    try {
+        await fetch(`/api/production/pedido/${pedidoId}/salvar-rascunho`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itens: payloadItens })
+        });
+    } catch (e) {
+        console.error('Erro ao salvar rascunho silenciosamente:', e);
+    }
+};
+
+window.saveKitComponentsSilently = async function(parentId) {
+    const container = document.getElementById(`kitComponentsContainer_${parentId}`);
     if (!container) return;
     
-    const newRowHtml = renderComponentRow(itemId, null);
+    const componentCards = container.querySelectorAll('.kit-component-card');
+    const components = [];
     
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = newRowHtml.trim();
-    container.appendChild(tempDiv.firstChild);
+    for (const card of componentCards) {
+        const id = card.getAttribute('data-comp-id') || null;
+        const produto = card.querySelector('.comp-produto').value.trim();
+        const setor_destino = card.querySelector('.comp-setor').value;
+        const cor_impressao = card.querySelector('.comp-cor').value.trim();
+        const observacao_arte = card.querySelector('.comp-obs').value.trim();
+        
+        components.push({
+            id: id ? Number(id) : null,
+            produto,
+            setor_destino,
+            cor_impressao,
+            observacao_arte
+        });
+    }
+    
+    try {
+        await fetch(`/api/production/item/${parentId}/desmembrar-kit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ components })
+        });
+    } catch (e) {
+        console.error('Erro ao salvar componentes silenciosamente:', e);
+    }
+};
+
+window.addKitComponentRow = async function(itemId, pedidoId) {
+    await window.saveKitComponentsSilently(itemId);
+    
+    fetch(`/api/production/item/${itemId}/add-blank-component`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    }).then(res => {
+        if (res.ok) {
+            openArteAction(pedidoId);
+        } else {
+            alert('Erro ao adicionar componente.');
+        }
+    }).catch(e => {
+        console.error(e);
+        alert('Erro de conexão ao adicionar componente.');
+    });
 };
 
 window.saveKitComponents = async function(parentId, pedidoId) {
@@ -5211,19 +5326,34 @@ window.saveKitComponents = async function(parentId, pedidoId) {
     }
 };
 
-window.removeComponentRow = function(btn, compId, parentId) {
-    const card = btn.closest('.kit-component-card');
-    if (!card) return;
-    
+window.removeComponentRow = async function(btn, compId, parentId, pedidoId) {
     if (!compId) {
-        card.remove();
+        const card = btn.closest('.kit-component-card');
+        if (card) card.remove();
         return;
     }
     
-    if (!confirm('Deseja realmente remover este componente e apagar todos os seus arquivos?')) return;
+    if (parentId) {
+        await window.saveKitComponentsSilently(parentId);
+    }
     
-    card.remove();
-    alert('Componente removido temporariamente. Para salvar as alterações no banco de dados, clique em "Salvar Componentes".');
+    fetch(`/api/production/item/${compId}/delete-component`, {
+        method: 'DELETE'
+    }).then(res => {
+        if (res.ok) {
+            if (pedidoId) {
+                openArteAction(pedidoId);
+            } else {
+                const card = btn.closest('.kit-component-card');
+                if (card) card.remove();
+            }
+        } else {
+            alert('Erro ao remover componente.');
+        }
+    }).catch(e => {
+        console.error(e);
+        alert('Erro de conexão ao remover componente.');
+    });
 };
 
 window.toggleCompFileSections = function(uniqueId, sector) {
@@ -5246,7 +5376,7 @@ function renderComponentRow(parentId, comp) {
                 <h5 style="margin: 0; font-size: 0.9rem; color: #0f766e; font-weight: bold; display: flex; align-items: center; gap: 0.25rem;">
                     <i class="ph-puzzle-piece"></i> Componente
                 </h5>
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeComponentRow(this, ${compId ? compId : 'null'}, ${parentId})" style="padding: 2px 8px; font-size: 0.75rem; background: #ef4444; color: white; border: none; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;">
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeComponentRow(this, ${compId ? compId : 'null'}, ${parentId}, ${comp ? comp.pedido_id : 'null'})" style="padding: 2px 8px; font-size: 0.75rem; background: #ef4444; color: white; border: none; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;">
                     <i class="ph-trash"></i> Remover
                 </button>
             </div>
@@ -5295,7 +5425,7 @@ function renderComponentRow(parentId, comp) {
                         </div>
                         <div style="display: flex; gap: 0.25rem; align-items: center;">
                             <input type="file" id="layoutFile_${comp.id}" accept="image/*,application/pdf" style="font-size: 0.7rem; flex-grow: 1;">
-                            <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'layout', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem;"><i class="ph-upload-simple"></i></button>
+                            <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'layout', ${comp.pedido_id})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;"><i class="ph-upload-simple"></i> Enviar</button>
                         </div>
                     </div>
 
@@ -5314,7 +5444,7 @@ function renderComponentRow(parentId, comp) {
                             </div>
                             <div style="display: flex; gap: 0.25rem; align-items: center;">
                                 <input type="file" id="digitalFile_${comp.id}" accept=".pdf,.cdr,.zip" style="font-size: 0.7rem; flex-grow: 1;">
-                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'digital', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #166534; color: white; display: inline-flex; align-items: center; justify-content: center;"><i class="ph-upload-simple"></i></button>
+                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'digital', ${comp.pedido_id})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #166534; color: white; display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;"><i class="ph-upload-simple"></i> Enviar</button>
                             </div>
                         </div>
 
@@ -5332,7 +5462,7 @@ function renderComponentRow(parentId, comp) {
                             </div>
                             <div style="display: flex; gap: 0.25rem; align-items: center;">
                                 <input type="file" id="laserFile_${comp.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.7rem; flex-grow: 1;">
-                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'laser', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #d97706; color: white; display: inline-flex; align-items: center; justify-content: center;"><i class="ph-upload-simple"></i></button>
+                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'laser', ${comp.pedido_id})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #d97706; color: white; display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;"><i class="ph-upload-simple"></i> Enviar</button>
                             </div>
                         </div>
 
@@ -5350,7 +5480,7 @@ function renderComponentRow(parentId, comp) {
                             </div>
                             <div style="display: flex; gap: 0.25rem; align-items: center;">
                                 <input type="file" id="tampografiaFile_${comp.id}" accept=".cdr,.dxf,.pdf,.zip,.ai" style="font-size: 0.7rem; flex-grow: 1;">
-                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'tampografia', ${comp.pedido_id})" style="padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #2563eb; color: white; display: inline-flex; align-items: center; justify-content: center;"><i class="ph-upload-simple"></i></button>
+                                <button type="button" class="btn btn-sm" onclick="uploadItemFile(${comp.id}, 'tampografia', ${comp.pedido_id})" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #2563eb; color: white; display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;"><i class="ph-upload-simple"></i> Enviar</button>
                             </div>
                         </div>
                     </div>

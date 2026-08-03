@@ -5,9 +5,16 @@ const multer = require('multer');
 
 // Função auxiliar para sincronizar o status do Kit Pai de acordo com o status dos seus filhos
 function checkAndSyncKitParent(db, childItemId) {
+    console.log(`[checkAndSyncKitParent] Iniciado para o item filho: ${childItemId}`);
     db.get('SELECT parent_item_id FROM itens_pedido WHERE id = ?', [childItemId], (err, itemRow) => {
-        if (!err && itemRow && itemRow.parent_item_id) {
+        if (err) {
+            console.error(`[checkAndSyncKitParent] Erro ao buscar parent_item_id para filho ${childItemId}:`, err);
+            return;
+        }
+        console.log(`[checkAndSyncKitParent] Resultado para filho ${childItemId}:`, itemRow);
+        if (itemRow && itemRow.parent_item_id) {
             const parentId = itemRow.parent_item_id;
+            console.log(`[checkAndSyncKitParent] Pai encontrado ID: ${parentId}. Verificando pendências...`);
             
             // Verificar se todos os filhos desse pai estão prontos (AGUARDANDO_EMBALE, AGUARDANDO_ENVIO, CONCLUIDO, CANCELADO)
             db.get(`SELECT COUNT(*) as pending_count 
@@ -16,20 +23,39 @@ function checkAndSyncKitParent(db, childItemId) {
                       AND status_atual NOT IN ('AGUARDANDO_EMBALE', 'AGUARDANDO_ENVIO', 'CONCLUIDO', 'CANCELADO')`,
                 [parentId],
                 (errCheck, countRow) => {
-                    if (errCheck) return;
+                    if (errCheck) {
+                        console.error(`[checkAndSyncKitParent] Erro ao verificar pendências do pai ${parentId}:`, errCheck);
+                        return;
+                    }
+                    console.log(`[checkAndSyncKitParent] Resultado pendências para pai ${parentId}:`, countRow);
                     
                     if (countRow.pending_count === 0) {
-                        // Todos os filhos estão prontos! Mover o pai para AGUARDANDO_EMBALE
-                        db.run(`UPDATE itens_pedido SET status_atual = 'AGUARDANDO_EMBALE' WHERE id = ? AND status_atual != 'AGUARDANDO_EMBALE'`, [parentId]);
+                        console.log(`[checkAndSyncKitParent] Nenhuma pendência para pai ${parentId}. Movendo para AGUARDANDO_EMBALE.`);
+                        db.run(`UPDATE itens_pedido SET status_atual = 'AGUARDANDO_EMBALE' WHERE id = ? AND status_atual != 'AGUARDANDO_EMBALE'`, [parentId], function(errUpdate) {
+                            if (errUpdate) {
+                                console.error(`[checkAndSyncKitParent] Erro ao atualizar pai ${parentId} para AGUARDANDO_EMBALE:`, errUpdate);
+                            } else {
+                                console.log(`[checkAndSyncKitParent] Pai ${parentId} atualizado para AGUARDANDO_EMBALE com sucesso. Linhas alteradas: ${this.changes}`);
+                            }
+                        });
                     } else {
-                        // Pelo menos um filho não está pronto. Se o pai estiver em AGUARDANDO_EMBALE, tirar do Embale (volta para AGUARDANDO_DESEMBALE)
-                        db.run(`UPDATE itens_pedido SET status_atual = 'AGUARDANDO_DESEMBALE' WHERE id = ? AND status_atual = 'AGUARDANDO_EMBALE'`, [parentId]);
+                        console.log(`[checkAndSyncKitParent] Pai ${parentId} tem ${countRow.pending_count} pendências. Mantendo/movendo para AGUARDANDO_DESEMBALE.`);
+                        db.run(`UPDATE itens_pedido SET status_atual = 'AGUARDANDO_DESEMBALE' WHERE id = ? AND status_atual = 'AGUARDANDO_EMBALE'`, [parentId], function(errUpdate) {
+                            if (errUpdate) {
+                                console.error(`[checkAndSyncKitParent] Erro ao atualizar pai ${parentId} para AGUARDANDO_DESEMBALE:`, errUpdate);
+                            } else {
+                                console.log(`[checkAndSyncKitParent] Pai ${parentId} mantido/movendo para AGUARDANDO_DESEMBALE. Linhas alteradas: ${this.changes}`);
+                            }
+                        });
                     }
                 }
             );
+        } else {
+            console.log(`[checkAndSyncKitParent] O item ${childItemId} não possui pai ou não é componente.`);
         }
     });
 }
+
 
 
 // Listar Itens por Contexto (Setor ou Status)
@@ -240,6 +266,95 @@ router.get('/item/:id/children', (req, res) => {
     db.all(`SELECT * FROM itens_pedido WHERE parent_item_id = ? AND status_atual != 'CANCELADO'`, [parentId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
+    });
+});
+
+// POST Ativar modo Kit e adicionar primeiro componente se não houver nenhum
+router.post('/item/:id/enable-kit', (req, res) => {
+    const parentId = req.params.id;
+    db.run('UPDATE itens_pedido SET is_kit = 1 WHERE id = ?', [parentId], (errUpdate) => {
+        if (errUpdate) return res.status(500).json({ error: errUpdate.message });
+
+        db.get('SELECT count(*) as count FROM itens_pedido WHERE parent_item_id = ? AND status_atual != "CANCELADO"', [parentId], (errCount, rowCount) => {
+            if (errCount) return res.status(500).json({ error: errCount.message });
+            const count = rowCount ? rowCount.count : 0;
+            if (count > 0) {
+                return res.json({ message: 'Kit ativado, componentes existentes mantidos' });
+            }
+
+            db.get('SELECT * FROM itens_pedido WHERE id = ?', [parentId], (errParent, parent) => {
+                if (errParent) return res.status(500).json({ error: errParent.message });
+                if (!parent) return res.status(404).json({ error: 'Item pai não encontrado' });
+
+                db.run(`INSERT INTO itens_pedido 
+                        (pedido_id, produto, quantidade, status_atual, arte_status, is_kit, parent_item_id, is_kit_component, setor_destino, cor_impressao, observacao_arte, responsavel_arte)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, 1, 'SILK_PLANO', 'A definir', '', ?)`,
+                    [parent.pedido_id, `${parent.produto} - Componente 1`, parent.quantidade, parent.status_atual, parent.arte_status, parentId, parent.responsavel_arte],
+                    function(errIns) {
+                        if (errIns) return res.status(500).json({ error: errIns.message });
+                        res.json({ message: 'Kit ativado e primeiro componente adicionado', componentId: this.lastID });
+                    }
+                );
+            });
+        });
+    });
+});
+
+// POST Adicionar componente em branco
+router.post('/item/:id/add-blank-component', (req, res) => {
+    const parentId = req.params.id;
+    db.get('SELECT * FROM itens_pedido WHERE id = ?', [parentId], (errParent, parent) => {
+        if (errParent) return res.status(500).json({ error: errParent.message });
+        if (!parent) return res.status(404).json({ error: 'Item pai não encontrado' });
+
+        db.get('SELECT count(*) as count FROM itens_pedido WHERE parent_item_id = ? AND status_atual != "CANCELADO"', [parentId], (errCount, rowCount) => {
+            if (errCount) return res.status(500).json({ error: errCount.message });
+            const nextIndex = (rowCount ? rowCount.count : 0) + 1;
+
+            db.run(`INSERT INTO itens_pedido 
+                    (pedido_id, produto, quantidade, status_atual, arte_status, is_kit, parent_item_id, is_kit_component, setor_destino, cor_impressao, observacao_arte, responsavel_arte)
+                    VALUES (?, ?, ?, ?, ?, 0, ?, 1, 'SILK_PLANO', 'A definir', '', ?)`,
+                [parent.pedido_id, `${parent.produto} - Componente ${nextIndex}`, parent.quantidade, parent.status_atual, parent.arte_status, parentId, parent.responsavel_arte],
+                function(errIns) {
+                    if (errIns) return res.status(500).json({ error: errIns.message });
+                    res.json({ id: this.lastID, produto: `${parent.produto} - Componente ${nextIndex}`, parent_item_id: parentId });
+                }
+            );
+        });
+    });
+});
+
+// DELETE Deletar componente
+router.delete('/item/:id/delete-component', (req, res) => {
+    const itemId = req.params.id;
+    db.get('SELECT parent_item_id, layout_path, arquivo_impressao_digital_url, arquivo_impressao_laser_url, arquivo_impressao_tampografia_url FROM itens_pedido WHERE id = ?', [itemId], (err, item) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!item) return res.status(404).json({ error: 'Componente não encontrado' });
+
+        const parentId = item.parent_item_id;
+
+        const { deleteFilesForItems } = require('../utils/fileCleanup');
+        deleteFilesForItems([item])
+            .catch(errClean => console.error("Erro ao limpar arquivos do componente deletado:", errClean))
+            .finally(() => {
+                db.run(`DELETE FROM eventos_producao WHERE item_id = ?`, [itemId], (errEv) => {
+                    if (errEv) console.error("Erro ao deletar eventos do componente:", errEv);
+                    db.run(`DELETE FROM itens_pedido WHERE id = ?`, [itemId], (errDel) => {
+                        if (errDel) return res.status(500).json({ error: errDel.message });
+
+                        db.get('SELECT count(*) as count FROM itens_pedido WHERE parent_item_id = ? AND status_atual != "CANCELADO"', [parentId], (errC, rowCount) => {
+                            const count = rowCount ? rowCount.count : 0;
+                            if (count === 0) {
+                                db.run('UPDATE itens_pedido SET is_kit = 0 WHERE id = ?', [parentId], () => {
+                                    res.json({ message: 'Componente deletado com sucesso, pai atualizado para não-kit' });
+                                });
+                            } else {
+                                res.json({ message: 'Componente deletado com sucesso' });
+                            }
+                        });
+                    });
+                });
+            });
     });
 });
 
@@ -619,6 +734,50 @@ router.put('/pedido/:pedidoId/reprovar', (req, res) => {
     });
 });
 
+// Salvar Rascunho das Artes do Pedido (sem mudar status)
+router.put('/pedido/:pedidoId/salvar-rascunho', (req, res) => {
+    const { itens } = req.body; // Array de { id, setor_destino, cor_impressao, observacao_arte, is_kit }
+    const pedidoId = req.params.pedidoId;
+
+    if (!itens || !Array.isArray(itens) || itens.length === 0) {
+        return res.json({ message: 'Nenhum rascunho a salvar.' });
+    }
+
+    db.serialize(() => {
+        let errors = [];
+        let completed = 0;
+
+        itens.forEach(item => {
+            const isKit = item.is_kit === 1 || item.is_kit === true;
+            const corVal = isKit ? 'KIT' : item.cor_impressao;
+            const setorVal = isKit ? 'KIT' : item.setor_destino;
+
+            const query = `UPDATE itens_pedido SET 
+                setor_destino = ?, 
+                cor_impressao = ?, 
+                observacao_arte = ?,
+                is_terceirizado = CASE WHEN ? = 'TERCEIRIZADO' THEN 1 ELSE 0 END
+                WHERE id = ? AND pedido_id = ?`;
+
+            const params = [setorVal, corVal, item.observacao_arte || null, setorVal, item.id, pedidoId];
+
+            db.run(query, params, function (err) {
+                if (err) {
+                    errors.push({ id: item.id, error: err.message });
+                }
+                completed++;
+                if (completed === itens.length) {
+                    if (errors.length > 0) {
+                        res.status(500).json({ error: 'Erro ao salvar rascunho de alguns itens.', details: errors });
+                    } else {
+                        res.json({ message: 'Rascunho salvo com sucesso.' });
+                    }
+                }
+            });
+        });
+    });
+});
+
 // Aprovar Arte do Pedido em Lote (Roteamento Individual por Item)
 router.put('/pedido/:pedidoId/aprovar', (req, res) => {
     const { itens } = req.body; // Array de { id, setor_destino, cor_impressao, observacao_arte, responsavel, is_kit }
@@ -924,6 +1083,10 @@ router.post('/evento', (req, res) => {
 
                 db.run(queryUpdate, paramsUpdate, (err2) => {
                     if (err2) return res.status(500).json({ error: err2.message });
+                    
+                    // Sincronizar o pai se este item for componente de um kit
+                    checkAndSyncKitParent(db, item_id);
+
                     res.json({ message: 'Evento registrado e status atualizado' });
                 });
             } else {
@@ -1295,6 +1458,17 @@ router.put('/item/:id/embale', (req, res) => {
             console.error("Error updating embale:", err);
             return res.status(500).json({ error: err.message });
         }
+        
+        // Se for Kit Pai, sincronizar o status para todos os seus filhos
+        db.get('SELECT is_kit FROM itens_pedido WHERE id = ?', [itemId], (errKit, itemRow) => {
+            if (!errKit && itemRow && itemRow.is_kit === 1) {
+                const childQuery = `UPDATE itens_pedido SET status_atual = 'AGUARDANDO_ENVIO', data_embale = DATETIME('now', 'localtime') WHERE parent_item_id = ?`;
+                db.run(childQuery, [itemId], (errChildUpdate) => {
+                    if (errChildUpdate) console.error('[KIT-EMBALE-SYNC] Erro ao sincronizar status dos filhos:', errChildUpdate);
+                });
+            }
+        });
+
         res.json({ message: 'Dados de embale salvos confirmados', changes: this.changes });
     });
 });
@@ -1328,45 +1502,66 @@ router.put('/item/:id/assign', (req, res) => {
     });
 });
 
-// Retornar Item para Etapa Anterior (Rollback)
+// Retornar Item para Etapa Anterior (Rollback de pedido inteiro)
 router.put('/item/:id/return', (req, res) => {
     const itemId = req.params.id;
     const { target_status, observation, operador_id } = req.body;
 
     console.log(`[ROLLBACK] Item ${itemId} -> ${target_status}. Obs: ${observation}`);
 
-    // 1. Get current status for history
-    db.get('SELECT status_atual FROM itens_pedido WHERE id = ?', [itemId], (err, row) => {
+    // 1. Obter o pedido_id do item
+    db.get('SELECT pedido_id FROM itens_pedido WHERE id = ?', [itemId], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Item não encontrado' });
 
-        const previousStatus = row.status_atual;
+        const pedidoId = row.pedido_id;
 
-        // 2. Update Status
-        let sqlUpdate = `UPDATE itens_pedido SET status_atual = ? WHERE id = ?`;
-
-        // CORRECTION: If returning to Art/Start, reset art approval and clear sector
-        if (target_status === 'NOVO' || target_status === 'AGUARDANDO_ARTE' || target_status.includes('ARTE')) {
-            console.log(`[ROLLBACK-RESET] Reseting Art Status for Item ${itemId}. Target: ${target_status}`);
-            sqlUpdate = `UPDATE itens_pedido SET status_atual = ?, arte_status = 'AGUARDANDO_APROVACAO', is_alteracao = 1, responsavel_arte = NULL, data_inicio_arte = NULL, data_entrada_arte = DATETIME('now', 'localtime'), setor_destino = NULL, is_terceirizado = 0 WHERE id = ?`;
-        } else {
-            console.log(`[ROLLBACK-NORMAL] Item ${itemId} Target: ${target_status} (No Art Reset)`);
-        }
-
-        db.run(sqlUpdate, [target_status, itemId], function (err2) {
+        // 2. Buscar todos os itens ativos (não cancelados) desse pedido
+        db.all('SELECT id, status_atual FROM itens_pedido WHERE pedido_id = ? AND status_atual != \'CANCELADO\'', [pedidoId], (err2, items) => {
             if (err2) return res.status(500).json({ error: err2.message });
+            if (!items || items.length === 0) return res.status(404).json({ error: 'Nenhum item ativo encontrado no pedido' });
 
-            // 3. Log Event
-            const sqlEvent = `
-                INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao)
-                VALUES (?, ?, ?, 'SISTEMA', 'RETORNO')
-            `;
+            // 3. Atualizar status de todos os itens do pedido
+            let sqlUpdate = `UPDATE itens_pedido SET status_atual = ? WHERE pedido_id = ? AND status_atual != 'CANCELADO'`;
+            let sqlParams = [target_status, pedidoId];
 
-            db.run(sqlEvent, [itemId, operador_id || null, null], (err3) => {
-                if (err3) console.error("Erro ao logar evento de retorno:", err3);
+            if (target_status === 'NOVO' || target_status === 'AGUARDANDO_ARTE' || target_status.includes('ARTE')) {
+                console.log(`[ROLLBACK-RESET] Reseting Art Status for Order ${pedidoId}. Target: ${target_status}`);
+                sqlUpdate = `
+                    UPDATE itens_pedido SET 
+                        status_atual = ?, 
+                        arte_status = 'AGUARDANDO_APROVACAO', 
+                        is_alteracao = 1, 
+                        data_arte_aprovacao = NULL,
+                        responsavel_arte = NULL, 
+                        data_inicio_arte = NULL, 
+                        data_entrada_arte = DATETIME('now', 'localtime'), 
+                        setor_destino = NULL, 
+                        is_terceirizado = 0 
+                    WHERE pedido_id = ? AND status_atual != 'CANCELADO'
+                `;
+            } else {
+                console.log(`[ROLLBACK-NORMAL] Order ${pedidoId} Target: ${target_status} (No Art Reset)`);
+            }
+
+            db.run(sqlUpdate, sqlParams, function (err3) {
+                if (err3) return res.status(500).json({ error: err3.message });
+
+                // 4. Resetar status_geral do pedido caso estivesse como FINALIZADO
+                db.run(`UPDATE pedidos SET status_geral = 'EM_PRODUCAO', finalizado_em = NULL, finalizado_por = NULL WHERE id = ?`, [pedidoId], (errOrder) => {
+                    if (errOrder) console.error("Erro ao atualizar status_geral do pedido no retorno:", errOrder);
+                });
+
+                // 5. Inserir evento de retorno para todos os itens ativos do pedido
+                items.forEach(item => {
+                    db.run(
+                        `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'SISTEMA', 'RETORNO')`,
+                        [item.id, operador_id || null, null]
+                    );
+                });
+
+                res.json({ message: 'Pedido inteiro retornado com sucesso', new_status: target_status });
             });
-
-            res.json({ message: 'Item retornado com sucesso', new_status: target_status });
         });
     });
 });

@@ -1,4 +1,5 @@
 async function loadControleQueue() {
+    currentViewMode = 'controle';
     document.getElementById('pageTitle').textContent = 'Controle de Produção';
     
     // Configurar datas defaults: Início e Fim da semana atual (ou apenas deixar vazio para mostrar os recentes)
@@ -147,7 +148,7 @@ async function fetchControleData() {
                     <td>${renderDeadline(item.prazo_entrega)}</td>
                     <td><span class="badge ${item.status_geral === 'FINALIZADO' ? 'badge-success' : 'badge-warning'}" style="font-size:0.7rem;">${item.status_geral}</span></td>
                     <td>
-                        <button class="btn" style="padding: 0.25rem 0.5rem; width: auto;" onclick="viewOrderDetails(${item.id}, ${item.pedido_id || 'null'})">Ver Pedido</button>
+                        <button class="btn" style="padding: 0.25rem 0.5rem; width: auto;" onclick="viewOrderDetails(${item.pedido_id})">Ver Pedido</button>
                     </td>
                 </tr>
             `;
