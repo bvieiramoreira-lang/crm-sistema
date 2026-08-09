@@ -983,7 +983,7 @@ router.put('/item/:id/status', (req, res) => {
 
 // Registrar Evento de Produção (Inicio/Fim)
 router.post('/evento', (req, res) => {
-    const { item_id, operador_id, operador_nome, setor, acao, quantidade_produzida, multiplos_operadores } = req.body;
+    const { item_id, operador_id, operador_nome, setor, acao, quantidade_produzida, multiplos_operadores, destino_final } = req.body;
     console.log(`[EVENTO-DEBUG] Setor: '${setor}', Acao: '${acao}', ID: ${item_id}, Nome: ${operador_nome}, Multiplos: ${multiplos_operadores ? 'Sim' : 'Nao'}`);
 
     // Helpers function to insert events
@@ -1063,13 +1063,21 @@ router.post('/evento', (req, res) => {
                 updateParams.push(newStatus);
             }
 
+            if (isProductionSector && acao === 'INICIO') {
+                updates.push("segundos_acumulados_producao = 0");
+            }
+
             if (isProductionSector && acao === 'FIM' && setor === 'IMPRESSAO_DIGITAL') {
                 // Ensure it overrides if not already in updates, or just replaces it (handled purely here)
                 updates = updates.filter(u => u !== "status_atual = ?"); // Safety cleanup
                 updates.push("status_atual = ?");
-                updateParams.push('AGUARDANDO_PRODUCAO');
-                updates.push("setor_destino = ?");
-                updateParams.push('ESTAMPARIA');
+                if (destino_final === 'EMBALE') {
+                    updateParams.push('AGUARDANDO_EMBALE');
+                } else {
+                    updateParams.push('AGUARDANDO_PRODUCAO');
+                    updates.push("setor_destino = ?");
+                    updateParams.push('ESTAMPARIA');
+                }
             }
 
             if (responsavelCol && responsavelValue) {
@@ -1600,8 +1608,8 @@ router.put('/item/:id/pause-approve', (req, res) => {
             
             db.run(query, [itemId], function(err2) {
                 if(err2) return res.status(500).json({ error: err2.message });
-                // Registrar evento de pausa
-                db.run("INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao, timestamp) VALUES (?, ?, ?, (SELECT setor_destino FROM itens_pedido WHERE id = ?), 'PAUSA', DATETIME('now', 'localtime'))", [itemId, operador_id, operador_nome, itemId], (err3) => {
+                // Registrar evento de pausa (timestamp defaults to UTC CURRENT_TIMESTAMP)
+                db.run("INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, (SELECT setor_destino FROM itens_pedido WHERE id = ?), 'PAUSA')", [itemId, operador_id, operador_nome, itemId], (err3) => {
                     res.json({ message: 'Pausa aprovada e cronometro congelado.' });
                 });
             });
@@ -1617,8 +1625,8 @@ router.put('/item/:id/resume', (req, res) => {
     db.run("UPDATE itens_pedido SET is_pausado_producao = 0 WHERE id = ?", [itemId], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         
-        // Insere evento de retomada
-        db.run("INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao, timestamp) VALUES (?, ?, ?, (SELECT setor_destino FROM itens_pedido WHERE id = ?), 'RETOMADA', DATETIME('now', 'localtime'))", [itemId, operador_id, operador_nome, itemId], (err2) => {
+        // Insere evento de retomada (timestamp defaults to UTC CURRENT_TIMESTAMP)
+        db.run("INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, (SELECT setor_destino FROM itens_pedido WHERE id = ?), 'RETOMADA')", [itemId, operador_id, operador_nome, itemId], (err2) => {
             res.json({ message: 'Producao retomada.' });
         });
     });

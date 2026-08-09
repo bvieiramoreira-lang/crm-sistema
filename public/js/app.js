@@ -1035,8 +1035,13 @@ async function loadArteQueue() {
         const wipLimitClass = colWip.length >= 10 ? 'background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;' : '';
 
         let html = `
-            <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
-                <input type="text" id="kanbanSearchInput" class="form-control" placeholder="🔍 Pesquisar na arte..." oninput="filterKanbanCards(this.value)">
+            <div style="display: flex; gap: 0.5rem; max-width: 500px; margin-bottom: 1.5rem; align-items: center;">
+                <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                    <input type="text" id="kanbanSearchInput" class="form-control" placeholder="🔍 Pesquisar na arte..." oninput="filterKanbanCards(this.value)">
+                </div>
+                <button class="btn" style="width: auto; height: 38px; display: flex; align-items: center; gap: 0.25rem; background: #e2e8f0; color: #475569; border: none; font-size: 0.85rem;" onclick="clearKanbanSearch()">
+                    <i class="ph-x-circle"></i> Limpar
+                </button>
             </div>
             
             <div class="kanban-board">
@@ -1088,6 +1093,15 @@ async function loadArteQueue() {
 
         document.getElementById('contentArea').innerHTML = html;
 
+        // Restaurar filtro de busca se houver
+        if (window.kanbanSearchQuery) {
+            const searchInput = document.getElementById('kanbanSearchInput');
+            if (searchInput) {
+                searchInput.value = window.kanbanSearchQuery;
+                filterKanbanCards(window.kanbanSearchQuery);
+            }
+        }
+
         // START TIMERS
         window.activeTimersCache = [];
         if (window.productionTimerInterval) clearInterval(window.productionTimerInterval);
@@ -1116,6 +1130,7 @@ function parseSqliteDate(str) {
 }
 
 function filterKanbanCards(query) {
+    window.kanbanSearchQuery = query;
     const cards = document.querySelectorAll('.kanban-card');
     const lowerQuery = query.toLowerCase();
     cards.forEach(card => {
@@ -1126,6 +1141,15 @@ function filterKanbanCards(query) {
             card.style.display = 'none';
         }
     });
+}
+
+function clearKanbanSearch() {
+    window.kanbanSearchQuery = '';
+    const searchInput = document.getElementById('kanbanSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    filterKanbanCards('');
 }
 
 async function updateArteStatusOrderDirect(pedidoId, status) {
@@ -1987,6 +2011,12 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                         mainBtnHtml = `
                             <button class="btn" style="background: var(--danger); opacity: 0.5; filter: grayscale(1); padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; pointer-events: none;"><i class="ph-check"></i> Finalizar</button>
                             <span style="font-size: 0.7rem; color: #b45309; font-weight: bold; display: inline-flex; align-items: center; gap: 0.2rem; margin-top:0.25rem;"><i class="ph-clock-countdown"></i> Pausa enviada</span>
+                        `;
+                    } else if (setor === 'IMPRESSAO_DIGITAL') {
+                        mainBtnHtml = `
+                            <button class="btn" style="background: var(--warning); color: #78350f; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade}, 'ESTAMPARIA')">Finalizar e Estamparia</button>
+                            <button class="btn" style="background: #0284c7; color: white; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade}, 'EMBALE')">Finalizar p/ Embale</button>
+                            <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.15rem 0.35rem; font-size: 0.7rem; width: 100%; border-radius:4px;" onclick="solicitarPausa(${item.id}, '${setor}')"><i class="ph-pause"></i> Solicitar Pausa</button>
                         `;
                     } else {
                         mainBtnHtml = `
@@ -3849,7 +3879,7 @@ async function confirmarEmbale(itemId, pedidoId, tipoEnvio) {
     }
 }
 
-async function registrarEvento(itemId, setor, acao, qtd) {
+async function registrarEvento(itemId, setor, acao, qtd, destinoFinal) {
     // Validação: Obrigatório ter responsável ao FINALIZAR
     if (acao === 'FIM') {
         const respSelect = document.getElementById(`resp_select_${itemId}`);
@@ -3887,7 +3917,8 @@ async function registrarEvento(itemId, setor, acao, qtd) {
             operador_nome: selectedOperadorNome, // Envia NOME processado
             setor,
             acao,
-            quantidade_produzida: qtd
+            quantidade_produzida: qtd,
+            destino_final: destinoFinal
         })
     });
     loadProductionQueue(setor);
