@@ -1516,6 +1516,7 @@ router.put('/item/:id/assign', (req, res) => {
 });
 
 // Retornar Item para Etapa Anterior (Rollback de pedido inteiro)
+// Retornar Item para Etapa Anterior (Rollback de item específico)
 router.put('/item/:id/return', (req, res) => {
     const itemId = req.params.id;
     const { target_status, observation, operador_id } = req.body;
@@ -1529,17 +1530,17 @@ router.put('/item/:id/return', (req, res) => {
 
         const pedidoId = row.pedido_id;
 
-        // 2. Buscar todos os itens ativos (não cancelados) desse pedido
-        db.all('SELECT id, status_atual FROM itens_pedido WHERE pedido_id = ? AND status_atual != \'CANCELADO\'', [pedidoId], (err2, items) => {
+        // 2. Buscar o próprio item e seus sub-itens ativos (não cancelados) caso seja kit
+        db.all('SELECT id, status_atual FROM itens_pedido WHERE (id = ? OR parent_item_id = ?) AND status_atual != \'CANCELADO\'', [itemId, itemId], (err2, items) => {
             if (err2) return res.status(500).json({ error: err2.message });
-            if (!items || items.length === 0) return res.status(404).json({ error: 'Nenhum item ativo encontrado no pedido' });
+            if (!items || items.length === 0) return res.status(404).json({ error: 'Nenhum item ativo encontrado para retorno' });
 
-            // 3. Atualizar status de todos os itens do pedido
-            let sqlUpdate = `UPDATE itens_pedido SET status_atual = ? WHERE pedido_id = ? AND status_atual != 'CANCELADO'`;
-            let sqlParams = [target_status, pedidoId];
+            // 3. Atualizar status dos itens específicos (item selecionado + filhos se for kit)
+            let sqlUpdate = `UPDATE itens_pedido SET status_atual = ? WHERE (id = ? OR parent_item_id = ?) AND status_atual != 'CANCELADO'`;
+            let sqlParams = [target_status, itemId, itemId];
 
             if (target_status === 'NOVO' || target_status === 'AGUARDANDO_ARTE' || target_status.includes('ARTE')) {
-                console.log(`[ROLLBACK-RESET] Reseting Art Status for Order ${pedidoId}. Target: ${target_status}`);
+                console.log(`[ROLLBACK-RESET] Reseting Art Status for Item ${itemId}. Target: ${target_status}`);
                 sqlUpdate = `
                     UPDATE itens_pedido SET 
                         status_atual = ?, 
@@ -1551,19 +1552,19 @@ router.put('/item/:id/return', (req, res) => {
                         data_entrada_arte = DATETIME('now', 'localtime'), 
                         setor_destino = NULL, 
                         is_terceirizado = 0 
-                    WHERE pedido_id = ? AND status_atual != 'CANCELADO'
+                    WHERE (id = ? OR parent_item_id = ?) AND status_atual != 'CANCELADO'
                 `;
             } else {
-                console.log(`[ROLLBACK-NORMAL] Order ${pedidoId} Target: ${target_status} (No Art Reset)`);
+                console.log(`[ROLLBACK-NORMAL] Item ${itemId} Target: ${target_status} (No Art Reset)`);
                 sqlUpdate = `
                     UPDATE itens_pedido 
                     SET status_atual = CASE 
                         WHEN is_terceirizado = 1 AND ? IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO') THEN 'AGUARDANDO_SEPARACAO' 
                         ELSE ? 
                     END 
-                    WHERE pedido_id = ? AND status_atual != 'CANCELADO'
+                    WHERE (id = ? OR parent_item_id = ?) AND status_atual != 'CANCELADO'
                 `;
-                sqlParams = [target_status, target_status, pedidoId];
+                sqlParams = [target_status, target_status, itemId, itemId];
             }
 
             db.run(sqlUpdate, sqlParams, function (err3) {
@@ -1574,7 +1575,7 @@ router.put('/item/:id/return', (req, res) => {
                     if (errOrder) console.error("Erro ao atualizar status_geral do pedido no retorno:", errOrder);
                 });
 
-                // 5. Inserir evento de retorno para todos os itens ativos do pedido
+                // 5. Inserir evento de retorno para todos os itens retornados
                 items.forEach(item => {
                     db.run(
                         `INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao) VALUES (?, ?, ?, 'SISTEMA', 'RETORNO')`,
@@ -1582,7 +1583,10 @@ router.put('/item/:id/return', (req, res) => {
                     );
                 });
 
-                res.json({ message: 'Pedido inteiro retornado com sucesso', new_status: target_status });
+                // 6. Sincronizar o status do pai caso o item retornado seja filho de um kit
+                checkAndSyncKitParent(db, itemId);
+
+                res.json({ message: 'Item retornado com sucesso', new_status: target_status });
             });
         });
     });
