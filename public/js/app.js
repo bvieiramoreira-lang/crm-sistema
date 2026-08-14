@@ -2521,7 +2521,11 @@ async function viewOrderDetails(id) {
         // Se finalizado, não mostra ações de transição
         if (!isFinalized) {
             if (hasProfile('separacao') && item.status_atual === 'AGUARDANDO_SEPARACAO') {
-                action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_DESEMBALE')">Separado OK</button>`;
+                if (item.is_terceirizado) {
+                    action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_EMBALE')">Separado (Pular)</button>`;
+                } else {
+                    action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_DESEMBALE')">Separado OK</button>`;
+                }
             }
             else if (hasProfile('desembale') && item.status_atual === 'AGUARDANDO_DESEMBALE') {
                 action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_PRODUCAO')">Liberar p/ Produção</button>`;
@@ -4603,7 +4607,12 @@ function openRollbackModal(itemId, currentStatus, setorDestino) {
     // Filter options where index < currentLevel
     // Also, restrict 'NOVO' usually implies 'AGUARDANDO_ARTE' logic if we want to reset flow
 
-    const validTargets = flow.filter((step, index) => index < currentLevel);
+    let validTargets = flow.filter((step, index) => index < currentLevel);
+
+    // If the item is outsourced (setorDestino === 'TERCEIRIZADO'), it cannot go to Desembale or Produção
+    if (setorDestino === 'TERCEIRIZADO') {
+        validTargets = validTargets.filter(t => t.status !== 'AGUARDANDO_DESEMBALE' && t.status !== 'AGUARDANDO_PRODUCAO');
+    }
 
     if (validTargets.length === 0) {
         return alert("Não há etapas anteriores para retornar (ou status desconhecido).");

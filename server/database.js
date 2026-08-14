@@ -139,6 +139,8 @@ db.serialize(() => {
     db.serialize(() => {
         db.run("UPDATE itens_pedido SET arte_status = 'ENTRADA' WHERE status_atual = 'AGUARDANDO_ARTE' AND (arte_status = 'ARTE_NAO_FEITA' OR arte_status IS NULL)");
         db.run("UPDATE itens_pedido SET data_entrada_arte = DATETIME('now', 'localtime') WHERE data_entrada_arte IS NULL");
+        // MIGRATION: Corrigir itens terceirizados presos em filas de desembale/produção
+        db.run("UPDATE itens_pedido SET status_atual = 'AGUARDANDO_SEPARACAO' WHERE is_terceirizado = 1 AND status_atual IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO')");
     });
 
     // MIGRATION: Colunas para o Sistema de Pausa

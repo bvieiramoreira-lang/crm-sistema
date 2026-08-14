@@ -911,14 +911,18 @@ router.put('/item/:id/status', (req, res) => {
     }
 
     // Logic for generic moves
-    let query = `UPDATE itens_pedido SET status_atual = ? WHERE id = ?`;
+    // Check if the item is outsourced. If it is outsourced (is_terceirizado = 1), it bypasses Desembale and Produção.
+    // So if novo_status_item is AGUARDANDO_DESEMBALE, AGUARDANDO_PRODUCAO, or EM_PRODUCAO, we route it to AGUARDANDO_SEPARACAO.
+    let query = `UPDATE itens_pedido SET status_atual = CASE WHEN is_terceirizado = 1 AND ? IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO') THEN 'AGUARDANDO_SEPARACAO' ELSE ? END WHERE id = ?`;
+    let queryParams = [novo_status_item, novo_status_item, itemId];
+
     if (timestampCol) {
-        query = `UPDATE itens_pedido SET status_atual = ?, ${timestampCol} = DATETIME('now', 'localtime') ${extraCols} WHERE id = ?`;
+        query = `UPDATE itens_pedido SET status_atual = CASE WHEN is_terceirizado = 1 AND ? IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO') THEN 'AGUARDANDO_SEPARACAO' ELSE ? END, ${timestampCol} = DATETIME('now', 'localtime') ${extraCols} WHERE id = ?`;
     }
 
     db.serialize(() => {
         // 1. Update Item Status
-        db.run(query, [novo_status_item, itemId], function (err) {
+        db.run(query, queryParams, function (err) {
             if (err) return res.status(500).json({ error: err.message });
 
             const changes = this.changes;
@@ -926,11 +930,12 @@ router.put('/item/:id/status', (req, res) => {
             // Se for Kit Pai, sincronizar o status para todos os seus filhos
             db.get('SELECT is_kit FROM itens_pedido WHERE id = ?', [itemId], (errKit, itemRow) => {
                 if (!errKit && itemRow && itemRow.is_kit === 1) {
-                    let childQuery = `UPDATE itens_pedido SET status_atual = ? WHERE parent_item_id = ?`;
+                    let childQuery = `UPDATE itens_pedido SET status_atual = CASE WHEN is_terceirizado = 1 AND ? IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO') THEN 'AGUARDANDO_SEPARACAO' ELSE ? END WHERE parent_item_id = ?`;
+                    let childParams = [novo_status_item, novo_status_item, itemId];
                     if (timestampCol) {
-                        childQuery = `UPDATE itens_pedido SET status_atual = ?, ${timestampCol} = DATETIME('now', 'localtime') ${extraCols} WHERE parent_item_id = ?`;
+                        childQuery = `UPDATE itens_pedido SET status_atual = CASE WHEN is_terceirizado = 1 AND ? IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO') THEN 'AGUARDANDO_SEPARACAO' ELSE ? END, ${timestampCol} = DATETIME('now', 'localtime') ${extraCols} WHERE parent_item_id = ?`;
                     }
-                    db.run(childQuery, [novo_status_item, itemId], (errChildUpdate) => {
+                    db.run(childQuery, childParams, (errChildUpdate) => {
                         if (errChildUpdate) console.error('[KIT-SYNC] Erro ao sincronizar status dos filhos:', errChildUpdate);
                     });
                 }
@@ -1550,6 +1555,15 @@ router.put('/item/:id/return', (req, res) => {
                 `;
             } else {
                 console.log(`[ROLLBACK-NORMAL] Order ${pedidoId} Target: ${target_status} (No Art Reset)`);
+                sqlUpdate = `
+                    UPDATE itens_pedido 
+                    SET status_atual = CASE 
+                        WHEN is_terceirizado = 1 AND ? IN ('AGUARDANDO_DESEMBALE', 'AGUARDANDO_PRODUCAO', 'EM_PRODUCAO') THEN 'AGUARDANDO_SEPARACAO' 
+                        ELSE ? 
+                    END 
+                    WHERE pedido_id = ? AND status_atual != 'CANCELADO'
+                `;
+                sqlParams = [target_status, target_status, pedidoId];
             }
 
             db.run(sqlUpdate, sqlParams, function (err3) {
