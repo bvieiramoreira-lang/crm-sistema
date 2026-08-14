@@ -90,4 +90,13 @@ router.put('/:id', (req, res) => {
     });
 });
 
+// DELETE /api/users/:id - Delete User
+router.delete('/:id', (req, res) => {
+    const { id } = req.params;
+    db.run("DELETE FROM usuarios WHERE id = ?", [id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Usuário excluído com sucesso' });
+    });
+});
+
 module.exports = router;

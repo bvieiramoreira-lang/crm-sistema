@@ -49,9 +49,12 @@ async function loadUsersPage() {
                         <td style="padding: 0.75rem; font-size: 0.85rem;">${setoresSec.toUpperCase()}</td>
                         <td style="padding: 0.75rem; font-size: 0.85rem;">${setorImp}</td>
                         <td style="padding: 0.75rem;">${statusBadge}</td>
-                        <td style="padding: 0.75rem; text-align: center;">
-                            <button class="btn" style="padding: 0.25rem 0.75rem; width: auto; font-size: 0.85rem;" onclick='openUserModal(${JSON.stringify(u)})'>
+                        <td style="padding: 0.75rem; text-align: center; display: flex; gap: 0.25rem; justify-content: center; align-items: center;">
+                            <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.85rem;" onclick='openUserModal(${JSON.stringify(u)})'>
                                 <i class="ph-pencil"></i> Editar
+                            </button>
+                            <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.85rem; background: var(--danger);" onclick='deleteUser(${u.id})'>
+                                <i class="ph-trash"></i> Excluir
                             </button>
                         </td>
                     </tr>
@@ -258,5 +261,21 @@ async function saveUser(id) {
     } catch (e) {
         console.error(e);
         alert('Erro de conexão com o servidor.');
+    }
+}
+
+async function deleteUser(id) {
+    if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+    try {
+        const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            loadUsersPage();
+        } else {
+            const data = await res.json();
+            alert('Erro ao excluir: ' + (data.error || 'Desconhecido'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erro de conexão ao tentar excluir o usuário.');
     }
 }
