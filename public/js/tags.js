@@ -76,18 +76,24 @@ function renderTags(list) {
 }
 
 async function deleteTag(id) {
-    if (!confirm('Tem certeza que deseja excluir esta tag? Ela será removida de todos os pedidos associados.')) return;
+    const confirmAction = await window.showCustomConfirm(
+        'Excluir Tag', 
+        'Tem certeza que deseja excluir esta tag? Ela será removida de todos os pedidos associados.',
+        true
+    );
+    if (!confirmAction) return;
     try {
         const res = await fetch(`/api/tags/${id}`, { method: 'DELETE' });
         if (res.ok) {
+            window.showToast('Tag excluída com sucesso!');
             loadTagsView();
         } else {
             const err = await res.json();
-            alert(err.error || 'Erro ao excluir tag');
+            window.showToast(err.error || 'Erro ao excluir tag', 'error');
         }
     } catch (e) {
         console.error(e);
-        alert('Erro de conexão com o servidor');
+        window.showToast('Erro de conexão com o servidor', 'error');
     }
 }
 

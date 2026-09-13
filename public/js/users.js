@@ -111,7 +111,8 @@ function openUserModal(user = null) {
     const specialPermsList = [
         { value: 'controle', label: 'Controle' },
         { value: 'orders', label: 'Todos os Pedidos' },
-        { value: 'finalizados', label: 'Finalizados' }
+        { value: 'finalizados', label: 'Finalizados' },
+        { value: 'precificacao', label: 'Preços / Precificação' }
     ];
 
     const buildCheckboxes = (list) => list.map(item => `
@@ -265,17 +266,19 @@ async function saveUser(id) {
 }
 
 async function deleteUser(id) {
-    if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+    const confirmAction = await window.showCustomConfirm('Excluir Usuário', 'Tem certeza que deseja excluir este usuário?', true);
+    if (!confirmAction) return;
     try {
         const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
         if (res.ok) {
+            window.showToast('Usuário excluído com sucesso!');
             loadUsersPage();
         } else {
             const data = await res.json();
-            alert('Erro ao excluir: ' + (data.error || 'Desconhecido'));
+            window.showToast('Erro ao excluir: ' + (data.error || 'Desconhecido'), 'error');
         }
     } catch (e) {
         console.error(e);
-        alert('Erro de conexão ao tentar excluir o usuário.');
+        window.showToast('Erro de conexão ao tentar excluir o usuário.', 'error');
     }
 }

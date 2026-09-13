@@ -181,9 +181,12 @@ async function handleUploadManual(e) {
 }
 
 async function deleteManual(id, titulo) {
-    if (!confirm(`Tem certeza que deseja apagar o manual: "${titulo}"?\n\nEsta ação não pode ser desfeita.`)) {
-        return;
-    }
+    const confirmAction = await window.showCustomConfirm(
+        'Excluir Manual', 
+        `Tem certeza que deseja apagar o manual: "${titulo}"?\n\nEsta ação não pode ser desfeita.`,
+        true
+    );
+    if (!confirmAction) return;
 
     try {
         const res = await fetch(`/api/manuals/${id}`, {
@@ -192,13 +195,14 @@ async function deleteManual(id, titulo) {
         const data = await res.json();
 
         if (data.success) {
+            window.showToast('Manual excluído com sucesso!');
             // Recarrega para atualizar a interface
             loadManuals();
         } else {
-            alert('Erro ao excluir: ' + (data.error || 'Desconhecido'));
+            window.showToast('Erro ao excluir: ' + (data.error || 'Desconhecido'), 'error');
         }
     } catch (e) {
         console.error(e);
-        alert('Erro de conexão ao tentar excluir.');
+        window.showToast('Erro de conexão ao tentar excluir.', 'error');
     }
 }

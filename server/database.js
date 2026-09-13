@@ -291,6 +291,131 @@ db.serialize(() => {
             db.run("INSERT INTO tags (nome, cor) VALUES ('MERCADO LIVRE', '#f59e0b')");
         }
     });
+
+    // ==========================================
+    // MÓDULO DE PRECIFICAÇÃO DE PRODUTOS
+    // ==========================================
+    db.run(`CREATE TABLE IF NOT EXISTS configuracao_precificacao (
+        id INTEGER PRIMARY KEY,
+        senha_acesso TEXT DEFAULT '102030',
+        cf_percentual REAL DEFAULT 25.2601,
+        cv_percentual REAL DEFAULT 21.0000,
+        cv_fixo_reais REAL DEFAULT 0.00,
+        faturamento_mensal REAL DEFAULT 600000.00,
+        custos_fixos_total REAL DEFAULT 151560.86,
+        atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run("ALTER TABLE configuracao_precificacao ADD COLUMN senha_acesso TEXT DEFAULT '102030'", (err) => {});
+
+    db.get("SELECT * FROM configuracao_precificacao WHERE id = 1", [], (err, row) => {
+        if (!row) {
+            db.run(`INSERT INTO configuracao_precificacao (id, senha_acesso, cf_percentual, cv_percentual, cv_fixo_reais, faturamento_mensal, custos_fixos_total) 
+                    VALUES (1, '102030', 25.2601, 21.0000, 0.00, 600000.00, 151560.86)`);
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS faixas_margem_precificacao (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ordem INTEGER NOT NULL,
+        categoria TEXT DEFAULT 'GERAL',
+        custo_min REAL NOT NULL,
+        custo_max REAL NOT NULL,
+        m20 REAL NOT NULL,
+        m50 REAL NOT NULL,
+        m100 REAL NOT NULL,
+        m200 REAL NOT NULL,
+        m500 REAL NOT NULL,
+        m1000 REAL NOT NULL,
+        cor_nome TEXT NOT NULL,
+        cor_hex TEXT NOT NULL,
+        atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Migração de coluna se tabela já existia
+    db.run("ALTER TABLE faixas_margem_precificacao ADD COLUMN categoria TEXT DEFAULT 'GERAL'", (err) => {});
+    db.run("UPDATE faixas_margem_precificacao SET categoria = 'GERAL' WHERE categoria IS NULL");
+
+    // Semente com as 12 faixas padrão para PRODUTOS EM GERAL
+    db.get("SELECT COUNT(*) as total FROM faixas_margem_precificacao WHERE categoria = 'GERAL'", [], (err, row) => {
+        if (!err && (!row || row.total === 0)) {
+            const faixasPadrao = [
+                { ordem: 1,  categoria: 'GERAL', custo_min: 0.00,   custo_max: 0.90,   m20: 370, m50: 350, m100: 300, m200: 250, m500: 200, m1000: 150, cor_nome: 'Verde Bandeira', cor_hex: '#16a34a' },
+                { ordem: 2,  categoria: 'GERAL', custo_min: 0.91,   custo_max: 2.00,   m20: 250, m50: 200, m100: 150, m200: 120, m500: 100, m1000: 90,  cor_nome: 'Laranja',        cor_hex: '#ea580c' },
+                { ordem: 3,  categoria: 'GERAL', custo_min: 2.01,   custo_max: 3.00,   m20: 200, m50: 150, m100: 120, m200: 100, m500: 90,  m1000: 80,  cor_nome: 'Amarelo',        cor_hex: '#eab308' },
+                { ordem: 4,  categoria: 'GERAL', custo_min: 3.01,   custo_max: 6.00,   m20: 120, m50: 100, m100: 80,  m200: 70,  m500: 60,  m1000: 50,  cor_nome: 'Verde Musgo',    cor_hex: '#4d7c0f' },
+                { ordem: 5,  categoria: 'GERAL', custo_min: 6.01,   custo_max: 10.00,  m20: 70,  m50: 65,  m100: 60,  m200: 50,  m500: 45,  m1000: 40,  cor_nome: 'Marrom',         cor_hex: '#854d0e' },
+                { ordem: 6,  categoria: 'GERAL', custo_min: 10.01,  custo_max: 15.00,  m20: 65,  m50: 60,  m100: 50,  m200: 45,  m500: 40,  m1000: 30,  cor_nome: 'Rosa Claro',     cor_hex: '#f472b6' },
+                { ordem: 7,  categoria: 'GERAL', custo_min: 15.01,  custo_max: 20.00,  m20: 60,  m50: 55,  m100: 45,  m200: 40,  m500: 35,  m1000: 30,  cor_nome: 'Lilás',          cor_hex: '#a855f7' },
+                { ordem: 8,  categoria: 'GERAL', custo_min: 20.01,  custo_max: 40.00,  m20: 50,  m50: 45,  m100: 40,  m200: 35,  m500: 30,  m1000: 25,  cor_nome: 'Azul Claro',     cor_hex: '#0284c7' },
+                { ordem: 9,  categoria: 'GERAL', custo_min: 40.01,  custo_max: 50.00,  m20: 45,  m50: 40,  m100: 35,  m200: 30,  m500: 25,  m1000: 20,  cor_nome: 'Rosa Pink',      cor_hex: '#ec4899' },
+                { ordem: 10, categoria: 'GERAL', custo_min: 50.01,  custo_max: 70.00,  m20: 35,  m50: 30,  m100: 25,  m200: 20,  m500: 15,  m1000: 10,  cor_nome: 'Roxo',           cor_hex: '#7e22ce' },
+                { ordem: 11, categoria: 'GERAL', custo_min: 70.01,  custo_max: 100.00, m20: 30,  m50: 25,  m100: 20,  m200: 15,  m500: 10,  m1000: 8,   cor_nome: 'Vermelho',       cor_hex: '#dc2626' },
+                { ordem: 12, categoria: 'GERAL', custo_min: 100.01, custo_max: 500.00, m20: 20,  m50: 18,  m100: 15,  m200: 12,  m500: 10,  m100: 5,   cor_nome: 'Azul Tifany',    cor_hex: '#06b6d4' }
+            ];
+
+            const stmt = db.prepare(`INSERT INTO faixas_margem_precificacao 
+                (ordem, categoria, custo_min, custo_max, m20, m50, m100, m200, m500, m1000, cor_nome, cor_hex) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+            faixasPadrao.forEach(f => {
+                stmt.run([f.ordem, f.categoria, f.custo_min, f.custo_max, f.m20, f.m50, f.m100, f.m200, f.m500, f.m1000, f.cor_nome, f.cor_hex]);
+            });
+            stmt.finalize();
+        }
+    });
+
+    // Semente com as 4 faixas exclusivas para CANETAS
+    db.get("SELECT COUNT(*) as total FROM faixas_margem_precificacao WHERE categoria = 'CANETA'", [], (err, row) => {
+        if (!err && (!row || row.total === 0)) {
+            const faixasCaneta = [
+                { ordem: 1, categoria: 'CANETA', custo_min: 0.00, custo_max: 0.60, m20: 45,  m50: 40,  m100: 35,  m200: 30,  m500: 25,  m1000: 20, cor_nome: 'Rosa Pink',      cor_hex: '#ec4899' },
+                { ordem: 2, categoria: 'CANETA', custo_min: 0.61, custo_max: 1.00, m20: 250, m50: 200, m100: 150, m200: 120, m500: 100, m1000: 90, cor_nome: 'Laranja',        cor_hex: '#ea580c' },
+                { ordem: 3, categoria: 'CANETA', custo_min: 1.01, custo_max: 3.00, m20: 370, m50: 350, m100: 300, m200: 250, m500: 200, m1000: 150, cor_nome: 'Verde Bandeira', cor_hex: '#16a34a' },
+                { ordem: 4, categoria: 'CANETA', custo_min: 3.01, custo_max: 500.0, m20: 200, m50: 150, m100: 120, m200: 100, m500: 90,  m1000: 80, cor_nome: 'Amarelo',        cor_hex: '#eab308' }
+            ];
+
+            const stmt = db.prepare(`INSERT INTO faixas_margem_precificacao 
+                (ordem, categoria, custo_min, custo_max, m20, m50, m100, m200, m500, m1000, cor_nome, cor_hex) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+            faixasCaneta.forEach(f => {
+                stmt.run([f.ordem, f.categoria, f.custo_min, f.custo_max, f.m20, f.m50, f.m100, f.m200, f.m500, f.m1000, f.cor_nome, f.cor_hex]);
+            });
+            stmt.finalize();
+            console.log("Faixas de margem padrão para CANETAS inicializadas.");
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS produtos_precificados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT,
+        nome TEXT NOT NULL,
+        tipo_precificacao TEXT DEFAULT 'GERAL', -- 'GERAL' ou 'CANETA'
+        custo_base REAL NOT NULL,
+        custo_real REAL NOT NULL,
+        preco_20 REAL NOT NULL,
+        preco_50 REAL NOT NULL,
+        preco_100 REAL NOT NULL,
+        preco_200 REAL NOT NULL,
+        preco_500 REAL NOT NULL,
+        preco_1000 REAL NOT NULL,
+        margem_20 REAL,
+        margem_50 REAL,
+        margem_100 REAL,
+        margem_200 REAL,
+        margem_500 REAL,
+        margem_1000 REAL,
+        faixa_nome TEXT,
+        slot_precos TEXT,
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+        atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run("ALTER TABLE produtos_precificados ADD COLUMN tipo_precificacao TEXT DEFAULT 'GERAL'", (err) => {});
+    db.run("UPDATE produtos_precificados SET tipo_precificacao = 'GERAL' WHERE tipo_precificacao IS NULL");
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_produtos_precificados_codigo ON produtos_precificados(codigo)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_produtos_precificados_nome ON produtos_precificados(nome)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_produtos_precificados_tipo ON produtos_precificados(tipo_precificacao)`);
 });
 
 module.exports = db;

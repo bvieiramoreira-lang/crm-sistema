@@ -101,7 +101,8 @@ async function loadArteQueue() {
 }
 
 async function updateArteStatus(id, status) {
-    if (!confirm(`Confirmar status: ${status}?`)) return;
+    const confirmAction = await window.showCustomConfirm('Atualizar Status da Arte', `Confirmar status: ${status}?`);
+    if (!confirmAction) return;
     try {
         // We probably need a specific route for ARTE.
         // `PUT /item/:id/status` updates `status_atual`.
@@ -123,5 +124,5 @@ async function updateArteStatus(id, status) {
         loadArteQueue();
         updateMenuCounts();
 
-    } catch (e) { alert('Erro: ' + e.message); }
+    } catch (e) { window.showToast('Erro: ' + e.message, 'error'); }
 }

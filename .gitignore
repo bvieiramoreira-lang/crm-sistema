@@ -44,3 +44,4 @@ seed_*.js
 seed.js
 trigger_stats.js
 update_admin_uppercase.js
+*.xlsx

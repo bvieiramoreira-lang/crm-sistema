@@ -105,6 +105,127 @@ window.getMultiplosData = function(isDesembale, totalEsperado) {
 }
 // ==== END MULTIPLOS OPERADORES INJECT ====
 
+function formatResponsibleDisplay(respValue) {
+    if (!respValue) return '--';
+    if (typeof respValue === 'string' && respValue.trim().startsWith('[')) {
+        try {
+            const parsed = JSON.parse(respValue);
+            if (Array.isArray(parsed)) {
+                return parsed.map(p => {
+                    const nome = typeof p === 'string' ? p : (p.nome || p.operador_nome || 'Colab');
+                    const qtd = (typeof p === 'object' && p.quantidade != null) ? ` (${p.quantidade} un)` : '';
+                    return `👥 ${nome}${qtd}`;
+                }).join(', ');
+            }
+        } catch (e) { }
+    }
+    return respValue;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+window.obsDataCache = window.obsDataCache || {};
+
+function formatObsTag(tipo, text, item) {
+    if (!text || typeof text !== 'string' || text.trim() === '') return '';
+    const cleanText = text.trim();
+    const cacheKey = `${item.id}_${tipo}`;
+    window.obsDataCache[cacheKey] = {
+        tipo,
+        text: cleanText,
+        pedidoNum: item.numero_pedido || '',
+        produtoName: item.produto || '',
+        cliente: item.cliente || ''
+    };
+
+    const isArte = tipo === 'arte';
+    const label = isArte ? 'Obs Arte:' : 'Obs Pedido:';
+    const icon = isArte ? 'ph-warning' : 'ph-notepad';
+    const bg = isArte ? '#fff7ed' : '#fef9c3';
+    const border = isArte ? '#fdba74' : '#fde047';
+    const textColor = isArte ? '#c2410c' : '#854d0e';
+    const btnBg = isArte ? '#ffedd5' : '#fef08a';
+    const btnBorder = isArte ? '#f97316' : '#ca8a04';
+
+    const isLong = cleanText.length > 28 || cleanText.includes('\n');
+
+    if (!isLong) {
+        return `
+            <div style="margin-top:0.25rem; font-size:0.75rem; color:${textColor}; background:${bg}; border:1px solid ${border}; padding:2px 6px; border-radius:4px; max-width:270px; line-height:1.3; display:inline-flex; align-items:center; gap:0.3rem; cursor:pointer;" onclick="window.openObsDetailModalByKey('${cacheKey}')" title="Clique para ver detalhes">
+                <i class="${icon}"></i>
+                <span><strong>${label}</strong> ${escapeHtml(cleanText)}</span>
+            </div>
+        `;
+    }
+
+    // Snippet para texto longo: primeira linha limitada + reticências
+    const firstLine = cleanText.split('\n')[0];
+    const snippet = firstLine.length > 20 ? firstLine.slice(0, 20) + '...' : firstLine + '...';
+
+    return `
+        <div style="margin-top:0.25rem; font-size:0.75rem; color:${textColor}; background:${bg}; border:1px solid ${border}; padding:2px 6px; border-radius:4px; max-width:270px; display:flex; align-items:center; justify-content:space-between; gap:0.35rem; box-sizing:border-box;">
+            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;" title="${escapeHtml(cleanText)}">
+                <i class="${icon}"></i> <strong>${label}</strong> ${escapeHtml(snippet)}
+            </div>
+            <button type="button" class="btn" style="padding:1px 6px; font-size:0.68rem; height:auto; line-height:1.3; background:${btnBg}; border:1px solid ${btnBorder}; color:${textColor}; border-radius:3px; cursor:pointer; font-weight:700; white-space:nowrap; flex-shrink:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);" onclick="window.openObsDetailModalByKey('${cacheKey}')">
+                Ver obs
+            </button>
+        </div>
+    `;
+}
+
+window.openObsDetailModalByKey = function(cacheKey) {
+    const data = window.obsDataCache && window.obsDataCache[cacheKey];
+    if (!data) return;
+
+    const existing = document.getElementById('obsDetailModal');
+    if (existing) existing.remove();
+
+    const isArte = data.tipo === 'arte';
+    const title = isArte ? 'Observação da Arte Final' : 'Observação do Pedido';
+    const icon = isArte ? 'ph-warning' : 'ph-notepad';
+    const headerBg = isArte ? '#fff7ed' : '#fefce8';
+    const headerBorder = isArte ? '#fdba74' : '#fde047';
+    const textColor = isArte ? '#9a3412' : '#854d0e';
+    const badgeColor = isArte ? '#ea580c' : '#ca8a04';
+
+    const modalHtml = `
+    <div id="obsDetailModal" class="modal show" style="z-index: 11000; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center;" onclick="if(event.target === this) this.remove()">
+        <div class="modal-content" style="max-width: 520px; width: 92%; padding: 1.5rem; border-radius: 0.85rem; background: #ffffff; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25);">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <div style="width: 38px; height: 38px; border-radius: 8px; background: ${headerBg}; border: 1.5px solid ${headerBorder}; color: ${badgeColor}; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; flex-shrink: 0;">
+                        <i class="${icon}"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #1e293b;">${title}</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: #64748b;">Pedido #${data.pedidoNum || ''} ${data.produtoName ? '• ' + data.produtoName : ''}</p>
+                    </div>
+                </div>
+                <button type="button" onclick="document.getElementById('obsDetailModal').remove()" style="background: none; border: none; font-size: 1.3rem; color: #94a3b8; cursor: pointer; line-height: 1;">✕</button>
+            </div>
+
+            <div style="background: ${headerBg}; border: 1.5px solid ${headerBorder}; border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem; text-align: left; max-height: 350px; overflow-y: auto;">
+                <div style="font-size: 0.95rem; color: ${textColor}; line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-weight: 500;">${escapeHtml(data.text)}</div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" style="padding: 0.5rem 1.25rem; border-radius: 6px; font-weight: 600;" onclick="document.getElementById('obsDetailModal').remove()">Fechar</button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     setupNavigation();
@@ -272,6 +393,7 @@ function setupNavigation() {
             },
             { id: 'orders', label: 'Todos os Pedidos', icon: 'ph-stack', profiles: ['financeiro', 'admin'], action: loadOrders },
             { id: 'controle', label: 'Controle', icon: 'ph-chart-bar', profiles: ['admin', 'vendedor'], action: loadControleQueue },
+            { id: 'precificacao', label: 'Preços', icon: 'ph-currency-circle-dollar', profiles: ['admin'], action: () => { if (typeof loadPricingView === 'function') loadPricingView(); } },
             { id: 'new_order', label: 'Novo Pedido', icon: 'ph-plus-circle', profiles: ['financeiro', 'admin'], action: openNewOrderModal },
             { id: 'arte', label: 'Arte Final', icon: 'ph-paint-brush', profiles: ['arte', 'admin'], action: loadArteQueue },
             { id: 'separacao', label: 'Separação', icon: 'ph-basket', profiles: ['separacao', 'admin'], action: () => loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação') },
@@ -511,7 +633,7 @@ function renderFlowStatusBar(item) {
     const currentSeq = getStatusSequence(item.status_atual);
 
     // Steps Definition
-    const steps = [
+    let steps = [
         { label: 'ARTE FINAL', seq: 0 },
         { label: 'SEPARAÇÃO', seq: 1 },
         { label: 'DESEMBALE', seq: 2 },
@@ -519,6 +641,15 @@ function renderFlowStatusBar(item) {
         { label: 'EMBALE', seq: 4 },
         { label: 'LOGÍSTICA', seq: 5 }
     ];
+
+    if (item.is_terceirizado) {
+        steps = [
+            { label: 'ARTE FINAL', seq: 0 },
+            { label: 'SEPARAÇÃO', seq: 1 },
+            { label: 'EMBALE', seq: 4 },
+            { label: 'LOGÍSTICA', seq: 5 }
+        ];
+    }
 
     let html = '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem; overflow-x:auto; padding-bottom:0.2rem; flex-wrap:wrap;">';
 
@@ -908,22 +1039,23 @@ function renderOrderRows(orders, isFinishedMode = false) {
 }
 
 async function markAsRetirado(id) {
-    if (!confirm('Deseja registrar que este pedido foi RETIRADO pelo cliente?')) return;
+    const confirmAction = await showCustomConfirm('Registrar Retirada', 'Deseja registrar que este pedido foi RETIRADO pelo cliente?');
+    if (!confirmAction) return;
     try {
         const res = await fetch(`/api/orders/${id}/retirar`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' }
         });
         if (res.ok) {
-            alert('Retirada registrada com sucesso!');
+            showToast('Retirada registrada com sucesso!');
             fetchAndRenderOrders();
         } else {
             const err = await res.json();
-            alert('Erro: ' + (err.error || 'Falha ao registrar retirada'));
+            showToast('Erro: ' + (err.error || 'Falha ao registrar retirada'), 'error');
         }
     } catch (e) {
         console.error(e);
-        alert('Erro de conexão ao servidor.');
+        showToast('Erro de conexão ao servidor.', 'error');
     }
 }
 
@@ -1153,7 +1285,8 @@ function clearKanbanSearch() {
 }
 
 async function updateArteStatusOrderDirect(pedidoId, status) {
-    if (!confirm(`Confirmar alteração do pedido para o status: ${status}?`)) return;
+    const confirmAction = await showCustomConfirm('Alterar Status', `Confirmar alteração do pedido para o status: ${status}?`);
+    if (!confirmAction) return;
 
     const cardEl = document.getElementById(`kanban-card-${pedidoId}`);
     const selectEl = cardEl ? cardEl.querySelector('select') : null;
@@ -1545,6 +1678,7 @@ async function loadGenericQueue(statusFiltro, titulo) {
 
         const itensExec = await resExec.json();
         const itensFuture = await resFuture.json();
+        window.currentGenericQueueItems = Array.isArray(itensExec) ? itensExec : [];
 
         const totalItems = itensExec.length + itensFuture.length;
         document.getElementById('headerActions').innerHTML = `<span class="badge badge-blue">Total: <span id="queueCount">${totalItems}</span> (Ativos: ${itensExec.length} / Futuros: ${itensFuture.length})</span>`;
@@ -1611,7 +1745,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
             if (statusFiltro === 'AGUARDANDO_SEPARACAO') {
                 if (item.is_terceirizado) {
                     nextStatus = 'AGUARDANDO_EMBALE';
-                    btnLabel = 'Separado (Pular)';
+                    btnLabel = 'Separado OK';
                 } else {
                     nextStatus = 'AGUARDANDO_DESEMBALE';
                     btnLabel = 'Separado OK';
@@ -1632,19 +1766,23 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
         let respBlock = '';
         if (targetSectorCode && !isReadOnly) {
             const currentResp = item[`responsavel_${targetSectorCode}`] || '';
-            let options = `<option value="">-- Selecione --</option>`;
-            sectorUsers.forEach(u => {
-                const sel = u.nome === currentResp ? 'selected' : '';
-                options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
-            });
-            respBlock = `
-                 <select class="form-control" id="resp_select_${item.id}" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1; height: auto;" 
-                        onchange="assignItem(${item.id}, '${targetSectorCode}', this.value)">
-                    ${options}
-                </select>`;
+            if (typeof currentResp === 'string' && currentResp.trim().startsWith('[')) {
+                respBlock = `<div style="font-size:0.8rem; color:#1d4ed8; background:#eff6ff; border:1px solid #bfdbfe; padding:2px 6px; border-radius:4px; line-height:1.3;">${formatResponsibleDisplay(currentResp)}</div>`;
+            } else {
+                let options = `<option value="">-- Selecione --</option>`;
+                sectorUsers.forEach(u => {
+                    const sel = u.nome === currentResp ? 'selected' : '';
+                    options += `<option value="${u.nome}" ${sel}>${u.nome}</option>`;
+                });
+                respBlock = `
+                     <select class="form-control" id="resp_select_${item.id}" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1; height: auto;" 
+                            onchange="assignItem(${item.id}, '${targetSectorCode}', this.value)">
+                        ${options}
+                    </select>`;
+            }
         } else if (targetSectorCode && isReadOnly) {
             const currentResp = item[`responsavel_${targetSectorCode}`] || '--';
-            respBlock = `<span style="color:#64748b; font-size:0.85rem; font-weight:500;">${currentResp}</span>`;
+            respBlock = `<span style="color:#64748b; font-size:0.85rem; font-weight:500;">${formatResponsibleDisplay(currentResp)}</span>`;
         }
 
         // Layout & Prints
@@ -1658,10 +1796,9 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
             printSectorInfo = `<div><span class="badge badge-danger" style="font-size: 0.7rem; padding: 2px 4px;">Não definido</span></div>`;
         }
 
-        // Obs Arte
-        const obsArteContent = item.observacao_arte
-            ? `<div style="margin-top:0.2rem; font-size:0.75rem; color:#c2410c; background:#fff7ed; border:1px solid #fdba74; padding:2px 4px; border-radius:3px; max-width:250px;"><i class="ph-warning"></i> Obs: ${item.observacao_arte}</div>`
-            : '';
+        // Obs Pedido & Obs Arte
+        const obsPedidoContent = formatObsTag('pedido', item.observacao, item);
+        const obsArteContent = formatObsTag('arte', item.observacao_arte, item);
 
         // Obs: Bypass Embale
         const volumeWarning = (item.flag_embale_sem_volumes === 1 || item.flag_embale_sem_volumes === true)
@@ -1786,6 +1923,7 @@ function renderGenericRows(itens, statusFiltro, isReadOnly, sectorUsers, targetS
                             ${item.transportadora ? `<span style="font-size:0.75rem; color:#64748b;">(Transp: <b>${item.transportadora}</b>)</span>` : ''}
                         </div>
                         ${tercBadge}
+                        ${obsPedidoContent}
                         ${obsArteContent}
                         ${volumeWarning}
                         ${productionDurationInfo}
@@ -1807,6 +1945,8 @@ async function loadProductionQueue(setor) {
 
     // --- BUSCAR COLABORADORES DO SUB-SETOR ---
     let sectorUsers = await getSectorUsersCached(setor);
+    window.currentSectorUsers = sectorUsers;
+    window.currentProductionSector = setor;
 
     // Fetch Parallel: Execution + Future
     let itensExec = [];
@@ -1840,6 +1980,7 @@ async function loadProductionQueue(setor) {
     }
 
     const totalItems = itensExec.length + itensFuture.length;
+    window.currentProductionItems = itensExec;
     document.getElementById('headerActions').innerHTML = `<span class="badge badge-blue">Total: <span id="queueCount">${totalItems}</span> (Ativos: ${itensExec.length} / Futuros: ${itensFuture.length})</span>`;
 
     let html = `
@@ -1891,22 +2032,26 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
             let respBlock = '';
             if (!isReadOnly) {
                 const currentResp = item.responsavel_impressao || '';
-                let options = `<option value="">-- Selecione --</option>`;
-                if (Array.isArray(sectorUsers)) {
-                    sectorUsers.forEach(u => {
-                        const sel = u.nome === currentResp ? 'selected' : '';
-                        options += `<option value="${u.nome}" data-userid="${u.id}" ${sel}>${u.nome}</option>`;
-                    });
+                if (typeof currentResp === 'string' && currentResp.trim().startsWith('[')) {
+                    respBlock = `<div style="font-size:0.8rem; color:#1d4ed8; background:#eff6ff; border:1px solid #bfdbfe; padding:2px 6px; border-radius:4px; line-height:1.3;">${formatResponsibleDisplay(currentResp)}</div>`;
+                } else {
+                    let options = `<option value="">-- Selecione --</option>`;
+                    if (Array.isArray(sectorUsers)) {
+                        sectorUsers.forEach(u => {
+                            const sel = u.nome === currentResp ? 'selected' : '';
+                            options += `<option value="${u.nome}" data-userid="${u.id}" ${sel}>${u.nome}</option>`;
+                        });
+                    }
+                    respBlock = `
+                        <select class="form-control" id="resp_select_${item.id}" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1; height: auto;" 
+                                onchange="assignItem(${item.id}, 'impressao', this.value)">
+                            ${options}
+                        </select>
+                    `;
                 }
-                respBlock = `
-                    <select class="form-control" id="resp_select_${item.id}" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; width: 100%; border-color: #cbd5e1; height: auto;" 
-                            onchange="assignItem(${item.id}, 'impressao', this.value)">
-                        ${options}
-                    </select>
-                `;
             } else {
                 const currentResp = item.responsavel_impressao || '--';
-                respBlock = `<span style="color:#64748b; font-size:0.85rem; font-weight:500;">${currentResp}</span>`;
+                respBlock = `<span style="color:#64748b; font-size:0.85rem; font-weight:500;">${formatResponsibleDisplay(currentResp)}</span>`;
             }
 
             // Layout & Prints
@@ -1916,10 +2061,9 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
 
             const tercBadge = item.is_terceirizado ? `<div style="margin-top: 0.25rem;"><span class="badge" style="font-size:0.7rem; background:#fef08a; color:#854d0e; border:1px solid #fce71c; padding: 2px 4px;"><i class="ph-truck"></i> Terceirizado</span></div>` : '';
 
-            // Obs Arte
-            const obsArteContent = item.observacao_arte
-                ? `<div style="margin-top:0.2rem; font-size:0.75rem; color:#c2410c; background:#fff7ed; border:1px solid #fdba74; padding:2px 4px; border-radius:3px; max-width:250px;"><i class="ph-warning"></i> Obs: ${item.observacao_arte}</div>`
-                : '';
+            // Obs Pedido & Obs Arte
+            const obsPedidoContent = formatObsTag('pedido', item.observacao, item);
+            const obsArteContent = formatObsTag('arte', item.observacao_arte, item);
 
             // Compact File Badge
             let fileBadge = '';
@@ -2014,18 +2158,18 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                         `;
                     } else if (setor === 'IMPRESSAO_DIGITAL') {
                         mainBtnHtml = `
-                            <button class="btn" style="background: var(--warning); color: #78350f; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade}, 'ESTAMPARIA')">Finalizar e Estamparia</button>
-                            <button class="btn" style="background: #0284c7; color: white; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade}, 'EMBALE')">Finalizar p/ Embale</button>
+                            <button class="btn" style="background: var(--warning); color: #78350f; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="openFinalizarProducaoModal(${item.id}, '${setor}', ${item.quantidade}, 'ESTAMPARIA')">Finalizar e Estamparia</button>
+                            <button class="btn" style="background: #0284c7; color: white; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="openFinalizarProducaoModal(${item.id}, '${setor}', ${item.quantidade}, 'EMBALE')">Finalizar p/ Embale</button>
                             <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.15rem 0.35rem; font-size: 0.7rem; width: 100%; border-radius:4px;" onclick="solicitarPausa(${item.id}, '${setor}')"><i class="ph-pause"></i> Solicitar Pausa</button>
                         `;
                     } else {
                         mainBtnHtml = `
-                            <button class="btn" style="background: var(--warning); color: #78350f; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="registrarEvento(${item.id}, '${setor}', 'FIM', ${item.quantidade})">Finalizar</button>
+                            <button class="btn" style="background: var(--warning); color: #78350f; padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%; margin-bottom: 0.2rem;" onclick="openFinalizarProducaoModal(${item.id}, '${setor}', ${item.quantidade})">Finalizar</button>
                             <button class="btn" style="background: #fcd34d; color: #854d0e; padding: 0.15rem 0.35rem; font-size: 0.7rem; width: 100%; border-radius:4px;" onclick="solicitarPausa(${item.id}, '${setor}')"><i class="ph-pause"></i> Solicitar Pausa</button>
                         `;
                     }
                 } else {
-                    mainBtnHtml = `<button class="btn" style="background: var(--success); padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%;" onclick="openPrintingConfirmation(${item.id}, '${setor}')">Iniciar</button>`;
+                    mainBtnHtml = `<button class="btn" style="background: var(--success); padding: 0.2rem 0.4rem; font-size:0.75rem; border-radius:4px; width:100%;" onclick="handleStartProductionClick(${item.id}, '${setor}')">Iniciar</button>`;
                     if (setor === 'ESTAMPARIA') {
                         mainBtnHtml += `<button class="btn" style="background: #eab308; color: #713f12; padding: 0.2rem 0.4rem; font-size:0.7rem; border-radius:4px; width:100%; margin-top:0.2rem;" onclick="skipProduction(${item.id}, '${setor}')" title="Pular Produção">Pular Prod.</button>`;
                     }
@@ -2091,6 +2235,7 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                             </div>
                             ${tercBadge}
                             ${fileBadge}
+                            ${obsPedidoContent}
                             ${obsArteContent}
                         </div>
                     </td>
@@ -2522,7 +2667,7 @@ async function viewOrderDetails(id) {
         if (!isFinalized) {
             if (hasProfile('separacao') && item.status_atual === 'AGUARDANDO_SEPARACAO') {
                 if (item.is_terceirizado) {
-                    action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_EMBALE')">Separado (Pular)</button>`;
+                    action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_EMBALE')">Separado OK</button>`;
                 } else {
                     action = `<button class="btn" onclick="mudarStatusItem(${item.id}, 'AGUARDANDO_DESEMBALE')">Separado OK</button>`;
                 }
@@ -2851,7 +2996,7 @@ async function openArteAction(pedidoId) {
 
                             <div class="form-group" style="margin-bottom: 1rem;">
                                 <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Setor Destino ${item.is_terceirizado ? '<span style="color:#854d0e">(Terceirizado - Pula Impressão)</span>' : ''}</label>
-                                <select id="setorDestino_${item.id}" class="form-control" ${item.is_terceirizado ? 'disabled' : ''} onchange="toggleItemFileSections(${item.id})" style="margin-bottom: 0;">
+                                <select id="setorDestino_${item.id}" class="form-control" onchange="toggleItemFileSections(${item.id})" style="margin-bottom: 0;">
                                     <option value="">Selecione...</option>
                                     <option value="SILK_PLANO" ${item.setor_destino === 'SILK_PLANO' ? 'selected' : ''}>Silk Plano</option>
                                     <option value="SILK_CILINDRICA" ${item.setor_destino === 'SILK_CILINDRICA' ? 'selected' : ''}>Silk Cilíndrica</option>
@@ -3469,6 +3614,27 @@ async function mudarStatusItem(itemId, novoStatus) {
 function openEmbaleAction(itemId, pedidoId, tipoEnvio, itemQuantidade) {
     const isRetirada = tipoEnvio === 'RETIRADA';
 
+    let item = null;
+    if (window.currentGenericQueueItems && Array.isArray(window.currentGenericQueueItems)) {
+        item = window.currentGenericQueueItems.find(i => i.id === itemId);
+    }
+
+    let obsEmbaleHtml = '';
+    const hasObsPedido = item && item.observacao && item.observacao.trim() !== '';
+    const hasObsArte = item && item.observacao_arte && item.observacao_arte.trim() !== '';
+
+    if (hasObsPedido || hasObsArte) {
+        obsEmbaleHtml = `
+            <div style="background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; text-align: left;">
+                <div style="font-weight: 700; color: #b45309; font-size: 0.85rem; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.35rem;">
+                    <i class="ph-warning-octagon" style="font-size: 1.2rem;"></i> OBSERVAÇÕES IMPORTANTES DO PEDIDO / EMBALAGEM
+                </div>
+                ${hasObsPedido ? `<div style="font-size: 0.9rem; color: #78350f; margin-bottom: 0.35rem; line-height: 1.35;"><strong>📋 Obs Pedido:</strong> ${item.observacao}</div>` : ''}
+                ${hasObsArte ? `<div style="font-size: 0.9rem; color: #7c2d12; line-height: 1.35;"><strong>🎨 Obs Arte:</strong> ${item.observacao_arte}</div>` : ''}
+            </div>
+        `;
+    }
+
     // Base HTML structure
     let baseHtml = '';
 
@@ -3524,6 +3690,7 @@ function openEmbaleAction(itemId, pedidoId, tipoEnvio, itemQuantidade) {
                 <p>Pedido #${pedidoId} - Envio: <strong>${tipoEnvio}</strong></p>
                 <hr style="margin: 1rem 0; border: 0; border-top: 1px solid var(--border)">
                 
+                ${obsEmbaleHtml}
                 ${multiHtml}
                 ${baseHtml}
 
@@ -3884,18 +4051,9 @@ async function confirmarEmbale(itemId, pedidoId, tipoEnvio) {
 }
 
 async function registrarEvento(itemId, setor, acao, qtd, destinoFinal) {
-    // Validação: Obrigatório ter responsável ao FINALIZAR
+    // Ao FINALIZAR, abrir modal com opções de responsável único ou múltiplos (dupla)
     if (acao === 'FIM') {
-        const respSelect = document.getElementById(`resp_select_${itemId}`);
-        if (!respSelect) {
-            // Fallback HARD BLOCk
-            alert('⚠️ ERRO DE VALIDAÇÃO: Campo de responsável não detectado. Por favor, recarregue a página (F5) e tente novamente.');
-            return;
-        }
-
-        if (!respSelect.value) {
-            return alert('⚠️ OBJETIVO BLOQUEADO: Selecione o RESPONSÁVEL antes de finalizar a produção.');
-        }
+        return openFinalizarProducaoModal(itemId, setor, qtd, destinoFinal);
     }
 
     // Capturar NOME do Responsável Selecionado (se houver)
@@ -3953,7 +4111,8 @@ async function solicitarPausa(itemId, setor) {
 }
 
 async function resumeProducao(itemId, setor) {
-    if (!confirm('Deseja retomar a produção deste item? O cronômetro voltará a contar.')) return;
+    const confirmAction = await showCustomConfirm('Retomar Produção', 'Deseja retomar a produção deste item? O cronômetro voltará a contar.');
+    if (!confirmAction) return;
     
     try {
         const res = await fetch(`/api/production/item/${itemId}/resume`, {
@@ -3963,15 +4122,15 @@ async function resumeProducao(itemId, setor) {
         });
         const data = await res.json();
         if (res.ok || data.success || data.message) {
-            alert('Produção retomada com sucesso!');
+            showToast('Produção retomada com sucesso!');
             if (setor) loadProductionQueue(setor);
             else location.reload();
         } else {
-            alert('Erro: ' + (data.error || 'Erro desconhecido'));
+            showToast('Erro: ' + (data.error || 'Erro desconhecido'), 'error');
         }
     } catch (e) {
         console.error(e);
-        alert('Erro de conexão ao retomar produção.');
+        showToast('Erro de conexão ao retomar produção.', 'error');
     }
 }
 
@@ -4156,7 +4315,12 @@ async function handleEditSubmit(e, id, isRestricted) {
 }
 
 async function deleteOrder(id) {
-    if (!confirm('Tem certeza que deseja excluir o pedido completo e todos os itens\\n\\nESSA AÇÃO NÃO PODE SER DESFEITA.')) return;
+    const confirmAction = await showCustomConfirm(
+        'Excluir Pedido', 
+        'Tem certeza que deseja excluir o pedido completo e todos os itens\n\nESSA AÇÃO NÃO PODE SER DESFEITA.', 
+        true
+    );
+    if (!confirmAction) return;
 
     try {
         const res = await fetch(`/api/orders/${id}`, {
@@ -4165,17 +4329,15 @@ async function deleteOrder(id) {
         const data = await res.json();
 
         if (res.ok) {
-
-
-            alert('Pedido excluído com sucesso!');
+            showToast('Pedido excluído com sucesso!');
             loadDashboard(); // Refresh current page
         } else {
             console.error('Erro Backend:', data);
-            alert('Erro: ' + (data.error || 'Erro desconhecido no servidor'));
+            showToast('Erro: ' + (data.error || 'Erro desconhecido no servidor'), 'error');
         }
     } catch (e) {
         console.error('Erro Frontend/Fetch:', e);
-        alert('Erro de conexão ao excluir o pedido: ' + e.message);
+        showToast('Erro de conexão ao excluir o pedido: ' + e.message, 'error');
     }
 }
 
@@ -4324,7 +4486,8 @@ function openLabelModal(item) {
 }
 
 async function dispatchItem(itemId) {
-    if (!confirm('Confirmar despacho deste item? Ele será marcado como CONCLUÍDO.')) return;
+    const confirmAction = await showCustomConfirm('Confirmar Despacho', 'Confirmar despacho deste item? Ele será marcado como CONCLUÍDO.');
+    if (!confirmAction) return;
 
     document.getElementById('labelModal').remove();
     await mudarStatusItem(itemId, 'CONCLUIDO');
@@ -4541,7 +4704,7 @@ function renderTimelineStep(title, user, date, icon, color, extraHtml, isBypasse
                 <i class="${icon}" style="font-size:1.2rem"></i>
             </div>
             <div style="font-weight:bold; font-size:0.9rem; color:${isBypassed ? '#94a3b8' : color}">${title}</div>
-            <div style="font-size:0.8rem; margin-top:0.25rem;">${isBypassed ? 'Pulado (Terc.)' : (user || '-')}</div>
+            <div style="font-size:0.8rem; margin-top:0.25rem;">${isBypassed ? 'Pulado (Terc.)' : (typeof formatResponsibleDisplay === 'function' ? formatResponsibleDisplay(user) : (user || '-'))}</div>
             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.25rem;">${dateStr || '-'}</div>
             ${extraHtml ? `<div style="font-size:0.75rem; color:${isBypassed ? '#94a3b8' : '#475569'}; margin-top:0.25rem; background:#f1f5f9; padding:2px 4px; border-radius:4px; display:inline-block;">${extraHtml}</div>` : ''}
         </div>
@@ -4896,6 +5059,106 @@ window.submitDesembale = async function(itemId, nextStatus, itemQuantidade) {
     } catch(e) { console.error('Erro desembale', e); }
 }
 
+function handleStartProductionClick(itemId, sector) {
+    let item = null;
+    if (window.currentProductionItems && Array.isArray(window.currentProductionItems)) {
+        item = window.currentProductionItems.find(i => i.id === itemId);
+    }
+
+    const hasObsPedido = item && item.observacao && item.observacao.trim() !== '';
+    const hasObsArte = item && item.observacao_arte && item.observacao_arte.trim() !== '';
+
+    if (hasObsPedido || hasObsArte) {
+        openObservationAlertModal(item, sector);
+    } else {
+        openPrintingConfirmation(itemId, sector);
+    }
+}
+
+function openObservationAlertModal(item, sector) {
+    const existing = document.getElementById('obsAlertModal');
+    if (existing) existing.remove();
+
+    const hasObsPedido = item && item.observacao && item.observacao.trim() !== '';
+    const hasObsArte = item && item.observacao_arte && item.observacao_arte.trim() !== '';
+
+    let obsPedidoHtml = '';
+    if (hasObsPedido) {
+        obsPedidoHtml = `
+            <div style="background: #fefce8; border: 1.5px solid #eab308; border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem; text-align: left;">
+                <div style="font-weight: 700; color: #854d0e; font-size: 0.85rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+                    <i class="ph-notepad" style="font-size: 1.1rem;"></i> OBSERVAÇÃO DO PEDIDO (GERAL)
+                </div>
+                <div style="font-size: 0.95rem; color: #713f12; line-height: 1.4; white-space: pre-line; word-break: break-word;">${item.observacao}</div>
+            </div>
+        `;
+    }
+
+    let obsArteHtml = '';
+    if (hasObsArte) {
+        obsArteHtml = `
+            <div style="background: #fff7ed; border: 1.5px solid #f97316; border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem; text-align: left;">
+                <div style="font-weight: 700; color: #9a3412; font-size: 0.85rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+                    <i class="ph-paint-brush" style="font-size: 1.1rem;"></i> OBSERVAÇÃO DA ARTE FINAL
+                </div>
+                <div style="font-size: 0.95rem; color: #7c2d12; line-height: 1.4; white-space: pre-line; word-break: break-word;">${item.observacao_arte}</div>
+            </div>
+        `;
+    }
+
+    const modalHtml = `
+    <div id="obsAlertModal" class="modal show" style="z-index: 10000; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center;">
+        <div class="modal-content" style="max-width: 520px; width: 92%; padding: 1.75rem; border-radius: 1rem; background: #ffffff; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25);">
+            <div style="display: flex; align-items: center; gap: 0.6rem; color: #dc2626; margin-bottom: 0.75rem;">
+                <i class="ph-warning-octagon" style="font-size: 2.2rem;"></i>
+                <div>
+                    <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #1e293b;">ATENÇÃO: LEIA AS OBSERVAÇÕES</h3>
+                    <p style="margin: 0; font-size: 0.8rem; color: #64748b;">Pedido #${item.numero_pedido || ''} - ${item.produto || ''}</p>
+                </div>
+            </div>
+
+            <p style="color: #475569; font-size: 0.9rem; margin-bottom: 1rem; line-height: 1.4;">
+                Este pedido possui orientações importantes. É obrigatório ler as observações antes de iniciar a produção:
+            </p>
+
+            ${obsPedidoHtml}
+            ${obsArteHtml}
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem; margin: 1rem 0; text-align: left;">
+                <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; color: #1e293b; font-weight: 600; line-height: 1.4;">
+                    <input type="checkbox" id="checkObsRead" style="margin-top: 2px; transform: scale(1.2);">
+                    Confirmo que li atentamente as observações e estou ciente das especificações.
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end; width: 100%;">
+                <button class="btn btn-secondary" style="padding: 0.6rem 1.2rem; border-radius: 0.5rem;" onclick="document.getElementById('obsAlertModal').remove()">Cancelar</button>
+                <button id="btnStartWithObs" class="btn btn-primary" disabled style="padding: 0.6rem 1.2rem; border-radius: 0.5rem; background: var(--success); opacity: 0.5; cursor: not-allowed; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem;">
+                    <i class="ph-play"></i> Iniciar Produção
+                </button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const check = document.getElementById('checkObsRead');
+    const startBtn = document.getElementById('btnStartWithObs');
+
+    check.onchange = () => {
+        startBtn.disabled = !check.checked;
+        startBtn.style.opacity = check.checked ? '1' : '0.5';
+        startBtn.style.cursor = check.checked ? 'pointer' : 'not-allowed';
+    };
+
+    startBtn.onclick = () => {
+        if (!startBtn.disabled) {
+            document.getElementById('obsAlertModal').remove();
+            registrarEvento(item.id, sector, 'INICIO', 0);
+        }
+    };
+}
+
 function openPrintingConfirmation(itemId, sector) {
     const isEstamparia = sector === 'ESTAMPARIA';
     const title = isEstamparia ? "Confirmação antes de iniciar Estamparia" : "Confirmação antes de iniciar a impressão";
@@ -4914,7 +5177,343 @@ function openPrintingConfirmation(itemId, sector) {
     );
 }
 
-// Duplicate function removed
+// ==== FINALIZAR PRODUÇÃO (RESPONSÁVEL ÚNICO OU MÚLTIPLOS / DUPLA) ====
+async function openFinalizarProducaoModal(itemId, setor, itemQuantidade, destinoFinal) {
+    const existing = document.getElementById('finalizarProducaoModal');
+    if (existing) existing.remove();
+
+    let item = null;
+    if (window.currentProductionItems && Array.isArray(window.currentProductionItems)) {
+        item = window.currentProductionItems.find(i => i.id === itemId);
+    }
+    const totalQtd = (item && item.quantidade) ? item.quantidade : (itemQuantidade || 0);
+
+    let sectorUsers = await getSectorUsersCached(setor);
+    if (!sectorUsers || sectorUsers.length === 0) {
+        try {
+            const res = await fetch('/api/users');
+            if (res.ok) sectorUsers = await res.json();
+        } catch (e) {}
+    }
+
+    const currentSelect = document.getElementById(`resp_select_${itemId}`);
+    let preselectedName = '';
+    if (currentSelect && currentSelect.value) {
+        preselectedName = currentSelect.value;
+    } else if (item && item.responsavel_impressao && !item.responsavel_impressao.startsWith('[')) {
+        preselectedName = item.responsavel_impressao;
+    }
+
+    let singleOptions = '<option value="">-- Selecione o colaborador responsável --</option>';
+    if (Array.isArray(sectorUsers)) {
+        sectorUsers.forEach(u => {
+            const isSel = (u.nome === preselectedName) ? 'selected' : '';
+            singleOptions += `<option value="${u.id}|${u.nome}" ${isSel}>${u.nome}</option>`;
+        });
+    }
+
+    const destinoLabel = destinoFinal === 'ESTAMPARIA' 
+        ? 'Finalizar e Enviar para Estamparia' 
+        : (destinoFinal === 'EMBALE' ? 'Finalizar e Enviar para Embale' : 'Finalizar Produção');
+
+    const modalHtml = `
+    <div id="finalizarProducaoModal" class="modal show" style="z-index: 10000; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center;">
+        <div class="modal-content" style="max-width: 540px; width: 92%; padding: 1.5rem; border-radius: 0.85rem; background: #ffffff; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25);">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <div style="width: 38px; height: 38px; border-radius: 8px; background: #dcfce7; color: #16a34a; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+                        <i class="ph-check-circle"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #1e293b;">${destinoLabel}</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: #64748b;">Setor: <strong>${setor.replace(/_/g, ' ')}</strong></p>
+                    </div>
+                </div>
+                <button type="button" onclick="document.getElementById('finalizarProducaoModal').remove()" style="background: none; border: none; font-size: 1.3rem; color: #94a3b8; cursor: pointer; line-height: 1;">✕</button>
+            </div>
+
+            <!-- Detalhes do Pedido e Item -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 700; color: #1e293b; font-size: 0.9rem;">Pedido #${item ? (item.numero_pedido || '') : ''} - ${item ? (item.produto || 'Item') : 'Item'}</div>
+                    <div style="font-size: 0.8rem; color: #64748b;">Cliente: <strong>${item ? (item.cliente || '-') : '-'}</strong></div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.725rem; color: #64748b; text-transform: uppercase; font-weight: 600;">Total do Item</div>
+                    <div style="font-size: 1.3rem; font-weight: 800; color: #2563eb;">${totalQtd} <span style="font-size: 0.8rem; font-weight: 500;">peças</span></div>
+                </div>
+            </div>
+
+            <!-- Alternador Modo Múltiplos -->
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 1rem;">
+                <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.9rem; color: #166534; user-select: none; margin-bottom: 0;">
+                    <input type="checkbox" id="checkMultiplosProducao" style="width: 18px; height: 18px; cursor: pointer; accent-color: #16a34a;" onchange="window.toggleMultiplosProducaoUI(${totalQtd}, '${setor}')">
+                    <span>👥 Múltiplos Colaboradores (Dupla / Divisão de Peças)</span>
+                </label>
+                <div style="font-size: 0.775rem; color: #15803d; margin-left: 1.8rem; margin-top: 0.25rem;">
+                    Ative caso 2 ou mais operadores tenham produzido este item para distribuir a quantidade exata feita por cada um.
+                </div>
+            </div>
+
+            <!-- MODO ÚNICO -->
+            <div id="singleRespContainer" style="margin-bottom: 1.25rem;">
+                <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.4rem;">
+                    Colaborador Responsável <span style="color: #dc2626;">*</span>
+                </label>
+                <select id="finalizar_resp_single" class="form-control" style="width: 100%; padding: 0.5rem 0.75rem; font-size: 0.95rem; border-color: #cbd5e1; border-radius: 6px;">
+                    ${singleOptions}
+                </select>
+                <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.35rem;">
+                    O colaborador acima receberá o crédito total de <strong>${totalQtd}</strong> peças no Relatório de Produção.
+                </div>
+            </div>
+
+            <!-- MODO MÚLTIPLOS -->
+            <div id="multiplosRespContainer" style="display: none; margin-bottom: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: #334155; margin: 0;">
+                        Colaboradores e Peças Produzidas <span style="color: #dc2626;">*</span>
+                    </label>
+                    <button type="button" class="btn" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.3rem;" onclick="window.addMultiploProducaoRow('${setor}', ${totalQtd})">
+                        <i class="ph-plus"></i> Adicionar Colaborador
+                    </button>
+                </div>
+
+                <div id="multiplosProducaoList" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 200px; overflow-y: auto; padding-right: 2px;">
+                </div>
+
+                <div id="multiplosTotalTracker" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; transition: all 0.2s;">
+                    <span>Distribuído: <strong id="multiplosTotalSoma">0</strong> / <strong>${totalQtd}</strong> peças</span>
+                    <span id="multiplosStatusMsg" style="font-weight: 600;">Faltam ${totalQtd} peças</span>
+                </div>
+            </div>
+
+            <!-- Botões de Ação -->
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
+                <button type="button" class="btn btn-secondary" style="padding: 0.5rem 1rem; border-radius: 6px;" onclick="document.getElementById('finalizarProducaoModal').remove()">Cancelar</button>
+                <button type="button" id="btnConfirmarFinalizarProducao" class="btn btn-primary" style="background: var(--success); padding: 0.5rem 1.25rem; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem;" onclick="window.submitFinalizarProducao(${itemId}, '${setor}', ${totalQtd}, ${destinoFinal ? `'${destinoFinal}'` : 'null'})">
+                    <i class="ph-check"></i> Confirmar Finalização
+                </button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+window.toggleMultiplosProducaoUI = async function(totalQtd, setor) {
+    const isChecked = document.getElementById('checkMultiplosProducao')?.checked;
+    const singleContainer = document.getElementById('singleRespContainer');
+    const multiContainer = document.getElementById('multiplosRespContainer');
+    if (!singleContainer || !multiContainer) return;
+
+    if (isChecked) {
+        singleContainer.style.display = 'none';
+        multiContainer.style.display = 'block';
+        const list = document.getElementById('multiplosProducaoList');
+        if (list && list.children.length === 0) {
+            // Adicionar 2 linhas iniciais (dupla)
+            await window.addMultiploProducaoRow(setor, totalQtd);
+            await window.addMultiploProducaoRow(setor, totalQtd);
+        }
+    } else {
+        singleContainer.style.display = 'block';
+        multiContainer.style.display = 'none';
+    }
+};
+
+window.addMultiploProducaoRow = async function(setor, totalQtd) {
+    const list = document.getElementById('multiplosProducaoList');
+    if (!list) return;
+
+    let sectorUsers = await getSectorUsersCached(setor);
+    if (!sectorUsers || sectorUsers.length === 0) {
+        try {
+            const res = await fetch('/api/users');
+            if (res.ok) sectorUsers = await res.json();
+        } catch (e) {}
+    }
+
+    let options = '<option value="">-- Colaborador --</option>';
+    if (Array.isArray(sectorUsers)) {
+        sectorUsers.forEach(u => {
+            options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`;
+        });
+    }
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display: flex; gap: 0.4rem; align-items: center;';
+    row.innerHTML = `
+        <select class="form-control prod-multi-user" style="flex: 1; padding: 0.4rem 0.5rem; font-size: 0.85rem;" onchange="window.updateMultiplosProducaoTracker(${totalQtd})">
+            ${options}
+        </select>
+        <input type="number" class="form-control prod-multi-qtd" min="1" max="${totalQtd}" placeholder="Qtd" style="width: 100px; padding: 0.4rem 0.5rem; font-size: 0.85rem; font-weight: 700; text-align: center;" oninput="window.updateMultiplosProducaoTracker(${totalQtd})">
+        <button type="button" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; color: #dc2626; cursor: pointer; font-weight: bold; flex-shrink: 0;" onclick="window.removeMultiploProducaoRow(this, ${totalQtd})" title="Remover">✕</button>
+    `;
+    list.appendChild(row);
+    window.updateMultiplosProducaoTracker(totalQtd);
+};
+
+window.removeMultiploProducaoRow = function(btn, totalQtd) {
+    btn.parentElement.remove();
+    window.updateMultiplosProducaoTracker(totalQtd);
+};
+
+window.updateMultiplosProducaoTracker = function(totalQtd) {
+    const list = document.getElementById('multiplosProducaoList');
+    const tracker = document.getElementById('multiplosTotalTracker');
+    const somaEl = document.getElementById('multiplosTotalSoma');
+    const msgEl = document.getElementById('multiplosStatusMsg');
+    if (!list || !tracker || !somaEl || !msgEl) return;
+
+    const qtdInputs = list.querySelectorAll('.prod-multi-qtd');
+    let soma = 0;
+    qtdInputs.forEach(input => {
+        const val = parseInt(input.value) || 0;
+        soma += val;
+    });
+
+    somaEl.textContent = soma;
+
+    if (soma === totalQtd) {
+        tracker.style.background = '#ecfdf5';
+        tracker.style.borderColor = '#a7f3d0';
+        tracker.style.color = '#065f46';
+        msgEl.innerHTML = '<i class="ph-check-circle"></i> Quantidade conferida!';
+    } else if (soma < totalQtd) {
+        tracker.style.background = '#fee2e2';
+        tracker.style.borderColor = '#fca5a5';
+        tracker.style.color = '#991b1b';
+        msgEl.textContent = `Faltam ${totalQtd - soma} peças`;
+    } else {
+        tracker.style.background = '#fef2f2';
+        tracker.style.borderColor = '#f87171';
+        tracker.style.color = '#b91c1c';
+        msgEl.textContent = `Excedeu em ${soma - totalQtd} peças!`;
+    }
+};
+
+window.submitFinalizarProducao = async function(itemId, setor, totalQtd, destinoFinal) {
+    const isMultiplos = document.getElementById('checkMultiplosProducao')?.checked;
+    const confirmBtn = document.getElementById('btnConfirmarFinalizarProducao');
+
+    if (!isMultiplos) {
+        // MODO ÚNICO
+        const select = document.getElementById('finalizar_resp_single');
+        if (!select || !select.value) {
+            return alert('⚠️ Por favor, selecione o colaborador responsável antes de finalizar a produção.');
+        }
+
+        const [opId, opNome] = select.value.split('|');
+
+        if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Finalizando...'; }
+
+        try {
+            const res = await fetch('/api/production/evento', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: itemId,
+                    operador_id: opId || currentUser.id,
+                    operador_nome: opNome,
+                    setor: setor,
+                    acao: 'FIM',
+                    quantidade_produzida: totalQtd,
+                    destino_final: destinoFinal
+                })
+            });
+
+            if (res.ok) {
+                document.getElementById('finalizarProducaoModal')?.remove();
+                if (typeof showToast === 'function') showToast('Produção finalizada com sucesso!');
+                else alert('Produção finalizada com sucesso!');
+                loadProductionQueue(setor);
+            } else {
+                const err = await res.json();
+                alert('Erro ao finalizar: ' + (err.error || 'Erro desconhecido'));
+                if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirmar Finalização'; }
+            }
+        } catch (e) {
+            console.error('Erro submitFinalizarProducao:', e);
+            alert('Erro de conexão ao finalizar produção.');
+            if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirmar Finalização'; }
+        }
+    } else {
+        // MODO MÚLTIPLOS (DUPLA / MUTIRÃO)
+        const list = document.getElementById('multiplosProducaoList');
+        const rows = list ? Array.from(list.children) : [];
+
+        if (rows.length < 2) {
+            return alert('⚠️ No modo múltiplos, adicione ao menos 2 colaboradores (dupla/equipe).');
+        }
+
+        let data = [];
+        let soma = 0;
+        const usedIds = new Set();
+
+        for (let r of rows) {
+            const select = r.querySelector('.prod-multi-user');
+            const input = r.querySelector('.prod-multi-qtd');
+
+            if (!select || !select.value) {
+                return alert('⚠️ Selecione o colaborador em todas as linhas.');
+            }
+            const [opId, opNome] = select.value.split('|');
+            const qtd = parseInt(input?.value) || 0;
+
+            if (qtd <= 0) {
+                return alert(`⚠️ Informe uma quantidade válida (maior que zero) para ${opNome}.`);
+            }
+
+            if (usedIds.has(opId)) {
+                return alert(`⚠️ O colaborador "${opNome}" foi adicionado mais de uma vez. Combine as quantidades em uma única linha.`);
+            }
+            usedIds.add(opId);
+
+            data.push({
+                operador_id: opId,
+                operador_nome: opNome,
+                quantidade_produzida: qtd
+            });
+            soma += qtd;
+        }
+
+        if (soma !== totalQtd) {
+            return alert(`⚠️ A soma das quantidades (${soma}) não bate com o total do item (${totalQtd})! Ajuste os valores.`);
+        }
+
+        if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Finalizando...'; }
+
+        try {
+            const res = await fetch('/api/production/evento', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: itemId,
+                    setor: setor,
+                    acao: 'FIM',
+                    multiplos_operadores: data,
+                    destino_final: destinoFinal
+                })
+            });
+
+            if (res.ok) {
+                document.getElementById('finalizarProducaoModal')?.remove();
+                if (typeof showToast === 'function') showToast('Produção finalizada com sucesso (múltiplos colaboradores)!');
+                else alert('Produção finalizada com sucesso!');
+                loadProductionQueue(setor);
+            } else {
+                const err = await res.json();
+                alert('Erro ao finalizar múltiplos: ' + (err.error || 'Erro desconhecido'));
+                if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirmar Finalização'; }
+            }
+        } catch (e) {
+            console.error('Erro submitFinalizarProducao multiplos:', e);
+            alert('Erro de conexão ao finalizar produção.');
+            if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirmar Finalização'; }
+        }
+    }
+};
 
 // --- LIVE TIMER LOGIC ---
 function updateLiveTimers() {
@@ -5001,7 +5600,11 @@ function renderLayoutIndicator(path, type) {
 
 // FIX: Pular Produção Estamparia (Digital já impressa)
 async function skipProduction(itemId, setor) {
-    if (!confirm('Tem certeza que deseja PULAR a produção na Estamparia e enviar este item direto para a fila de Embale? (Nenhum tempo será registrado)')) return;
+    const confirmAction = await showCustomConfirm(
+        'Pular Produção', 
+        'Tem certeza que deseja PULAR a produção na Estamparia e enviar este item direto para a fila de Embale? (Nenhum tempo será registrado)'
+    );
+    if (!confirmAction) return;
 
     try {
         const payload = {
@@ -5020,21 +5623,25 @@ async function skipProduction(itemId, setor) {
         });
 
         if (res.ok) {
-
-
+            showToast('Produção pulada com sucesso!');
             loadProductionQueue(setor); // Atualiza a tela local imediatamente
         } else {
             const errData = await res.json();
-            alert('Erro ao pular: ' + (errData.error || 'Erro desconhecido.'));
+            showToast('Erro ao pular: ' + (errData.error || 'Erro desconhecido.'), 'error');
         }
     } catch (err) {
         console.error('Erro no skipProduction:', err);
-        alert('Erro de conexão ao tentar despachar o pedido.');
+        showToast('Erro de conexão ao tentar despachar o pedido.', 'error');
     }
 }
 
 async function reverterPedidoParaArte(pedidoId) {
-    if (!confirm('Tem certeza de que deseja reverter este pedido inteiro para a Fila de Arte (Aguardando Aprovação)?')) return;
+    const confirmAction = await showCustomConfirm(
+        'Reverter Pedido', 
+        'Tem certeza de que deseja reverter este pedido inteiro para a Fila de Arte (Aguardando Aprovação)?',
+        true
+    );
+    if (!confirmAction) return;
 
     try {
         const res = await fetch(`/api/production/pedido/${pedidoId}/reverter-arte`, {
@@ -5046,7 +5653,7 @@ async function reverterPedidoParaArte(pedidoId) {
         });
 
         if (res.ok) {
-            alert('Pedido revertido com sucesso!');
+            showToast('Pedido revertido com sucesso!');
             // Se estiver na visualização de detalhes, podemos recarregar os detalhes do pedido
             viewOrderDetails(pedidoId);
         } else {
@@ -5112,9 +5719,13 @@ async function aprovarPedidoCompleto(pedidoId, itemsJsonStr) {
             const setorSelect = document.getElementById(`setorDestino_${item.id}`);
             const obsTextarea = document.getElementById(`obsArte_${item.id}`);
 
-            const corImpressao = corInput ? corInput.value.trim() : '';
+            let corImpressao = corInput ? corInput.value.trim() : '';
             const setorDestino = setorSelect ? setorSelect.value : '';
             const observacaoArte = obsTextarea ? obsTextarea.value.trim() : '';
+
+            if (setorDestino === 'TERCEIRIZADO' && !corImpressao) {
+                corImpressao = 'PADRÃO / TERCEIRIZADO';
+            }
 
             if (!corImpressao) {
                 if (corInput) corInput.focus();
@@ -5183,7 +5794,12 @@ window.toggleKitMode = async function(itemId, pedidoId) {
             document.getElementById(`isKit_${itemId}`).checked = false;
         });
     } else {
-        if (confirm('Ao desmarcar a opção de Kit, todos os componentes salvos serão removidos. Deseja prosseguir?')) {
+        const confirmDisable = await showCustomConfirm(
+            'Desativar Modo Kit', 
+            'Ao desmarcar a opção de Kit, todos os componentes salvos serão removidos. Deseja prosseguir?',
+            true
+        );
+        if (confirmDisable) {
             fetch(`/api/production/item/${itemId}/desmembrar-kit`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -5194,7 +5810,7 @@ window.toggleKitMode = async function(itemId, pedidoId) {
                     kitSpecs.style.display = 'none';
                     openArteAction(pedidoId);
                 } else {
-                    alert('Erro ao limpar componentes do kit.');
+                    showToast('Erro ao limpar componentes do kit.', 'error');
                     document.getElementById(`isKit_${itemId}`).checked = true;
                 }
             }).catch(e => {
@@ -5532,5 +6148,86 @@ function renderComponentRow(parentId, comp) {
             `}
         </div>
     `;
+}
+
+// --- DIALOGS E TOASTS EXPORTADOS GLOBALMENTE ---
+window.showCustomConfirm = function(title, message, isDanger = false) {
+    return new Promise((resolve) => {
+        const existing = document.getElementById('confirmModal');
+        if (existing) existing.remove();
+
+        const processedMessage = message.replace(/\\n/g, '\n');
+
+        const html = `
+        <div id="confirmModal" class="modal show" style="z-index: 10000; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center;">
+            <div class="modal-content" style="max-width: 400px; text-align: center; padding: 2rem; border-radius: 1rem; background: #ffffff; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: none;">
+                <div style="font-size: 3rem; margin-bottom: 1rem; color: ${isDanger ? 'var(--danger)' : 'var(--accent)'};">
+                    <i class="${isDanger ? 'ph-warning-octagon' : 'ph-question'}"></i>
+                </div>
+                <h2 style="margin-bottom: 0.5rem; font-size: 1.3rem; text-transform: none; color: var(--text-primary); font-weight: 700;">${title}</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.4; white-space: pre-line; text-transform: none; text-align: center;">${processedMessage}</p>
+                <div style="display: flex; gap: 0.75rem; justify-content: center; width: 100%;">
+                    <button id="confirmCancelBtn" class="btn btn-secondary" style="flex: 1; padding: 0.6rem; border-radius: 0.5rem; white-space: nowrap;">Cancelar</button>
+                    <button id="confirmOkBtn" class="btn ${isDanger ? 'btn-danger' : 'btn-primary'}" style="flex: 1; padding: 0.6rem; border-radius: 0.5rem; white-space: nowrap;">Confirmar</button>
+                </div>
+            </div>
+        </div>`;
+
+        document.body.insertAdjacentHTML('beforeend', html);
+
+        const modal = document.getElementById('confirmModal');
+        modal.style.display = 'flex';
+
+        document.getElementById('confirmCancelBtn').onclick = () => {
+            modal.remove();
+            resolve(false);
+        };
+
+        document.getElementById('confirmOkBtn').onclick = () => {
+            modal.remove();
+            resolve(true);
+        };
+    });
+};
+
+window.showToast = function(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    
+    let bg = 'var(--success)';
+    if (type === 'error' || type === 'danger') bg = 'var(--danger)';
+    if (type === 'warning') bg = 'var(--warning)';
+    if (type === 'info') bg = 'var(--accent)';
+
+    toast.style.cssText = `
+        position: fixed; 
+        bottom: 20px; 
+        right: 20px; 
+        background: ${bg}; 
+        color: white; 
+        padding: 0.75rem 1.5rem; 
+        border-radius: 0.75rem; 
+        z-index: 10000;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        font-weight: 600;
+        font-size: 0.9rem;
+        animation: fadeIn 0.3s ease-out;
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 500);
+    }, 3000);
+};
+
+// --- DIALOGS E TOASTS ---
+function showCustomConfirm(title, message, isDanger = false) {
+    return window.showCustomConfirm(title, message, isDanger);
+}
+
+function showToast(message, type = 'success') {
+    window.showToast(message, type);
 }
 

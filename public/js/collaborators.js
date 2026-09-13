@@ -62,17 +62,23 @@ function renderCollaborators(list) {
 }
 
 async function deleteCollaborator(id) {
-    if (!confirm('Tem certeza que deseja excluir este colaborador?')) return;
+    const confirmAction = await window.showCustomConfirm(
+        'Excluir Colaborador', 
+        'Tem certeza que deseja excluir este colaborador?',
+        true
+    );
+    if (!confirmAction) return;
     try {
         const res = await fetch(`/api/collaborators/${id}`, { method: 'DELETE' });
         if (res.ok) {
+            window.showToast('Colaborador excluído com sucesso!');
             loadCollaborators();
         } else {
-            alert('Erro ao excluir');
+            window.showToast('Erro ao excluir', 'error');
         }
     } catch (e) {
         console.error(e);
-        alert('Erro de conexão');
+        window.showToast('Erro de conexão', 'error');
     }
 }
 

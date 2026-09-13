@@ -15,23 +15,28 @@ router.get('/productivity', (req, res) => {
     const startDate = `${start} 00:00:00`;
     const endDate = `${end} 23:59:59`;
 
-    // Query complexa para parear INICIO e FIM e calcular tempo
-    // Assumindo um fluxo simples onde cada FIM tem um INICIO correspondente recente pelo mesmo operador/setor
+    // Query robusta para parear INICIO e FIM e calcular tempo (suporta inicio sem responsavel e multiplos operadores)
     const query = `
         SELECT 
             COALESCE(fim.operador_nome, u.nome) as operador,
             fim.setor,
             SUM(COALESCE(fim.quantidade_produzida, i.quantidade)) as total_produzido,
             COUNT(fim.id) as total_eventos,
-            SUM(CASE WHEN inicio.timestamp IS NOT NULL THEN (julianday(fim.timestamp) - julianday(inicio.timestamp)) * 24 * 60 ELSE 0 END) as tempo_total_minutos
+            SUM(CASE WHEN inicio_map.inicio_timestamp IS NOT NULL THEN (julianday(fim.timestamp) - julianday(inicio_map.inicio_timestamp)) * 24 * 60 ELSE 0 END) as tempo_total_minutos
         FROM eventos_producao fim
         LEFT JOIN usuarios u ON fim.operador_id = u.id
         LEFT JOIN itens_pedido i ON fim.item_id = i.id
-        LEFT JOIN eventos_producao inicio ON 
-            fim.item_id = inicio.item_id AND 
-            fim.operador_id = inicio.operador_id AND
-            fim.setor = inicio.setor AND
-            inicio.acao = 'INICIO'
+        LEFT JOIN (
+            SELECT fim_sub.id as fim_id, MAX(inicio_sub.timestamp) as inicio_timestamp
+            FROM eventos_producao fim_sub
+            LEFT JOIN eventos_producao inicio_sub ON 
+                inicio_sub.item_id = fim_sub.item_id AND 
+                inicio_sub.setor = fim_sub.setor AND 
+                inicio_sub.acao = 'INICIO' AND 
+                inicio_sub.timestamp <= fim_sub.timestamp
+            WHERE fim_sub.acao = 'FIM'
+            GROUP BY fim_sub.id
+        ) inicio_map ON fim.id = inicio_map.fim_id
         WHERE datetime(fim.timestamp, 'localtime') BETWEEN ? AND ?
         AND fim.acao = 'FIM'
         GROUP BY COALESCE(fim.operador_nome, u.nome), fim.setor
@@ -120,39 +125,56 @@ router.get('/users/productivity', (req, res) => {
 
         rows.forEach(row => {
             sectors.forEach(sector => {
-                const respName = row[`responsavel_${sector}`];
-                if (respName) {
-                    if (targetName && respName !== targetName) return; // Skip if filtering by user
+                const respRaw = row[`responsavel_${sector}`];
+                if (respRaw) {
+                    let respList = [];
+                    if (typeof respRaw === 'string' && respRaw.trim().startsWith('[')) {
+                        try {
+                            const parsed = JSON.parse(respRaw);
+                            if (Array.isArray(parsed)) {
+                                respList = parsed.map(p => ({
+                                    name: typeof p === 'string' ? p : (p.nome || p.operador_nome),
+                                    qtd: (typeof p === 'object' && p.quantidade != null) ? p.quantidade : null
+                                }));
+                            }
+                        } catch (e) {
+                            respList = [{ name: respRaw, qtd: null }];
+                        }
+                    } else {
+                        respList = [{ name: respRaw, qtd: null }];
+                    }
 
-                    if (!stats[respName]) stats[respName] = {
-                        name: respName,
-                        itemsAssigned: 0,
-                        itemsCompletedStage: 0,
-                        details: []
-                    };
+                    respList.forEach(resp => {
+                        const respName = resp.name;
+                        if (!respName) return;
+                        if (targetName && respName !== targetName) return; // Skip if filtering by user
 
-                    stats[respName].itemsAssigned++;
+                        if (!stats[respName]) stats[respName] = {
+                            name: respName,
+                            itemsAssigned: 0,
+                            itemsCompletedStage: 0,
+                            details: []
+                        };
 
-                    // Logic for "Completed Stage"
-                    // Arte: approved
-                    // Logistica: Concluido
-                    // Others: advanced beyond waiting?
-                    let isCompleted = false;
+                        stats[respName].itemsAssigned++;
 
-                    if (sector === 'arte' && row.arte_status === 'APROVADO') isCompleted = true;
-                    if (sector === 'logistica' && row.status_atual === 'CONCLUIDO') isCompleted = true;
+                        // Logic for "Completed Stage"
+                        let isCompleted = false;
+                        if (sector === 'arte' && row.arte_status === 'APROVADO') isCompleted = true;
+                        if (sector === 'logistica' && row.status_atual === 'CONCLUIDO') isCompleted = true;
+                        if (row.status_atual === 'CONCLUIDO' || row.status_atual === 'AGUARDANDO_EMBALE' || row.status_atual === 'AGUARDANDO_ENVIO') {
+                            isCompleted = true;
+                        }
 
-                    // Simple logic for others: If status is 'ahead' or item is done.
-                    // Rough approximation
-                    if (row.status_atual === 'CONCLUIDO') isCompleted = true;
+                        if (isCompleted) stats[respName].itemsCompletedStage++;
 
-                    if (isCompleted) stats[respName].itemsCompletedStage++;
-
-                    stats[respName].details.push({
-                        pedido: row.numero_pedido,
-                        item: row.produto,
-                        setor: sector,
-                        status: row.status_atual
+                        stats[respName].details.push({
+                            pedido: row.numero_pedido,
+                            item: row.produto,
+                            setor: sector,
+                            status: row.status_atual,
+                            quantidade: resp.qtd != null ? resp.qtd : row.quantidade
+                        });
                     });
                 }
             });

@@ -29,6 +29,7 @@ async function loadControleQueue() {
                         <option value="IMPRESSAO_LASER">Impressão Laser</option>
                         <option value="IMPRESSAO_DIGITAL">Impressão Digital</option>
                         <option value="ESTAMPARIA">Estamparia</option>
+                        <option value="TERCEIRIZADO">Terceirizado</option>
                     </select>
                 </div>
                 <div class="form-group" style="margin-bottom:0; min-width: 180px;">
@@ -218,7 +219,8 @@ async function fetchPendingPauses() {
 }
 
 async function approvePausa(itemId) {
-    if(!confirm("Aprovar e congelar cronômetro deste item?")) return;
+    const confirmAction = await window.showCustomConfirm('Aprovar Pausa', 'Aprovar e congelar cronômetro deste item?');
+    if (!confirmAction) return;
     try {
         const res = await fetch(`/api/production/item/${itemId}/pause-approve`, {
             method: 'PUT',
@@ -226,28 +228,29 @@ async function approvePausa(itemId) {
             body: JSON.stringify({ operador_id: currentUser.id, operador_nome: currentUser.nome || currentUser.username || 'Admin' })
         });
         const data = await res.json();
-        alert(data.message || 'Pausa aprovada com sucesso.');
+        window.showToast(data.message || 'Pausa aprovada com sucesso.');
         fetchPendingPauses();
         fetchControleData();
     } catch (e) {
         console.error(e);
-        alert('Erro ao aprovar pausa.');
+        window.showToast('Erro ao aprovar pausa.', 'error');
     }
 }
 
 async function denyPausa(itemId) {
-    if(!confirm("Negar esta pausa? O cronômetro não será afetado e continuará rodando.")) return;
+    const confirmAction = await window.showCustomConfirm('Negar Pausa', 'Negar esta pausa? O cronômetro não será afetado e continuará rodando.', true);
+    if (!confirmAction) return;
     try {
         const res = await fetch(`/api/production/item/${itemId}/pause-deny`, {
             method: 'PUT'
         });
         const data = await res.json();
-        alert(data.message || 'Pausa negada.');
+        window.showToast(data.message || 'Pausa negada.', 'warning');
         fetchPendingPauses();
         fetchControleData();
     } catch (e) {
         console.error(e);
-        alert('Erro ao negar pausa.');
+        window.showToast('Erro ao negar pausa.', 'error');
     }
 }
 

@@ -31,10 +31,15 @@ const uppercaseMiddleware = (req, res, next) => {
         Object.keys(req.body).forEach(key => {
             const val = req.body[key];
 
-            // Lista de campos para ignorar
-            const ignoreKeys = ['password', 'senha', 'email', 'layout_path', 'layout_type', 'arquivo', 'layout', 'cor'];
+            // Lista de campos para ignorar (senhas, emails, arquivos, etc.)
+            const isPasswordKey = key.toLowerCase().includes('password') || key.toLowerCase().includes('senha');
+            const ignoreKeys = ['email', 'layout_path', 'layout_type', 'arquivo', 'layout', 'cor'];
 
-            if (typeof val === 'string' && !ignoreKeys.includes(key)) {
+            if (isPasswordKey || ignoreKeys.includes(key)) {
+                return;
+            }
+
+            if (typeof val === 'string') {
                 // Verificar se é URL ou Email (básico)
                 if (!val.includes('@') && !val.startsWith('http')) {
                     req.body[key] = val.toUpperCase();
@@ -63,6 +68,7 @@ app.use('/api/dashboard', require('./routes/dashboard')); // NEW DASHBOARD ROUTE
 app.use('/api/controle', require('./routes/controle')); // Rota de controle gerencial
 app.use('/api/manuals', require('./routes/manuals')); // Rota de Manuais
 app.use('/api/tags', require('./routes/tags')); // Rota de Tags
+app.use('/api/pricing', require('./routes/pricing')); // Rota de Precificação de Produtos
 
 // Servir frontend
 app.get('*', (req, res) => {

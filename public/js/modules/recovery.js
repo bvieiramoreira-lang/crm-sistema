@@ -163,12 +163,17 @@ async function handleEditSubmit(e) {
 
 function closeEditOrderModal() { document.getElementById('editOrderModal').style.display = 'none'; }
 async function deleteOrderAction() {
-    if (!confirm("TEM CERTEZA? Isso apagará todo o histórico e itens.")) return;
+    const confirmAction = await window.showCustomConfirm(
+        'Excluir Pedido', 
+        'TEM CERTEZA? Isso apagará todo o histórico e itens.',
+        true
+    );
+    if (!confirmAction) return;
     const id = document.getElementById('editOrderId').value;
     try {
         await fetch(`/api/orders/${id}`, { method: 'DELETE' });
-        alert('Pedido excluído.'); closeEditOrderModal(); loadOrders();
-    } catch (e) { alert('Erro ao excluir'); }
+        window.showToast('Pedido excluído com sucesso!'); closeEditOrderModal(); loadOrders();
+    } catch (e) { window.showToast('Erro ao excluir', 'error'); }
 }
 
 
