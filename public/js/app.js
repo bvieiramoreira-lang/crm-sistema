@@ -393,7 +393,8 @@ function setupNavigation() {
             },
             { id: 'orders', label: 'Todos os Pedidos', icon: 'ph-stack', profiles: ['financeiro', 'admin'], action: loadOrders },
             { id: 'controle', label: 'Controle', icon: 'ph-chart-bar', profiles: ['admin', 'vendedor'], action: loadControleQueue },
-            { id: 'precificacao', label: 'Preços', icon: 'ph-currency-circle-dollar', profiles: ['admin'], action: () => { if (typeof loadPricingView === 'function') loadPricingView(); } },
+            { id: 'calculadora', label: 'Calculadora', icon: 'ph-calculator', profiles: ['admin', 'vendedor', 'financeiro', 'arte', 'separacao', 'desembale', 'impressao', 'embale', 'logistica'], action: () => { if (typeof loadSalesCalculatorView === 'function') loadSalesCalculatorView(); } },
+            { id: 'precificacao', label: 'Preços (Admin)', icon: 'ph-currency-circle-dollar', profiles: ['admin'], action: () => { if (typeof loadPricingView === 'function') loadPricingView(); } },
             { id: 'new_order', label: 'Novo Pedido', icon: 'ph-plus-circle', profiles: ['financeiro', 'admin'], action: openNewOrderModal },
             { id: 'arte', label: 'Arte Final', icon: 'ph-paint-brush', profiles: ['arte', 'admin'], action: loadArteQueue },
             { id: 'separacao', label: 'Separação', icon: 'ph-basket', profiles: ['separacao', 'admin'], action: () => loadGenericQueue('AGUARDANDO_SEPARACAO', 'Separação') },
@@ -1981,6 +1982,7 @@ async function loadProductionQueue(setor) {
 
     const totalItems = itensExec.length + itensFuture.length;
     window.currentProductionItems = itensExec;
+    window.currentAllProductionItems = [...itensExec, ...itensFuture];
     document.getElementById('headerActions').innerHTML = `<span class="badge badge-blue">Total: <span id="queueCount">${totalItems}</span> (Ativos: ${itensExec.length} / Futuros: ${itensFuture.length})</span>`;
 
     let html = `
@@ -2196,7 +2198,10 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                             <div><span class="badge badge-blue" style="font-size:0.7rem; padding: 2px 4px;"><i class="ph-printer"></i> ${setor.replace('IMPRESSAO_', '').replace(/_/g, ' ')}</span></div>
                             ${colorInfo}
                         </div>
-                        ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                        <div style="display: flex; align-items: center; gap: 0.35rem;">
+                            ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                            ${renderItemOptionsMenu(item, setor)}
+                        </div>
                     </div>
                 `;
             } else {
@@ -2206,7 +2211,10 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
                             <div><span class="badge badge-blue" style="font-size:0.7rem; padding: 2px 4px;"><i class="ph-printer"></i> ${setor.replace('IMPRESSAO_', '').replace(/_/g, ' ')}</span></div>
                             ${colorInfo}
                         </div>
-                        ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                        <div style="display: flex; align-items: center; gap: 0.35rem;">
+                            ${renderLayoutIndicatorSm(item.layout_path, item.layout_type)}
+                            ${renderItemOptionsMenu(item, setor)}
+                        </div>
                     </div>
                 `;
             }
@@ -2251,6 +2259,263 @@ function renderProductionRows(itens, setor, isReadOnly, sectorUsers) {
             return `<tr><td colspan="7" style="background:#fee2e2; color:#b91c1c;">Erro ao renderizar item #${item.id || '?'}: ${err.message}</td></tr>`;
         }
     }).join('');
+}
+
+// --- MENU DE OPÇÕES DO ITEM E TRANSFERÊNCIA DE SETOR ---
+function renderItemOptionsMenu(item, setor) {
+    return `
+        <div class="item-options-wrapper" style="position: relative; display: inline-block;">
+            <button type="button" class="btn-item-options" onclick="toggleItemMenu(event, ${item.id})" title="Opções do item" 
+                    style="background: transparent; border: none; border-radius: 6px; padding: 4px; cursor: pointer; color: #64748b; display: inline-flex; align-items: center; justify-content: center; height: 28px; width: 28px; transition: all 0.15s ease-in-out;"
+                    onmouseover="this.style.background='#f1f5f9'; this.style.color='#1e293b';"
+                    onmouseout="this.style.background='transparent'; this.style.color='#64748b';">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="2" y="4.8" width="20" height="2.4" rx="1.2" />
+                    <circle cx="7" cy="6" r="3.4" />
+                    <rect x="2" y="10.8" width="20" height="2.4" rx="1.2" />
+                    <circle cx="17" cy="12" r="3.4" />
+                    <rect x="2" y="16.8" width="20" height="2.4" rx="1.2" />
+                    <circle cx="11" cy="18" r="3.4" />
+                </svg>
+            </button>
+            <div id="itemMenuDropdown_${item.id}" class="item-options-dropdown" 
+                 style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; z-index: 1050; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); min-width: 145px; overflow: hidden;">
+                <div style="padding: 6px 12px; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #f1f5f9; background: #f8fafc;">
+                    Opções
+                </div>
+                <button type="button" onclick="openTransferSectorModal(${item.id})" 
+                        style="width: 100%; display: flex; align-items: center; gap: 0.5rem; padding: 8px 12px; font-size: 0.82rem; font-weight: 500; color: #1e293b; background: none; border: none; text-align: left; cursor: pointer; transition: background 0.15s;"
+                        onmouseover="this.style.background='#eff6ff'; this.style.color='#2563eb';"
+                        onmouseout="this.style.background='none'; this.style.color='#1e293b';">
+                    <i class="ph ph-arrows-left-right" style="color: #2563eb; font-size: 1rem;"></i>
+                    <span>Transferir</span>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function toggleItemMenu(event, itemId) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const targetDropdown = document.getElementById(`itemMenuDropdown_${itemId}`);
+    if (!targetDropdown) return;
+
+    const isShown = targetDropdown.style.display === 'block';
+
+    // Fechar todos os menus abertos
+    document.querySelectorAll('.item-options-dropdown').forEach(d => {
+        d.style.display = 'none';
+    });
+
+    if (!isShown) {
+        targetDropdown.style.display = 'block';
+    }
+}
+
+// Fechar menu ao clicar em qualquer lugar da tela
+if (typeof window._itemMenuGlobalListenerAdded === 'undefined') {
+    window.addEventListener('click', (e) => {
+        if (!e.target.closest('.item-options-wrapper')) {
+            document.querySelectorAll('.item-options-dropdown').forEach(d => {
+                d.style.display = 'none';
+            });
+        }
+    });
+    window._itemMenuGlobalListenerAdded = true;
+}
+
+function openTransferSectorModal(itemId) {
+    // Fechar dropdowns abertos
+    document.querySelectorAll('.item-options-dropdown').forEach(d => {
+        d.style.display = 'none';
+    });
+
+    const allItems = window.currentAllProductionItems || window.currentProductionItems || [];
+    const item = allItems.find(i => i.id === itemId);
+
+    if (!item) {
+        alert('Item não encontrado na fila atual.');
+        return;
+    }
+
+    const currentSector = item.setor_destino || window.currentProductionSector || '';
+    const currentCor = item.cor_impressao || '';
+    const isRunning = item.status_atual === 'EM_PRODUCAO';
+
+    const sectors = [
+        { key: 'SILK_PLANO', label: 'Silk Plano' },
+        { key: 'SILK_CILINDRICA', label: 'Silk Cilíndrica' },
+        { key: 'TAMPOGRAFIA', label: 'Tampografia' },
+        { key: 'IMPRESSAO_LASER', label: 'Impressão Laser' },
+        { key: 'IMPRESSAO_DIGITAL', label: 'Impressão Digital' },
+        { key: 'ESTAMPARIA', label: 'Estamparia' },
+        { key: 'TERCEIRIZADO', label: 'Terceirizado' }
+    ];
+
+    let sectorOptionsHtml = '<option value="">-- Selecione o Novo Setor --</option>';
+    sectors.forEach(s => {
+        const isCurrent = s.key === currentSector;
+        sectorOptionsHtml += `<option value="${s.key}" ${isCurrent ? 'disabled style="color:#94a3b8;"' : ''}>${s.label} ${isCurrent ? '(Atual)' : ''}</option>`;
+    });
+
+    const formatSectorName = (sec) => {
+        if (!sec) return 'Não Definido';
+        const found = sectors.find(s => s.key === sec);
+        return found ? found.label : sec.replace('IMPRESSAO_', '').replace(/_/g, ' ');
+    };
+
+    const modalHtml = `
+        <div id="transferSectorModal" class="modal show" style="display:flex; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999;">
+            <div class="modal-content" style="max-width: 480px; width: 92%; background:#fff; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); overflow:hidden; padding:0;">
+                <div style="background:#f8fafc; padding:1.25rem 1.5rem; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between;">
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <div style="width:36px; height:36px; border-radius:8px; background:#eff6ff; display:flex; align-items:center; justify-content:center; color:#2563eb;">
+                            <i class="ph ph-arrows-left-right" style="font-size:1.25rem;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin:0; font-size:1.1rem; color:#1e293b;">Transferir Impressão</h3>
+                            <p style="margin:0; font-size:0.75rem; color:#64748b;">Mudar o tipo de impressão e transferir para outro setor</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closeTransferSectorModal()" style="background:none; border:none; font-size:1.5rem; color:#94a3b8; cursor:pointer; line-height:1;">&times;</button>
+                </div>
+
+                <div style="padding:1.5rem; max-height:75vh; overflow-y:auto;">
+                    <div style="background:#f1f5f9; border-radius:8px; padding:0.85rem 1rem; margin-bottom:1.25rem; font-size:0.85rem; border-left:4px solid #3b82f6;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem;">
+                            <span style="color:#64748b;">Pedido:</span>
+                            <strong style="color:#1e293b;">#${item.numero_pedido || ''} - ${item.cliente || 'Cliente'}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem;">
+                            <span style="color:#64748b;">Produto:</span>
+                            <strong style="color:#1e293b;">${item.produto} (Qtd: ${item.quantidade})</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem;">
+                            <span style="color:#64748b;">Setor Atual:</span>
+                            <span class="badge badge-blue" style="font-size:0.75rem;"><i class="ph ph-printer"></i> ${formatSectorName(currentSector)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:#64748b;">Status:</span>
+                            <span style="font-weight:600; color:#334155;">${item.status_atual}</span>
+                        </div>
+                    </div>
+
+                    ${isRunning ? `
+                        <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; display:flex; align-items:flex-start; gap:0.5rem; color:#92400e; font-size:0.8rem;">
+                            <i class="ph ph-warning" style="font-size:1.1rem; flex-shrink:0; margin-top:2px;"></i>
+                            <div><strong>Atenção:</strong> Este item está atualmente <strong>Em Produção</strong>. Ao transferir, o status retornará para 'Aguardando Produção' no novo setor e o responsável será desvinculado.</div>
+                        </div>
+                    ` : ''}
+
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label style="font-size:0.85rem; font-weight:600; color:#1e293b; display:block; margin-bottom:0.35rem;">
+                            Novo Tipo de Impressão / Setor Destino <span style="color:#ef4444;">*</span>
+                        </label>
+                        <select id="transferNewSector" class="form-control" style="width:100%; padding:0.55rem; font-size:0.875rem; border-radius:6px; border:1px solid #cbd5e1;">
+                            ${sectorOptionsHtml}
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label style="font-size:0.85rem; font-weight:600; color:#1e293b; display:block; margin-bottom:0.35rem;">
+                            Cor de Impressão (opcional)
+                        </label>
+                        <input type="text" id="transferCorImpressao" class="form-control" value="${currentCor}" placeholder="Ex: Preto, Branco, Pantone 186C..." style="width:100%; padding:0.55rem; font-size:0.875rem; border-radius:6px; border:1px solid #cbd5e1;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:0.5rem;">
+                        <label style="font-size:0.85rem; font-weight:600; color:#1e293b; display:block; margin-bottom:0.35rem;">
+                            Motivo da Transferência (opcional)
+                        </label>
+                        <textarea id="transferMotivo" class="form-control" rows="2" placeholder="Ex: Produto incompatível com silk cilíndrico, alterado para plano..." style="width:100%; padding:0.55rem; font-size:0.875rem; border-radius:6px; border:1px solid #cbd5e1;"></textarea>
+                    </div>
+                </div>
+
+                <div style="background:#f8fafc; padding:1rem 1.5rem; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:0.75rem;">
+                    <button type="button" class="btn" onclick="closeTransferSectorModal()" style="background:#ffffff; color:#475569; border:1px solid #cbd5e1; width:auto; padding:0.5rem 1rem; font-size:0.85rem;">
+                        Cancelar
+                    </button>
+                    <button type="button" id="btnConfirmTransfer" class="btn" onclick="submitSectorTransfer(${itemId})" style="background:#2563eb; color:#ffffff; width:auto; padding:0.5rem 1.25rem; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem;">
+                        <i class="ph ph-arrows-left-right"></i> Confirmar Transferência
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const existing = document.getElementById('transferSectorModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeTransferSectorModal() {
+    const modal = document.getElementById('transferSectorModal');
+    if (modal) modal.remove();
+}
+
+async function submitSectorTransfer(itemId) {
+    const newSector = document.getElementById('transferNewSector')?.value;
+    const corImpressao = document.getElementById('transferCorImpressao')?.value;
+    const motivo = document.getElementById('transferMotivo')?.value;
+    const btn = document.getElementById('btnConfirmTransfer');
+
+    if (!newSector) {
+        alert('Por favor, selecione o novo setor de impressão de destino.');
+        document.getElementById('transferNewSector')?.focus();
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Transferindo...';
+    }
+
+    try {
+        const payload = {
+            novo_setor: newSector,
+            cor_impressao: corImpressao,
+            motivo: motivo,
+            operador_id: currentUser ? currentUser.id : null,
+            operador_nome: currentUser ? currentUser.nome : 'Usuário'
+        };
+
+        const res = await fetch(`/api/production/item/${itemId}/transfer-sector`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            alert(data.error || 'Erro ao transferir item.');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-arrows-left-right"></i> Confirmar Transferência';
+            }
+            return;
+        }
+
+        closeTransferSectorModal();
+
+        alert(data.message || 'Item transferido com sucesso!');
+
+        // Recarregar a fila de produção ativa
+        if (window.currentProductionSector) {
+            loadProductionQueue(window.currentProductionSector);
+        }
+    } catch (err) {
+        console.error('Erro na requisição de transferência:', err);
+        alert('Erro de conexão ao transferir item.');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-arrows-left-right"></i> Confirmar Transferência';
+        }
+    }
 }
 
 // 5. Relatórios

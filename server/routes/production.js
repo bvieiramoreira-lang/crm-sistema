@@ -1705,4 +1705,85 @@ router.put('/item/:id/pause-deny', (req, res) => {
     });
 });
 
+// Transferir tipo de impressão / setor de um item
+router.put('/item/:id/transfer-sector', (req, res) => {
+    const itemId = req.params.id;
+    const { novo_setor, cor_impressao, motivo, operador_id, operador_nome } = req.body;
+
+    const validSectors = ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'TERCEIRIZADO'];
+    if (!novo_setor || !validSectors.includes(novo_setor)) {
+        return res.status(400).json({ error: 'Setor de destino inválido.' });
+    }
+
+    db.get('SELECT * FROM itens_pedido WHERE id = ?', [itemId], (err, item) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!item) return res.status(404).json({ error: 'Item não encontrado.' });
+
+        const setorAntigo = item.setor_destino || 'INDEFINIDO';
+        if (setorAntigo === novo_setor) {
+            return res.status(400).json({ error: 'O item já está no setor selecionado.' });
+        }
+
+        const isTerceirizado = novo_setor === 'TERCEIRIZADO' ? 1 : (item.is_terceirizado || 0);
+
+        // Se o item estava EM_PRODUCAO, retorna para AGUARDANDO_PRODUCAO no novo setor
+        const novoStatus = item.status_atual === 'EM_PRODUCAO' ? 'AGUARDANDO_PRODUCAO' : item.status_atual;
+
+        // Atualizar cor_impressao se enviada e não vazia, caso contrário mantém a atual
+        const novaCor = (cor_impressao !== undefined && cor_impressao !== null && String(cor_impressao).trim() !== '')
+            ? String(cor_impressao).trim()
+            : item.cor_impressao;
+
+        db.serialize(() => {
+            const updateSql = `
+                UPDATE itens_pedido SET
+                    setor_destino = ?,
+                    cor_impressao = ?,
+                    responsavel_impressao = NULL,
+                    status_atual = ?,
+                    is_pausado_producao = 0,
+                    pausa_solicitada = 0,
+                    is_terceirizado = ?
+                WHERE id = ?
+            `;
+            db.run(updateSql, [novo_setor, novaCor, novoStatus, isTerceirizado, itemId], function(updateErr) {
+                if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+                // Registrar evento de produção
+                const eventoSql = `
+                    INSERT INTO eventos_producao (item_id, operador_id, operador_nome, setor, acao)
+                    VALUES (?, ?, ?, ?, 'TRANSFERENCIA')
+                `;
+                db.run(eventoSql, [itemId, operador_id || null, operador_nome || 'Sistema', novo_setor], (evErr) => {
+                    if (evErr) console.error('Erro ao registrar evento de transferência:', evErr);
+                });
+
+                // Registrar auditoria no histórico do pedido
+                const detalheMotivo = `Transferido de ${setorAntigo} para ${novo_setor}${motivo ? `. Motivo: ${motivo}` : ''}`;
+                const histSql = `
+                    INSERT INTO historico_pedidos (pedido_id, usuario_id, campo_alterado, valor_antigo, valor_novo, motivo)
+                    VALUES (?, ?, 'setor_destino', ?, ?, ?)
+                `;
+                db.run(histSql, [item.pedido_id, operador_id || null, setorAntigo, novo_setor, detalheMotivo], (histErr) => {
+                    if (histErr) console.error('Erro ao registrar histórico do pedido:', histErr);
+                });
+
+                // Se houver motivo informado, acrescentar na observacao_arte para visibilidade
+                if (motivo && String(motivo).trim() !== '') {
+                    const appendObs = `\n[Transf. Setor ${new Date().toLocaleDateString('pt-BR')}]: ${String(motivo).trim()}`;
+                    db.run('UPDATE itens_pedido SET observacao_arte = COALESCE(observacao_arte, "") || ? WHERE id = ?', [appendObs, itemId]);
+                }
+
+                res.json({
+                    success: true,
+                    message: `Item transferido com sucesso de ${setorAntigo} para ${novo_setor}.`,
+                    item_id: itemId,
+                    setor_anterior: setorAntigo,
+                    novo_setor: novo_setor
+                });
+            });
+        });
+    });
+});
+
 module.exports = router;

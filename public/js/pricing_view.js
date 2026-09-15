@@ -1,6 +1,7 @@
 // MÓDULO DE PRECIFICAÇÃO DE PRODUTOS - PERSYS 2.0
 
 let pricingState = {
+    viewMode: 'admin', // 'admin' ou 'sales'
     activeTab: 'calc', // 'calc', 'catalog', 'settings'
     config: null,
     faixas: [],
@@ -149,13 +150,38 @@ function togglePricingPasswordVisibility(inputId, iconId) {
     }
 }
 
-// Ponto de entrada chamado pelo menu lateral
+// Ponto de entrada da Calculadora de Preços para Usuários e Vendedores (Sem métricas de lucro)
+async function loadSalesCalculatorView() {
+    pricingState.viewMode = 'sales';
+
+    if (typeof setActiveNavLink === 'function') {
+        setActiveNavLink('calculadora');
+    }
+    const titleEl = document.getElementById('pageTitle');
+    if (titleEl) titleEl.textContent = 'Calculadora de Preços';
+
+    const actionsEl = document.getElementById('headerActions');
+    if (actionsEl) actionsEl.innerHTML = '';
+
+    const contentArea = document.getElementById('contentArea');
+    if (!contentArea) return;
+
+    contentArea.innerHTML = `
+        <div id="pricingTabContent"></div>
+    `;
+
+    renderSalesCalculator(document.getElementById('pricingTabContent'));
+}
+window.loadSalesCalculatorView = loadSalesCalculatorView;
+
+// Ponto de entrada chamado pelo menu lateral (Admin Completo)
 async function loadPricingView() {
+    pricingState.viewMode = 'admin';
     if (typeof setActiveNavLink === 'function') {
         setActiveNavLink('precificacao');
     }
     const titleEl = document.getElementById('pageTitle');
-    if (titleEl) titleEl.textContent = 'Precificação de Produtos';
+    if (titleEl) titleEl.textContent = 'Precificação de Produtos (Admin)';
 
     const actionsEl = document.getElementById('headerActions');
     if (actionsEl) actionsEl.innerHTML = '';
@@ -225,21 +251,21 @@ function renderPricingLayout() {
     let tabsHtml = tabs.map(t => {
         const isActive = pricingState.activeTab === t.id;
         const activeStyle = isActive 
-            ? 'border-bottom: 3px solid var(--accent); color: var(--accent); font-weight: 700;' 
-            : 'border-bottom: 3px solid transparent; color: var(--text-secondary); font-weight: 500;';
+            ? 'border-bottom: 2px solid var(--accent); color: var(--accent); font-weight: 700;' 
+            : 'border-bottom: 2px solid transparent; color: var(--text-secondary); font-weight: 500;';
         return `
             <button onclick="switchPricingTab('${t.id}')" 
-                style="background: transparent; border: none; padding: 0.75rem 1.25rem; font-size: 0.95rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; transition: var(--transition); ${activeStyle}">
-                <i class="ph ${t.icon}" style="font-size: 1.15rem;"></i>
+                style="background: transparent; border: none; padding: 0.6rem 1rem; font-size: 0.88rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; transition: var(--transition); ${activeStyle}">
+                <i class="ph ${t.icon}" style="font-size: 1.05rem;"></i>
                 <span>${t.label}</span>
             </button>
         `;
     }).join('');
 
     contentArea.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.85rem;">
             <!-- Barra de Abas Superior -->
-            <div style="background: var(--bg-surface); border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 0 0.5rem;">
+            <div style="background: var(--bg-surface); border-bottom: 1px solid var(--border); display: flex; gap: 0.35rem; border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 0 0.5rem;">
                 ${tabsHtml}
             </div>
 
@@ -260,6 +286,11 @@ function renderActiveTabContent() {
     const container = document.getElementById('pricingTabContent');
     if (!container) return;
 
+    if (pricingState.viewMode === 'sales') {
+        renderSalesCalculator(container);
+        return;
+    }
+
     if (pricingState.activeTab === 'calc') {
         renderCalculatorTab(container);
     } else if (pricingState.activeTab === 'catalog') {
@@ -273,11 +304,227 @@ function renderActiveTabContent() {
 function selectPricingType(tipo) {
     pricingState.currentProduct.tipo_precificacao = tipo;
     pricingState.currentProduct.custom_margins = null; // reseta margens manuais para adotar a nova tabela
+    const container = document.getElementById('pricingTabContent');
+    if (container) {
+        if (pricingState.viewMode === 'sales') {
+            container.innerHTML = '';
+            renderSalesCalculator(container);
+        } else {
+            container.innerHTML = '';
+            renderCalculatorTab(container);
+        }
+    }
     executeCalculation();
 }
 
 // =========================================================================
-// ABA 1: CALCULADORA RÁPIDA DE PRECIFICAÇÃO
+// CALCULADORA DE PREÇOS RESTRITA (VENDEDORES E USUÁRIOS NÃO-ADMIN)
+// =========================================================================
+function renderSalesCalculator(container) {
+    if (!container) return;
+    const p = pricingState.currentProduct;
+    const res = p.lastResult;
+    const isCaneta = p.tipo_precificacao === 'CANETA';
+
+    let resultHtml = '';
+
+    if (res && res.tiers) {
+        const faixa = res.faixa;
+        const tipoLabel = isCaneta ? 'Caneta' : 'Geral';
+        const faixaBadge = faixa ? `
+            <span style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.65rem; border-radius: var(--radius-sm); background: #f1f5f9; color: #334155; font-weight: 700; font-size: 0.8rem; border: 1px solid #cbd5e1;">
+                ${tipoLabel} - Faixa ${faixa.ordem}: R$ ${faixa.custo_min.toFixed(2)} a R$ ${faixa.custo_max >= 500 ? 'Acima' : faixa.custo_max.toFixed(2)}
+            </span>
+        ` : '';
+
+        // Grade de Cards: Canetas tem pedido mínimo de 50 peças
+        const quantities = isCaneta ? [50, 100, 200, 500, 1000] : [20, 50, 100, 200, 500, 1000];
+        const cardsHtml = quantities.map(qtd => {
+            const tier = res.tiers[qtd] || {};
+
+            return `
+                <div class="card" style="padding: 0.85rem 0.6rem; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-surface); display: flex; flex-direction: column; gap: 0.5rem; position: relative; box-shadow: var(--shadow-sm); min-width: 0; text-align: center;">
+                    <!-- Quantidade de Peças -->
+                    <div style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); white-space: nowrap;">
+                        ${qtd} <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);">peças</span>
+                    </div>
+
+                    <!-- Preço de Venda Unitário + Botão Copiar Preço -->
+                    <div style="padding: 0.45rem 0; border-top: 1px solid #f1f5f9; border-bottom: 1px dashed var(--border);">
+                        <div style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.02em;">Preço Unitário</div>
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.3rem; margin-top: 0.15rem;">
+                            <span style="font-size: 1.25rem; font-weight: 900; color: var(--accent); line-height: 1.15; white-space: nowrap;">
+                                R$ ${tier.preco_unitario.toFixed(2)}
+                            </span>
+                            <button type="button" 
+                                class="btn-copy-price" 
+                                onclick="copySingleTierPrice(${qtd}, ${tier.preco_unitario}, this)" 
+                                title="Copiar R$ ${tier.preco_unitario.toFixed(2).replace('.', ',')}"
+                                style="background: transparent; border: none; padding: 2px; cursor: pointer; color: #94a3b8; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.15s ease; flex-shrink: 0;"
+                                onmouseover="this.style.color='var(--accent)'; this.style.background='#f1f5f9';"
+                                onmouseout="this.style.color='#94a3b8'; this.style.background='transparent';">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="8" y="4" width="13" height="17" rx="3"></rect>
+                                    <path d="M4 8v11a3 3 0 0 0 3 3h10"></path>
+                                    <line x1="12" y1="9" x2="17" y2="9"></line>
+                                    <line x1="12" y1="13" x2="17" y2="13"></line>
+                                    <line x1="12" y1="17" x2="15" y2="17"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Total do Lote -->
+                    <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); margin-top: 0.1rem; white-space: nowrap;">
+                        Total: <strong style="color: var(--text-primary);">R$ ${tier.total_lote.toFixed(2)}</strong>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        resultHtml = `
+            <div class="card" style="padding: 0.85rem 1rem; border-radius: var(--radius-md); background: #ffffff; border: 1px solid var(--border);">
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">
+                                ${p.nome ? escapeHtml(p.nome) : (isCaneta ? 'Caneta Personalizada' : 'Produto Sem Nome')}
+                            </h3>
+                            ${p.codigo ? `<span class="badge" style="background: #f1f5f9; color: #475569; font-weight: 700; font-size: 0.75rem;">SKU: ${escapeHtml(p.codigo)}</span>` : ''}
+                            <span class="badge" style="background: ${isCaneta ? '#f3e8ff' : '#f1f5f9'}; color: ${isCaneta ? 'var(--accent)' : '#475569'}; font-weight: 700; font-size: 0.75rem;">
+                                ${isCaneta ? 'Caneta' : 'Geral'}
+                            </span>
+                            ${isCaneta ? '<span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 700; font-size: 0.75rem; border: 1px solid #fde68a;"><i class="ph ph-warning-circle"></i> Pedido Mínimo: 50 peças</span>' : ''}
+                        </div>
+                        <div style="margin-top: 0.25rem;">${faixaBadge}</div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                        <button class="btn" style="background: #0284c7; color: white; font-size: 0.78rem; padding: 0.35rem 0.75rem;" onclick="copyWhatsAppTable()">
+                            <i class="ph ph-whatsapp-logo"></i> Copiar Tabela (WhatsApp)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Grid de Cards em linha única -->
+                <div style="display: grid; grid-template-columns: repeat(${quantities.length}, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.5rem;">
+                    ${cardsHtml}
+                </div>
+
+                <div style="margin-top: 0.6rem; padding: 0.45rem 0.75rem; background: #f8fafc; border-radius: var(--radius-sm); border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                    <span>Acima de 1.000 peças: <strong>Sob Orçamento Exclusivo</strong></span>
+                </div>
+            </div>
+        `;
+    }
+
+    const existingResArea = container.querySelector('#salesCalculatorResultArea');
+    if (existingResArea) {
+        existingResArea.innerHTML = resultHtml || `
+            <div class="card" style="padding: 2rem 1.5rem; text-align: center; color: var(--text-secondary); border: 2px dashed var(--border); border-radius: var(--radius-md); background: transparent;">
+                <i class="ph ${isCaneta ? 'ph-pen' : 'ph-arrow-circle-up'}" style="font-size: 2.25rem; color: var(--text-tertiary); margin-bottom: 0.5rem;"></i>
+                <h4 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-primary);">Digite o Custo ${isCaneta ? 'da Caneta' : 'do Produto'} acima</h4>
+                <p style="margin-top: 0.35rem; font-size: 0.82rem;">Ao digitar o custo do fornecedor, o PERSYS calculará automaticamente os preços de venda para 20 a 1.000 peças.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+            <!-- Painel Superior de Entrada -->
+            <div class="card" style="padding: 1rem 1.25rem; background: var(--bg-surface); border-radius: var(--radius-md); border: 1px solid var(--border);">
+                <!-- Seletor de Tipo (Geral vs Canetas) -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <span style="font-weight: 700; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Modalidade:</span>
+                        <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: var(--radius); border: 1px solid #cbd5e1;">
+                            <button type="button" 
+                                onclick="selectPricingType('GERAL')"
+                                style="border: none; padding: 0.3rem 0.8rem; border-radius: var(--radius); font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: var(--transition); ${!isCaneta ? 'background: var(--accent); color: white; box-shadow: var(--shadow-sm);' : 'background: transparent; color: #64748b;'}">
+                                Produtos em Geral
+                            </button>
+                            <button type="button" 
+                                onclick="selectPricingType('CANETA')"
+                                style="border: none; padding: 0.3rem 0.8rem; border-radius: var(--radius); font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: var(--transition); ${isCaneta ? 'background: var(--accent); color: white; box-shadow: var(--shadow-sm);' : 'background: transparent; color: #64748b;'}">
+                                Canetas (Tabela Especial)
+                            </button>
+                        </div>
+                    </div>
+
+                    <button class="btn" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #f1f5f9; color: var(--text-secondary);" onclick="clearCalculatorForm()">
+                        <i class="ph ph-trash"></i> Limpar Campos
+                    </button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 2fr; gap: 0.75rem; align-items: flex-end;">
+                    <!-- Custo Base -->
+                    <div>
+                        <label style="font-weight: 700; font-size: 0.8rem; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">
+                            Custo ${isCaneta ? 'da Caneta' : 'do Produto'} (Fornecedor) *
+                        </label>
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <span style="position: absolute; left: 0.65rem; font-weight: 700; color: var(--text-secondary); font-size: 0.85rem;">R$</span>
+                            <input type="number" step="0.01" min="0" 
+                                id="calcCustoBase" 
+                                class="form-control" 
+                                placeholder="0,00" 
+                                value="${p.custo_base || ''}"
+                                oninput="onCustoBaseInputChange(this.value)"
+                                style="padding-left: 2rem; font-size: 1.05rem; font-weight: 800; color: var(--accent); height: 38px;">
+                        </div>
+                    </div>
+
+                    <!-- Código / SKU -->
+                    <div>
+                        <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">
+                            Código / Referência (SKU)
+                        </label>
+                        <input type="text" 
+                            id="calcCodigo" 
+                            class="form-control" 
+                            placeholder="Ex: PP767" 
+                            value="${p.codigo || ''}"
+                            oninput="pricingState.currentProduct.codigo = this.value"
+                            style="height: 38px; font-weight: 600; font-size: 0.85rem;">
+                    </div>
+
+                    <!-- Nome do Produto -->
+                    <div>
+                        <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">
+                            Nome do Produto
+                        </label>
+                        <input type="text" 
+                            id="calcNome" 
+                            class="form-control" 
+                            placeholder="${isCaneta ? 'Ex: Caneta Plástica Esferográfica' : 'Ex: Copo Long Drink Personalizado'}" 
+                            value="${p.nome || ''}"
+                            oninput="pricingState.currentProduct.nome = this.value"
+                            style="height: 38px; font-size: 0.85rem;">
+                    </div>
+                </div>
+
+                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary); display: flex; gap: 0.75rem; align-items: center;">
+                    <span><i class="ph ph-info" style="color: var(--accent);"></i> Tabela ativa: <strong>${isCaneta ? 'Canetas (Tabela Especial)' : 'Produtos em Geral'}</strong>. Preços de venda oficiais da empresa.</span>
+                </div>
+            </div>
+
+            <!-- Área de Resultados Dinâmicos -->
+            <div id="salesCalculatorResultArea">
+                ${resultHtml || `
+                    <div class="card" style="padding: 2rem 1.5rem; text-align: center; color: var(--text-secondary); border: 2px dashed var(--border); border-radius: var(--radius-md); background: transparent;">
+                        <i class="ph ${isCaneta ? 'ph-pen' : 'ph-arrow-circle-up'}" style="font-size: 2.25rem; color: var(--text-tertiary); margin-bottom: 0.5rem;"></i>
+                        <h4 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-primary);">Digite o Custo ${isCaneta ? 'da Caneta' : 'do Produto'} acima</h4>
+                        <p style="margin-top: 0.35rem; font-size: 0.82rem;">Ao digitar o custo do fornecedor, o PERSYS calculará automaticamente os preços de venda para 20 a 1.000 peças.</p>
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+}
+
+// =========================================================================
+// ABA 1: CALCULADORA RÁPIDA DE PRECIFICAÇÃO (ADMIN)
 // =========================================================================
 function renderCalculatorTab(container) {
     const p = pricingState.currentProduct;
@@ -292,11 +539,10 @@ function renderCalculatorTab(container) {
 
     if (res && res.tiers) {
         const faixa = res.faixa;
-        const tipoLabel = isCaneta ? '🖊️ Caneta' : '📦 Geral';
+        const tipoLabel = isCaneta ? 'Caneta' : 'Geral';
         const faixaBadge = faixa ? `
-            <span style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: 9999px; background: ${faixa.cor_hex}15; color: ${faixa.cor_hex}; font-weight: 700; font-size: 0.85rem; border: 1px solid ${faixa.cor_hex}40;">
-                <span style="width: 10px; height: 10px; border-radius: 50%; background: ${faixa.cor_hex};"></span>
-                ${tipoLabel} - Faixa ${faixa.ordem}: R$ ${faixa.custo_min.toFixed(2)} a R$ ${faixa.custo_max >= 500 ? 'Acima' : faixa.custo_max.toFixed(2)} (${faixa.cor_nome})
+            <span style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.65rem; border-radius: var(--radius-sm); background: #f1f5f9; color: #334155; font-weight: 700; font-size: 0.8rem; border: 1px solid #cbd5e1;">
+                ${tipoLabel} - Faixa ${faixa.ordem}: R$ ${faixa.custo_min.toFixed(2)} a R$ ${faixa.custo_max >= 500 ? 'Acima' : faixa.custo_max.toFixed(2)}
             </span>
         ` : '';
 
@@ -311,55 +557,74 @@ function renderCalculatorTab(container) {
         const cardsHtml = quantities.map(qtd => {
             const tier = res.tiers[qtd] || {};
             const isCustom = tier.margem_aplicada !== tier.margem_padrao;
-            const customBadge = isCustom ? `<span style="font-size: 0.7rem; background: #ffedd5; color: #c2410c; padding: 1px 5px; border-radius: 4px; font-weight: 600;">Customizada</span>` : '';
+            const customBadge = isCustom ? `<span style="font-size: 0.62rem; background: #ffedd5; color: #c2410c; padding: 1px 4px; border-radius: 4px; font-weight: 600;">Custom</span>` : '';
 
             return `
-                <div class="card" style="padding: 1.25rem; border-radius: var(--radius-lg); border: 2px solid ${isCustom ? '#f97316' : 'var(--border)'}; background: var(--bg-surface); display: flex; flex-direction: column; gap: 0.75rem; position: relative; box-shadow: var(--shadow-sm);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">${qtd} <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">peças</span></span>
+                <div class="card" style="padding: 0.75rem 0.55rem; border-radius: var(--radius-md); border: 2px solid ${isCustom ? '#f97316' : 'var(--border)'}; background: var(--bg-surface); display: flex; flex-direction: column; gap: 0.45rem; position: relative; box-shadow: var(--shadow-sm); min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span style="font-size: 1rem; font-weight: 800; color: var(--text-primary); white-space: nowrap;">${qtd} <span style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);">peças</span></span>
                         ${customBadge}
                     </div>
 
                     <!-- Input Editável de Margem -->
-                    <div style="background: #f8fafc; padding: 0.5rem 0.75rem; border-radius: var(--radius); border: 1px solid #e2e8f0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-                            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Margem Lucro</label>
-                            <span style="font-size: 0.75rem; color: var(--text-tertiary);" title="Padrão da Faixa">Padrão: ${tier.margem_padrao}%</span>
+                    <div style="background: #f8fafc; padding: 0.3rem 0.45rem; border-radius: var(--radius-sm); border: 1px solid #e2e8f0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.15rem;">
+                            <label style="font-size: 0.62rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Margem</label>
+                            <span style="font-size: 0.62rem; color: var(--text-tertiary);" title="Padrão da Faixa">Pad: ${tier.margem_padrao}%</span>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="display: flex; align-items: center; gap: 0.2rem;">
                             <input type="number" step="1" min="0" max="2000" 
                                 class="form-control" 
                                 id="margin_input_${qtd}" 
                                 value="${tier.margem_aplicada}" 
                                 oninput="onCustomMarginChange(${qtd}, this.value)"
-                                style="font-weight: 700; font-size: 1.05rem; padding: 0.35rem 0.5rem; text-align: right; background: #ffffff;">
-                            <span style="font-weight: 700; color: var(--text-secondary);">%</span>
+                                style="font-weight: 700; font-size: 0.9rem; padding: 0.15rem 0.3rem; height: 28px; text-align: right; background: #ffffff; min-width: 0;">
+                            <span style="font-weight: 700; color: var(--text-secondary); font-size: 0.78rem;">%</span>
                         </div>
                     </div>
 
                     <!-- Preço de Venda Unitário -->
-                    <div style="text-align: center; padding: 0.5rem 0; border-bottom: 1px dashed var(--border);">
-                        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary);">Preço Unitário</div>
-                        <div style="font-size: 1.75rem; font-weight: 900; color: var(--accent); margin-top: 0.15rem;">
-                            R$ ${tier.preco_unitario.toFixed(2)}
+                    <div style="text-align: center; padding: 0.35rem 0; border-bottom: 1px dashed var(--border);">
+                        <div style="font-size: 0.62rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.02em;">Preço Unitário</div>
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.3rem; margin-top: 0.1rem;">
+                            <span style="font-size: 1.22rem; font-weight: 900; color: var(--accent); line-height: 1.15; white-space: nowrap;">
+                                R$ ${tier.preco_unitario.toFixed(2)}
+                            </span>
+                            <button type="button" 
+                                class="btn-copy-price" 
+                                onclick="copySingleTierPrice(${qtd}, ${tier.preco_unitario}, this)" 
+                                title="Copiar R$ ${tier.preco_unitario.toFixed(2).replace('.', ',')}"
+                                style="background: transparent; border: none; padding: 2px; cursor: pointer; color: #94a3b8; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.15s ease; flex-shrink: 0;"
+                                onmouseover="this.style.color='var(--accent)'; this.style.background='#f1f5f9';"
+                                onmouseout="this.style.color='#94a3b8'; this.style.background='transparent';">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="8" y="4" width="13" height="17" rx="3"></rect>
+                                    <path d="M4 8v11a3 3 0 0 0 3 3h10"></path>
+                                    <line x1="12" y1="9" x2="17" y2="9"></line>
+                                    <line x1="12" y1="13" x2="17" y2="13"></line>
+                                    <line x1="12" y1="17" x2="15" y2="17"></line>
+                                </svg>
+                            </button>
                         </div>
-                        <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-top: 0.2rem;">
+                        <div style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); margin-top: 0.15rem; white-space: nowrap;">
                             Total: <strong>R$ ${tier.total_lote.toFixed(2)}</strong>
                         </div>
                     </div>
 
                     <!-- Métricas de Lucro -->
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary);">
-                        <span>Lucro Unitário:</span>
-                        <strong style="color: var(--success);">+R$ ${tier.lucro_unitario.toFixed(2)}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary);">
-                        <span>Lucro Total Lote:</span>
-                        <strong style="color: var(--success);">+R$ ${tier.lucro_total.toFixed(2)}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary);">
-                        <span>Margem Venda:</span>
-                        <strong style="color: #0284c7;">${tier.margem_venda_pct}%</strong>
+                    <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.7rem;">
+                        <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+                            <span style="white-space: nowrap;">Lucro Unit:</span>
+                            <strong style="color: var(--success); white-space: nowrap;">+R$ ${tier.lucro_unitario.toFixed(2)}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+                            <span style="white-space: nowrap;">Lucro Lote:</span>
+                            <strong style="color: var(--success); white-space: nowrap;">+R$ ${tier.lucro_total.toFixed(2)}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+                            <span style="white-space: nowrap;">Mg Venda:</span>
+                            <strong style="color: #0284c7; white-space: nowrap;">${tier.margem_venda_pct}%</strong>
+                        </div>
                     </div>
                 </div>
             `;
@@ -367,77 +632,77 @@ function renderCalculatorTab(container) {
 
         resultHtml = `
             <!-- Barra de Resumo e Custo Real -->
-            <div class="card" style="padding: 1.25rem; border-radius: var(--radius-lg); background: #ffffff; border: 1px solid var(--border);">
-                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem; margin-bottom: 1rem;">
+            <div class="card" style="padding: 0.85rem 1rem; border-radius: var(--radius-md); background: #ffffff; border: 1px solid var(--border);">
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
                     <div>
-                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-                            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">
                                 ${p.nome ? escapeHtml(p.nome) : (isCaneta ? 'Caneta Personalizada' : 'Produto Sem Nome')}
                             </h3>
-                            ${p.codigo ? `<span class="badge" style="background: #f1f5f9; color: #475569; font-weight: 700;">SKU: ${escapeHtml(p.codigo)}</span>` : ''}
-                            <span class="badge" style="background: ${isCaneta ? '#f3e8ff' : '#f1f5f9'}; color: ${isCaneta ? 'var(--accent)' : '#475569'}; font-weight: 700;">
-                                ${isCaneta ? '🖊️ Caneta' : '📦 Geral'}
+                            ${p.codigo ? `<span class="badge" style="background: #f1f5f9; color: #475569; font-weight: 700; font-size: 0.75rem;">SKU: ${escapeHtml(p.codigo)}</span>` : ''}
+                            <span class="badge" style="background: ${isCaneta ? '#f3e8ff' : '#f1f5f9'}; color: ${isCaneta ? 'var(--accent)' : '#475569'}; font-weight: 700; font-size: 0.75rem;">
+                                ${isCaneta ? 'Caneta' : 'Geral'}
                             </span>
-                            ${isCaneta ? '<span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 700; border: 1px solid #fde68a;"><i class="ph ph-warning-circle"></i> Pedido Mínimo: 50 peças</span>' : ''}
+                            ${isCaneta ? '<span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 700; font-size: 0.75rem; border: 1px solid #fde68a;"><i class="ph ph-warning-circle"></i> Pedido Mínimo: 50 peças</span>' : ''}
                         </div>
-                        <div style="margin-top: 0.35rem;">${faixaBadge}</div>
+                        <div style="margin-top: 0.25rem;">${faixaBadge}</div>
                     </div>
 
                     <!-- Botões de Ação Rápida -->
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button class="btn" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; font-size: 0.85rem;" onclick="resetToDefaultMargins()" title="Restaura as margens padrão da faixa">
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                        <button class="btn" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; font-size: 0.78rem; padding: 0.3rem 0.6rem;" onclick="resetToDefaultMargins()" title="Restaura as margens padrão da faixa">
                             <i class="ph ph-arrow-counter-clockwise"></i> Restaurar Margens
                         </button>
-                        <button class="btn" style="background: #0284c7; color: white; font-size: 0.85rem;" onclick="copyWhatsAppTable()">
+                        <button class="btn" style="background: #0284c7; color: white; font-size: 0.78rem; padding: 0.3rem 0.6rem;" onclick="copyWhatsAppTable()">
                             <i class="ph ph-whatsapp-logo"></i> Copiar Tabela (WhatsApp)
                         </button>
-                        <button class="btn" style="background: #475569; color: white; font-size: 0.85rem;" onclick="copySlotString()">
+                        <button class="btn" style="background: #475569; color: white; font-size: 0.78rem; padding: 0.3rem 0.6rem;" onclick="copySlotString()">
                             <i class="ph ph-brackets-curly"></i> Copiar Slot Preços
                         </button>
-                        <button class="btn btn-primary" style="font-size: 0.85rem;" onclick="saveProductToCatalog()">
+                        <button class="btn btn-primary" style="font-size: 0.78rem; padding: 0.3rem 0.65rem;" onclick="saveProductToCatalog()">
                             <i class="ph ph-floppy-disk"></i> ${p.id ? 'Atualizar no Catálogo' : 'Salvar no Catálogo'}
                         </button>
                     </div>
                 </div>
 
                 <!-- Detalhamento de Custos (Fórmula Empresa) -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; background: #f8fafc; padding: 1rem; border-radius: var(--radius); border: 1px solid #e2e8f0;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.65rem; background: #f8fafc; padding: 0.65rem 0.85rem; border-radius: var(--radius-sm); border: 1px solid #e2e8f0;">
                     <div>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Custo Base (Fornecedor)</span>
-                        <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin-top: 0.2rem;">R$ ${baseVal.toFixed(2)}</div>
+                        <span style="font-size: 0.68rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Custo Base (Fornecedor)</span>
+                        <div style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin-top: 0.15rem;">R$ ${baseVal.toFixed(2)}</div>
                     </div>
                     <div>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Custo Fixo (+${cf}%)</span>
-                        <div style="font-size: 1.15rem; font-weight: 700; color: #64748b; margin-top: 0.2rem;">+ R$ ${cfReais}</div>
+                        <span style="font-size: 0.68rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Custo Fixo (+${cf}%)</span>
+                        <div style="font-size: 1rem; font-weight: 700; color: #64748b; margin-top: 0.15rem;">+ R$ ${cfReais}</div>
                     </div>
                     <div>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Custo Variável (+${cv}%)</span>
-                        <div style="font-size: 1.15rem; font-weight: 700; color: #64748b; margin-top: 0.2rem;">+ R$ ${cvReais}</div>
+                        <span style="font-size: 0.68rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Custo Variável (+${cv}%)</span>
+                        <div style="font-size: 1rem; font-weight: 700; color: #64748b; margin-top: 0.15rem;">+ R$ ${cvReais}</div>
                     </div>
-                    <div style="background: #ffffff; padding: 0.5rem 0.75rem; border-radius: var(--radius); border: 2px solid var(--accent); box-shadow: var(--shadow-sm);">
-                        <span style="font-size: 0.75rem; color: var(--accent); text-transform: uppercase; font-weight: 800;">Custo Real Empresa (Z)</span>
-                        <div style="font-size: 1.25rem; font-weight: 900; color: var(--accent); margin-top: 0.2rem;">R$ ${realVal}</div>
+                    <div style="background: #ffffff; padding: 0.35rem 0.65rem; border-radius: var(--radius-sm); border: 2px solid var(--accent); box-shadow: var(--shadow-sm);">
+                        <span style="font-size: 0.68rem; color: var(--accent); text-transform: uppercase; font-weight: 800;">Custo Real Empresa (Z)</span>
+                        <div style="font-size: 1.05rem; font-weight: 900; color: var(--accent); margin-top: 0.15rem;">R$ ${realVal}</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Grade de 6 Tiers -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+            <!-- Grade de Tiers (Alinhamento em 1 linha sem quebra) -->
+            <div style="display: grid; grid-template-columns: repeat(${quantities.length}, minmax(0, 1fr)); gap: 0.5rem; width: 100%;">
                 ${cardsHtml}
             </div>
 
             <!-- Card Especial > 1000 Peças -->
-            <div class="card" style="padding: 1rem 1.5rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div style="background: #3b82f6; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+            <div class="card" style="padding: 0.75rem 1.25rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; gap: 0.65rem;">
+                    <div style="background: #3b82f6; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
                         <i class="ph ph-crown"></i>
                     </div>
                     <div>
-                        <div style="font-weight: 800; color: #1e3a8a; font-size: 1rem;">Pedidos Acima de 1.000 Peças</div>
-                        <div style="font-size: 0.85rem; color: #3b82f6;">Produção em grande escala e margens diferenciadas sob consulta direta com o setor comercial.</div>
+                        <div style="font-weight: 800; color: #1e3a8a; font-size: 0.9rem;">Pedidos Acima de 1.000 Peças</div>
+                        <div style="font-size: 0.78rem; color: #3b82f6;">Produção em grande escala e margens diferenciadas sob consulta direta com o setor comercial.</div>
                     </div>
                 </div>
-                <span class="badge" style="background: #2563eb; color: white; padding: 0.5rem 1rem; font-weight: 700; font-size: 0.85rem; border-radius: 9999px;">
+                <span class="badge" style="background: #2563eb; color: white; padding: 0.35rem 0.75rem; font-weight: 700; font-size: 0.78rem; border-radius: 9999px;">
                     Sob Orçamento Exclusivo
                 </span>
             </div>
@@ -445,53 +710,53 @@ function renderCalculatorTab(container) {
     }
 
     container.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.85rem;">
             <!-- Painel Superior de Entrada -->
-            <div class="card" style="padding: 1.5rem; background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border);">
+            <div class="card" style="padding: 1rem 1.25rem; background: var(--bg-surface); border-radius: var(--radius-md); border: 1px solid var(--border);">
                 <!-- Seletor de Tipo (Geral vs Canetas) -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase;">Modalidade:</span>
-                        <div style="display: inline-flex; background: #f1f5f9; padding: 3px; border-radius: var(--radius); border: 1px solid #cbd5e1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <span style="font-weight: 700; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Modalidade:</span>
+                        <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: var(--radius); border: 1px solid #cbd5e1;">
                             <button type="button" 
                                 onclick="selectPricingType('GERAL')"
-                                style="border: none; padding: 0.45rem 1rem; border-radius: var(--radius); font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: var(--transition); ${!isCaneta ? 'background: var(--accent); color: white; box-shadow: var(--shadow-sm);' : 'background: transparent; color: #64748b;'}">
-                                📦 Produtos em Geral
+                                style="border: none; padding: 0.3rem 0.8rem; border-radius: var(--radius); font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: var(--transition); ${!isCaneta ? 'background: var(--accent); color: white; box-shadow: var(--shadow-sm);' : 'background: transparent; color: #64748b;'}">
+                                Produtos em Geral
                             </button>
                             <button type="button" 
                                 onclick="selectPricingType('CANETA')"
-                                style="border: none; padding: 0.45rem 1rem; border-radius: var(--radius); font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: var(--transition); ${isCaneta ? 'background: var(--accent); color: white; box-shadow: var(--shadow-sm);' : 'background: transparent; color: #64748b;'}">
-                                🖊️ Canetas (Tabela Especial)
+                                style="border: none; padding: 0.3rem 0.8rem; border-radius: var(--radius); font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: var(--transition); ${isCaneta ? 'background: var(--accent); color: white; box-shadow: var(--shadow-sm);' : 'background: transparent; color: #64748b;'}">
+                                Canetas (Tabela Especial)
                             </button>
                         </div>
                     </div>
 
-                    <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; background: #f1f5f9; color: var(--text-secondary);" onclick="clearCalculatorForm()">
+                    <button class="btn" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #f1f5f9; color: var(--text-secondary);" onclick="clearCalculatorForm()">
                         <i class="ph ph-trash"></i> Limpar Campos
                     </button>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1.2fr 1fr 2fr; gap: 1rem; align-items: flex-end;">
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 2fr; gap: 0.75rem; align-items: flex-end;">
                     <!-- Custo Base -->
                     <div>
-                        <label style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem;">
+                        <label style="font-weight: 700; font-size: 0.8rem; color: var(--text-primary); display: block; margin-bottom: 0.25rem;">
                             Custo ${isCaneta ? 'da Caneta' : 'do Produto'} (Fornecedor) *
                         </label>
                         <div style="position: relative; display: flex; align-items: center;">
-                            <span style="position: absolute; left: 0.75rem; font-weight: 700; color: var(--text-secondary); font-size: 0.95rem;">R$</span>
+                            <span style="position: absolute; left: 0.65rem; font-weight: 700; color: var(--text-secondary); font-size: 0.85rem;">R$</span>
                             <input type="number" step="0.01" min="0" 
                                 id="calcCustoBase" 
                                 class="form-control" 
                                 placeholder="0,00" 
                                 value="${p.custo_base || ''}"
                                 oninput="onCustoBaseInputChange(this.value)"
-                                style="padding-left: 2.25rem; font-size: 1.15rem; font-weight: 800; color: var(--accent); height: 44px;">
+                                style="padding-left: 2rem; font-size: 1.05rem; font-weight: 800; color: var(--accent); height: 38px;">
                         </div>
                     </div>
 
                     <!-- Código / SKU -->
                     <div>
-                        <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 0.35rem;">
+                        <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">
                             Código / Referência (SKU)
                         </label>
                         <input type="text" 
@@ -500,12 +765,12 @@ function renderCalculatorTab(container) {
                             placeholder="Ex: PP767" 
                             value="${p.codigo || ''}"
                             oninput="pricingState.currentProduct.codigo = this.value"
-                            style="height: 44px; font-weight: 600;">
+                            style="height: 38px; font-weight: 600; font-size: 0.85rem;">
                     </div>
 
                     <!-- Nome do Produto -->
                     <div>
-                        <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 0.35rem;">
+                        <label style="font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">
                             Nome do Produto
                         </label>
                         <input type="text" 
@@ -514,11 +779,11 @@ function renderCalculatorTab(container) {
                             placeholder="${isCaneta ? 'Ex: Caneta Plástica Esferográfica' : 'Ex: Copo Long Drink Personalizado'}" 
                             value="${p.nome || ''}"
                             oninput="pricingState.currentProduct.nome = this.value"
-                            style="height: 44px;">
+                            style="height: 38px; font-size: 0.85rem;">
                     </div>
                 </div>
 
-                <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 1rem; align-items: center;">
+                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary); display: flex; gap: 0.75rem; align-items: center;">
                     <span><i class="ph ph-info" style="color: var(--accent);"></i> Tabela ativa: <strong>${isCaneta ? 'Canetas (4 Faixas Especiais)' : 'Produtos em Geral (12 Faixas)'}</strong>. Encargos: <strong>CF ${cf}% + CV ${cv}% = ${somaEncargos}%</strong>.</span>
                 </div>
             </div>
@@ -526,10 +791,10 @@ function renderCalculatorTab(container) {
             <!-- Área de Resultados Dinâmicos -->
             <div id="calculatorResultArea">
                 ${resultHtml || `
-                    <div class="card" style="padding: 3rem 2rem; text-align: center; color: var(--text-secondary); border: 2px dashed var(--border); border-radius: var(--radius-lg); background: transparent;">
-                        <i class="ph ${isCaneta ? 'ph-pen' : 'ph-arrow-circle-up'}" style="font-size: 3rem; color: var(--text-tertiary); margin-bottom: 0.75rem;"></i>
-                        <h4 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">Digite o Custo ${isCaneta ? 'da Caneta' : 'do Produto'} acima</h4>
-                        <p style="margin-top: 0.5rem; font-size: 0.9rem;">Ao digitar o custo base do fornecedor, o PERSYS calculará automaticamente o custo real da empresa e as 6 faixas de preço de 20 a 1.000 peças com as regras de ${isCaneta ? 'Canetas' : 'Produtos em Geral'}.</p>
+                    <div class="card" style="padding: 2rem 1.5rem; text-align: center; color: var(--text-secondary); border: 2px dashed var(--border); border-radius: var(--radius-md); background: transparent;">
+                        <i class="ph ${isCaneta ? 'ph-pen' : 'ph-arrow-circle-up'}" style="font-size: 2.25rem; color: var(--text-tertiary); margin-bottom: 0.5rem;"></i>
+                        <h4 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-primary);">Digite o Custo ${isCaneta ? 'da Caneta' : 'do Produto'} acima</h4>
+                        <p style="margin-top: 0.35rem; font-size: 0.82rem;">Ao digitar o custo base do fornecedor, o PERSYS calculará automaticamente o custo real da empresa e as 6 faixas de preço de 20 a 1.000 peças com as regras de ${isCaneta ? 'Canetas' : 'Produtos em Geral'}.</p>
                     </div>
                 `}
             </div>
@@ -595,6 +860,12 @@ function clearCalculatorForm() {
         custom_margins: null,
         lastResult: null
     };
+    const cInput = document.getElementById('calcCustoBase');
+    if (cInput) cInput.value = '';
+    const sInput = document.getElementById('calcCodigo');
+    if (sInput) sInput.value = '';
+    const nInput = document.getElementById('calcNome');
+    if (nInput) nInput.value = '';
     renderActiveTabContent();
 }
 
@@ -747,6 +1018,59 @@ function copySlotString() {
     });
 }
 
+// Copiar preço unitário de um tier individual (1 card específico)
+function copySingleTierPrice(qtd, precoUnitario, btn) {
+    const precoFormatado = `R$ ${parseFloat(precoUnitario).toFixed(2).replace('.', ',')}`;
+
+    const onSuccess = () => {
+        if (typeof showToast === 'function') {
+            showToast(`Preço de ${qtd} peças copiado: ${precoFormatado}`);
+        }
+
+        if (btn) {
+            const originalSvg = btn.innerHTML;
+            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+            btn.style.color = '#16a34a';
+            btn.setAttribute('title', 'Copiado!');
+            setTimeout(() => {
+                btn.innerHTML = originalSvg;
+                btn.style.color = '#94a3b8';
+                btn.setAttribute('title', `Copiar ${precoFormatado}`);
+            }, 1400);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(precoFormatado)
+            .then(onSuccess)
+            .catch(() => {
+                copyToClipboardFallback(precoFormatado);
+                onSuccess();
+            });
+    } else {
+        copyToClipboardFallback(precoFormatado);
+        onSuccess();
+    }
+}
+window.copySingleTierPrice = copySingleTierPrice;
+
+function copyToClipboardFallback(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+        document.execCommand('copy');
+    } catch (e) {
+        console.error('Fallback copy failed', e);
+    }
+    document.body.removeChild(textArea);
+}
+
 // =========================================================================
 // ABA 2: CATÁLOGO DE PRODUTOS SALVOS
 // =========================================================================
@@ -784,8 +1108,8 @@ async function renderCatalogTab(container) {
         rowsHtml = prods.map(p => {
             const isCaneta = (p.tipo_precificacao || 'GERAL').toUpperCase() === 'CANETA';
             const tipoBadge = isCaneta 
-                ? `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #f3e8ff; color: var(--accent); font-weight: 700;">🖊️ Caneta</span>` 
-                : `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; color: #475569; font-weight: 600;">📦 Geral</span>`;
+                ? `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #f3e8ff; color: var(--accent); font-weight: 700;">Caneta</span>` 
+                : `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; color: #475569; font-weight: 600;">Geral</span>`;
 
             return `
                 <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
@@ -992,11 +1316,8 @@ function renderSettingsTab(container) {
 
     const renderFaixasTableRows = (lista, isCaneta = false) => lista.map((f, idx) => `
         <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-            <td style="padding: 0.6rem 0.75rem; font-weight: 700;">
-                <span style="display: inline-flex; align-items: center; gap: 0.4rem;">
-                    <span style="width: 12px; height: 12px; border-radius: 50%; background: ${f.cor_hex}; display: inline-block;"></span>
-                    <span>${f.ordem}. ${escapeHtml(f.cor_nome)}</span>
-                </span>
+            <td style="padding: 0.6rem 0.75rem; font-weight: 700; color: var(--text-primary);">
+                <span>Faixa ${f.ordem} (${escapeHtml(f.cor_nome)})</span>
             </td>
             <td style="padding: 0.6rem 0.75rem; white-space: nowrap;">
                 R$ <input type="number" step="0.01" min="0" class="form-control" id="f_min_${f.id}" value="${f.custo_min.toFixed(2)}" style="width: 75px; display: inline-block; padding: 0.2rem 0.4rem; font-size: 0.85rem;">
