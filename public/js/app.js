@@ -38,71 +38,123 @@ async function getSectorUsersCached(sectorCode) {
     return globalSectorUsersCache[sectorCode] || [];
 }
 
+async function getAllCollaboratorsCached() {
+    if (!globalSectorUsersCache['ALL'] || globalSectorUsersCache['ALL'].length === 0) {
+        try {
+            const res = await fetch('/api/collaborators');
+            if (res.ok) {
+                const list = await res.json();
+                globalSectorUsersCache['ALL'] = (list || []).filter(c => c.ativo === 1);
+            }
+        } catch (e) {
+            console.error('Erro ao carregar todos colaboradores:', e);
+        }
+    }
+    return globalSectorUsersCache['ALL'] || [];
+}
+
 async function fetchSectorUsersCache(sectorCode) {
     return await getSectorUsersCached(sectorCode);
 }
 
 window.toggleMultiplosUI = function(isDesembale) {
-    const isChecked = document.getElementById(isDesembale ? 'checkMultiplosDesembale' : 'checkMultiplos').checked;
-    document.getElementById(isDesembale ? 'multiplosUIDesembale' : 'multiplosUI').style.display = isChecked ? 'block' : 'none';
-    if(isChecked && document.getElementById(isDesembale ? 'multiplosListDesembale' : 'multiplosList').children.length === 0) {
+    const isChecked = document.getElementById(isDesembale ? 'checkMultiplosDesembale' : 'checkMultiplos')?.checked;
+    const uiEl = document.getElementById(isDesembale ? 'multiplosUIDesembale' : 'multiplosUI');
+    if (uiEl) uiEl.style.display = isChecked ? 'block' : 'none';
+    const listEl = document.getElementById(isDesembale ? 'multiplosListDesembale' : 'multiplosList');
+    if (isChecked && listEl && listEl.children.length === 0) {
         window.addMultiplosRow(isDesembale);
     }
-}
+};
 
 window.addMultiplosRow = async function(isDesembale) {
     const listId = isDesembale ? 'multiplosListDesembale' : 'multiplosList';
     const container = document.getElementById(listId);
-    if(!container) return;
+    if (!container) return;
     
     // Ensure cache is loaded
-    await fetchSectorUsersCache(isDesembale ? 'DESEMBALE' : 'EMBALE');
+    const sectorCode = isDesembale ? 'DESEMBALE' : 'EMBALE';
+    const [sectorUsers, allUsers] = await Promise.all([
+        getSectorUsersCached(sectorCode),
+        getAllCollaboratorsCached()
+    ]);
     
-    let options = '<option value="">-Selecione-</option>';
-    sectorUsersCache.forEach(u => options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`);
+    let options = '<option value="">-- Selecione o Colaborador --</option>';
+    const sectorIds = new Set();
+    if (sectorUsers && sectorUsers.length > 0) {
+        options += `<optgroup label="Colaboradores do Setor (${isDesembale ? 'Desembale' : 'Embale'})">`;
+        sectorUsers.forEach(u => {
+            sectorIds.add(u.id);
+            options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`;
+        });
+        options += `</optgroup>`;
+    }
+    
+    const otherUsers = (allUsers || []).filter(u => !sectorIds.has(u.id));
+    if (otherUsers.length > 0) {
+        options += `<optgroup label="Outros Colaboradores (Apoio)">`;
+        otherUsers.forEach(u => {
+            options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`;
+        });
+        options += `</optgroup>`;
+    }
 
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
+    row.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.35rem;';
     row.innerHTML = `
-        <select class="form-control" style="flex:1; padding:0.25rem;">${options}</select>
-        <input type="number" class="form-control" style="width:80px; padding:0.25rem;" min="1" placeholder="Qtd">
+        <select class="form-control" style="flex:1; padding:0.35rem 0.5rem; font-size:0.85rem;">${options}</select>
+        <input type="number" class="form-control" style="width:90px; padding:0.35rem 0.5rem; font-size:0.85rem; font-weight:bold; text-align:center;" min="1" placeholder="Qtd">
         <button type="button" style="width:34px; height:34px; display:flex; align-items:center; justify-content:center; background:#fee2e2; border:1px solid #f87171; border-radius:6px; color:#ef4444; cursor:pointer; font-weight:bold; flex-shrink:0; flex-grow:0; padding:0; line-height:1;" onclick="this.parentElement.remove()" title="Remover">✕</button>
     `;
     container.appendChild(row);
-}
+};
 
 window.getMultiplosData = function(isDesembale, totalEsperado) {
     const isChecked = document.getElementById(isDesembale ? 'checkMultiplosDesembale' : 'checkMultiplos')?.checked;
-    if(!isChecked) return null; // Retorna null significa que NAO usou modo múltiplo
+    if (!isChecked) return null; // Retorna null significa que NAO usou modo múltiplo
     
-    const rows = document.getElementById(isDesembale ? 'multiplosListDesembale' : 'multiplosList').children;
+    const listEl = document.getElementById(isDesembale ? 'multiplosListDesembale' : 'multiplosList');
+    const rows = listEl ? Array.from(listEl.children) : [];
     let data = [];
     let soma = 0;
+    const usedIds = new Set();
     
-    for(let r of rows) {
-        const val = r.querySelector('select').value;
-        const qtdStr = r.querySelector('input').value;
-        if(!val || val === '') { alert('Selecione todos os colaboradores nas linhas adcionadas.'); return false; }
-        if(!qtdStr || parseInt(qtdStr) <= 0) { alert('A quantidade deve ser maior que zero.'); return false; }
+    for (let r of rows) {
+        const sel = r.querySelector('select');
+        const inp = r.querySelector('input');
+        if (!sel || !inp) continue;
+        const val = sel.value;
+        const qtdStr = inp.value;
+        if (!val || val === '') { alert('Selecione todos os colaboradores nas linhas adicionadas.'); return false; }
+        if (!qtdStr || parseInt(qtdStr) <= 0) { alert('A quantidade deve ser maior que zero.'); return false; }
         
         let qtd = parseInt(qtdStr);
         let id_nome = val.split('|');
-        data.push({ operador_id: id_nome[0], operador_nome: id_nome[1], quantidade_produzida: qtd });
+        const opId = id_nome[0];
+        const opNome = id_nome[1];
+
+        if (usedIds.has(opId)) {
+            alert(`O colaborador "${opNome}" foi adicionado mais de uma vez. Combine as quantidades em uma única linha.`);
+            return false;
+        }
+        usedIds.add(opId);
+
+        data.push({ operador_id: opId, operador_nome: opNome, quantidade_produzida: qtd });
         soma += qtd;
     }
     
-    if(data.length === 0) {
+    if (data.length === 0) {
         alert('Adicione ao menos um colaborador ou desmarque a opção Múltiplos.');
         return false;
     }
     
-    if(soma !== totalEsperado) {
+    if (soma !== totalEsperado) {
         alert(`A soma das quantidades (${soma}) não bate com a quantidade do item (${totalEsperado})!`);
         return false; // Bloqueia!
     }
     
     return data;
-}
+};
 // ==== END MULTIPLOS OPERADORES INJECT ====
 
 function formatResponsibleDisplay(respValue) {
@@ -3947,7 +3999,7 @@ function openEmbaleAction(itemId, pedidoId, tipoEnvio, itemQuantidade) {
             <div id="multiplosUI" style="display: none; margin-top: 1rem;">
                 <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Adicione os colaboradores e a quantidade que cada um embalou (Soma deve ser igual a <span style="font-weight:bold;">${itemQuantidade}</span>).</p>
                 <div id="multiplosList" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
-                <button class="btn" style="width:auto; padding: 0.25rem 0.5rem; margin-top: 0.5rem; border: 1px dashed #64748b; background: transparent; color: #64748b;" onclick="addMultiplosRow(false)">+ Add Colaborador</button>
+                <button type="button" class="btn" style="width:auto; padding: 0.25rem 0.5rem; margin-top: 0.5rem; border: 1px dashed #64748b; background: transparent; color: #64748b;" onclick="window.addMultiplosRow(false)">+ Add Colaborador</button>
             </div>
         </div>
     `;
@@ -5233,7 +5285,7 @@ function openDesembaleConfirmation(itemId, nextStatus, itemQuantidade) {
             <div id="multiplosUIDesembale" style="display: none; margin-top: 1rem;">
                 <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Adicione os colaboradores e a quantidade que cada um desembalou (Soma deve ser igual a <span style="font-weight:bold;">${itemQuantidade}</span>).</p>
                 <div id="multiplosListDesembale" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
-                <button class="btn" style="width:auto; padding: 0.25rem 0.5rem; margin-top: 0.5rem; border: 1px dashed #64748b; background: transparent; color: #64748b;" onclick="addMultiplosRow(true)">+ Add Colaborador</button>
+                <button type="button" class="btn" style="width:auto; padding: 0.25rem 0.5rem; margin-top: 0.5rem; border: 1px dashed #64748b; background: transparent; color: #64748b;" onclick="window.addMultiplosRow(true)">+ Add Colaborador</button>
             </div>
         </div>
     `;
@@ -5294,27 +5346,40 @@ window.updateDesembaleBtnState = function() {
     btn.disabled = !allChecked;
     btn.style.opacity = allChecked ? '1' : '0.5';
     btn.style.cursor = allChecked ? 'pointer' : 'not-allowed';
-}
+};
 
 // Custom submitDesembale Function to handle API and Multiplos
 window.submitDesembale = async function(itemId, nextStatus, itemQuantidade) {
-    const mData = window.getMultiplosData(true, itemQuantidade);
+    const isMulti = document.getElementById('checkMultiplosDesembale')?.checked;
+    const mData = isMulti ? window.getMultiplosData(true, itemQuantidade) : null;
     
-    if (!document.getElementById('checkMultiplosDesembale').checked) {
-        if (!validateResponsible(itemId)) { document.getElementById('desembaleModal').remove(); return; }
+    if (!isMulti) {
+        if (!validateResponsible(itemId)) { 
+            const m = document.getElementById('desembaleModal');
+            if (m) m.remove(); 
+            return; 
+        }
+    } else {
+        if (mData === false) return; // failed validation
     }
-    if(document.getElementById('checkMultiplosDesembale').checked && mData === false) return; // failed validation
+
+    const confirmBtn = document.getElementById('confirmDesembaleBtn');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Processando...';
+    }
 
     try {
+        const opId = (currentUser && currentUser.id) ? currentUser.id : null;
         // Change Status First (existing logic)
         await fetch(`/api/production/item/${itemId}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ novo_status_item: nextStatus, operador_id: currentUser.id })
+            body: JSON.stringify({ novo_status_item: nextStatus, operador_id: opId })
         });
 
         // Insert Multiplos if needed
-        if(mData !== null) {
+        if (isMulti && mData !== null) {
             await fetch('/api/production/evento', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -5327,11 +5392,22 @@ window.submitDesembale = async function(itemId, nextStatus, itemQuantidade) {
             });
         }
         
-        document.getElementById('desembaleModal').remove();
+        const m = document.getElementById('desembaleModal');
+        if (m) m.remove();
         loadGenericQueue('AGUARDANDO_DESEMBALE', 'Desembale');
+        if (typeof showToast === 'function') {
+            showToast('Desembale concluído com sucesso!');
+        }
         
-    } catch(e) { console.error('Erro desembale', e); }
-}
+    } catch(e) { 
+        console.error('Erro desembale', e); 
+        alert('Erro ao confirmar desembale: ' + (e.message || 'Erro desconhecido'));
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Confirmar e avançar';
+        }
+    }
+};
 
 function handleStartProductionClick(itemId, sector) {
     let item = null;
