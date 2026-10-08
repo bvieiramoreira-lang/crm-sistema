@@ -1001,8 +1001,8 @@ router.put('/item/:id/status', (req, res) => {
 
 // Registrar Evento de Produção (Inicio/Fim)
 router.post('/evento', (req, res) => {
-    const { item_id, operador_id, operador_nome, setor, acao, quantidade_produzida, multiplos_operadores, destino_final } = req.body;
-    console.log(`[EVENTO-DEBUG] Setor: '${setor}', Acao: '${acao}', ID: ${item_id}, Nome: ${operador_nome}, Multiplos: ${multiplos_operadores ? 'Sim' : 'Nao'}`);
+    const { item_id, operador_id, operador_nome, setor, acao, quantidade_produzida, multiplos_operadores, destino_final, auxiliar } = req.body;
+    console.log(`[EVENTO-DEBUG] Setor: '${setor}', Acao: '${acao}', ID: ${item_id}, Nome: ${operador_nome}, Multiplos: ${multiplos_operadores ? 'Sim' : 'Nao'}, Auxiliar: ${auxiliar ? (auxiliar.operador_nome || 'Sim') : 'Nao'}`);
 
     // Helpers function to insert events
     const insertEvent = (op_id, op_nome, op_qtd) => {
@@ -1036,9 +1036,26 @@ router.post('/evento', (req, res) => {
         }
 
         try {
-            // 1. Inserir todos os eventos
+            // 1. Inserir todos os eventos dos operadores
             for (const op of operadoresInfo) {
                 await insertEvent(op.operador_id, op.operador_nome, op.quantidade_produzida);
+            }
+
+            // 1.1 Inserir evento do auxiliar se houver
+            if (auxiliar && auxiliar.operador_nome && (acao === 'FIM' || acao === 'INICIO')) {
+                const auxQtd = (auxiliar.quantidade_produzida !== undefined && auxiliar.quantidade_produzida !== null && parseInt(auxiliar.quantidade_produzida) > 0)
+                    ? parseInt(auxiliar.quantidade_produzida)
+                    : (parseInt(quantidade_produzida) || 0);
+                await new Promise((resolve, reject) => {
+                    db.run(
+                        `INSERT INTO eventos_producao(item_id, operador_id, operador_nome, setor, acao, quantidade_produzida) VALUES(?, ?, ?, 'AUXILIAR_RECOLHA', ?, ?)`,
+                        [item_id, auxiliar.operador_id || null, auxiliar.operador_nome, acao, auxQtd],
+                        function (err) {
+                            if (err) reject(err);
+                            else resolve(this.lastID);
+                        }
+                    );
+                });
             }
 
             // 2. Montar Atualizacao do Item
@@ -1101,6 +1118,11 @@ router.post('/evento', (req, res) => {
             if (responsavelCol && responsavelValue) {
                 updates.push(`${responsavelCol} = ?`);
                 updateParams.push(responsavelValue);
+            }
+
+            if (auxiliar && auxiliar.operador_nome) {
+                updates.push("responsavel_auxiliar = ?");
+                updateParams.push(auxiliar.operador_nome);
             }
 
             if (updates.length > 0) {
@@ -1748,6 +1770,7 @@ router.put('/item/:id/transfer-sector', (req, res) => {
                     setor_destino = ?,
                     cor_impressao = ?,
                     responsavel_impressao = NULL,
+                    responsavel_auxiliar = NULL,
                     status_atual = ?,
                     is_pausado_producao = 0,
                     pausa_solicitada = 0,

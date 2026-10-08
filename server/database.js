@@ -186,6 +186,7 @@ db.serialize(() => {
     addColumn('itens_pedido', 'data_desembale', 'DATETIME');
 
     addColumn('itens_pedido', 'responsavel_impressao', 'TEXT');
+    addColumn('itens_pedido', 'responsavel_auxiliar', 'TEXT');
     // data_impressao já pode ser calculada ou não, mas para garantir:
     addColumn('itens_pedido', 'data_impressao', 'DATETIME');
 

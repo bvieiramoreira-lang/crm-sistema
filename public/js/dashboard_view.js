@@ -279,6 +279,7 @@ function loadHistoryDashboard() {
                         <option value="TAMPOGRAFIA">Tampografia</option>
                         <option value="ESTAMPARIA">Estamparia</option>
                         <option value="PERSOGELO">Persogelo</option>
+                        <option value="AUXILIAR_RECOLHA">Auxiliar de Recolha</option>
                         <option value="EMBALE">Embale</option>
                         <option value="LOGISTICA">Logística</option>
                     </select>
@@ -358,6 +359,7 @@ async function runHistoryReport() {
         // Helper to format sector name
         const formatSectorName = (s) => {
             if (!s) return 'Setor Desconhecido';
+            if (s === 'AUXILIAR_RECOLHA') return 'Auxiliar de Recolha';
             return s.toLowerCase()
                 .split('_')
                 .map(w => w.charAt(0).toUpperCase() + w.slice(1))

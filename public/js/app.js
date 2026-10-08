@@ -4943,6 +4943,7 @@ function renderItemTimeline(item) {
         ${prodStart ? `<div>Início: ${formatDateTime(prodStart)}</div>` : ''}
         ${prodEnd ? `<div>Fim: ${formatDateTime(prodEnd)}</div>` : ''}
         ${prodDuration ? `<div style="font-weight:bold; color:#059669">Duração: ${prodDuration}</div>` : ''}
+        ${item.responsavel_auxiliar ? `<div style="color:#7e22ce; font-weight:600; margin-top:2px;"><i class="ph-handshake"></i> Auxiliar: ${escapeHtml(item.responsavel_auxiliar)}</div>` : ''}
     `;
     const prodSection = renderTimelineStep('Impressão', item.responsavel_impressao, prodEnd, 'ph-printer', '#ec4899', prodDetails, !!item.is_terceirizado);
 
@@ -5594,14 +5595,28 @@ async function openFinalizarProducaoModal(itemId, setor, itemQuantidade, destino
                 </div>
             </div>
 
-            <!-- Alternador Modo Múltiplos -->
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 1rem;">
-                <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.9rem; color: #166534; user-select: none; margin-bottom: 0;">
-                    <input type="checkbox" id="checkMultiplosProducao" style="width: 18px; height: 18px; cursor: pointer; accent-color: #16a34a;" onchange="window.toggleMultiplosProducaoUI(${totalQtd}, '${setor}')">
-                    <span>👥 Múltiplos Colaboradores (Dupla / Divisão de Peças)</span>
-                </label>
-                <div style="font-size: 0.775rem; color: #15803d; margin-left: 1.8rem; margin-top: 0.25rem;">
-                    Ative caso 2 ou mais operadores tenham produzido este item para distribuir a quantidade exata feita por cada um.
+            <!-- Opções de Produção (Múltiplos e Auxiliar) -->
+            <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem;">
+                <!-- Alternador Modo Múltiplos -->
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.65rem 0.85rem;">
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.875rem; color: #166534; user-select: none; margin-bottom: 0;">
+                        <input type="checkbox" id="checkMultiplosProducao" style="width: 18px; height: 18px; cursor: pointer; accent-color: #16a34a;" onchange="window.toggleMultiplosProducaoUI(${totalQtd}, '${setor}')">
+                        <span>👥 Múltiplos Colaboradores (Dupla / Divisão de Peças)</span>
+                    </label>
+                    <div style="font-size: 0.75rem; color: #15803d; margin-left: 1.75rem; margin-top: 0.2rem;">
+                        Ative caso 2 ou mais operadores tenham produzido este item para distribuir a quantidade feita por cada um.
+                    </div>
+                </div>
+
+                <!-- Alternador Auxiliar de Recolha -->
+                <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 0.65rem 0.85rem;">
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.875rem; color: #6b21a8; user-select: none; margin-bottom: 0;">
+                        <input type="checkbox" id="checkAuxiliarProducao" style="width: 18px; height: 18px; cursor: pointer; accent-color: #9333ea;" onchange="window.toggleAuxiliarProducaoUI(${totalQtd})">
+                        <span>🤝 Teve Auxiliar de Produção (Recolha)</span>
+                    </label>
+                    <div style="font-size: 0.75rem; color: #7e22ce; margin-left: 1.75rem; margin-top: 0.2rem;">
+                        Ative se houve colaborador auxiliando no recolhimento do material para o impressor.
+                    </div>
                 </div>
             </div>
 
@@ -5638,6 +5653,25 @@ async function openFinalizarProducaoModal(itemId, setor, itemQuantidade, destino
                 </div>
             </div>
 
+            <!-- CONTAINER AUXILIAR DE RECOLHA -->
+            <div id="auxiliarRespContainer" style="display: none; background: #fdf4ff; border: 1px dashed #d8b4fe; border-radius: 8px; padding: 0.85rem; margin-bottom: 1.25rem;">
+                <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #6b21a8; margin-bottom: 0.4rem;">
+                    Colaborador Auxiliar de Recolha <span style="color: #dc2626;">*</span>
+                </label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <select id="finalizar_auxiliar_select" class="form-control" style="flex: 1; padding: 0.45rem 0.65rem; font-size: 0.875rem; border-color: #d8b4fe; border-radius: 6px;">
+                        <option value="">Carregando auxiliares...</option>
+                    </select>
+                    <div style="width: 100px; flex-shrink: 0;">
+                        <input type="number" id="finalizar_auxiliar_qtd" class="form-control" style="padding: 0.45rem 0.5rem; font-size: 0.875rem; font-weight: bold; text-align: center; border-color: #d8b4fe; border-radius: 6px;" min="1" max="${totalQtd}" value="${totalQtd}" title="Quantidade recolhida pelo auxiliar">
+                    </div>
+                </div>
+                <div style="font-size: 0.75rem; color: #7e22ce; margin-top: 0.35rem; display: flex; justify-content: space-between;">
+                    <span>Colaborador que recolheu as peças</span>
+                    <span>Qtd recolhida</span>
+                </div>
+            </div>
+
             <!-- Botões de Ação -->
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
                 <button type="button" class="btn btn-secondary" style="padding: 0.5rem 1rem; border-radius: 6px;" onclick="document.getElementById('finalizarProducaoModal').remove()">Cancelar</button>
@@ -5669,6 +5703,48 @@ window.toggleMultiplosProducaoUI = async function(totalQtd, setor) {
     } else {
         singleContainer.style.display = 'block';
         multiContainer.style.display = 'none';
+    }
+};
+
+window.toggleAuxiliarProducaoUI = async function(totalQtd) {
+    const isChecked = document.getElementById('checkAuxiliarProducao')?.checked;
+    const container = document.getElementById('auxiliarRespContainer');
+    if (!container) return;
+
+    if (isChecked) {
+        container.style.display = 'block';
+        const select = document.getElementById('finalizar_auxiliar_select');
+        if (select && select.dataset.loaded !== 'true') {
+            const [auxUsers, allUsers] = await Promise.all([
+                getSectorUsersCached('AUXILIAR_RECOLHA'),
+                getAllCollaboratorsCached()
+            ]);
+
+            let options = '<option value="">-- Selecione o Auxiliar de Recolha --</option>';
+            const auxIds = new Set();
+            if (auxUsers && auxUsers.length > 0) {
+                options += `<optgroup label="Colaboradores de Recolha">`;
+                auxUsers.forEach(u => {
+                    auxIds.add(u.id);
+                    options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`;
+                });
+                options += `</optgroup>`;
+            }
+
+            const others = (allUsers || []).filter(u => !auxIds.has(u.id));
+            if (others.length > 0) {
+                options += `<optgroup label="Outros Colaboradores (Apoio)">`;
+                others.forEach(u => {
+                    options += `<option value="${u.id}|${u.nome}">${u.nome}</option>`;
+                });
+                options += `</optgroup>`;
+            }
+
+            select.innerHTML = options;
+            select.dataset.loaded = 'true';
+        }
+    } else {
+        container.style.display = 'none';
     }
 };
 
@@ -5745,7 +5821,30 @@ window.updateMultiplosProducaoTracker = function(totalQtd) {
 
 window.submitFinalizarProducao = async function(itemId, setor, totalQtd, destinoFinal) {
     const isMultiplos = document.getElementById('checkMultiplosProducao')?.checked;
+    const isAuxiliar = document.getElementById('checkAuxiliarProducao')?.checked;
     const confirmBtn = document.getElementById('btnConfirmarFinalizarProducao');
+
+    let auxiliarPayload = null;
+    let auxOpId = null;
+
+    if (isAuxiliar) {
+        const auxSelect = document.getElementById('finalizar_auxiliar_select');
+        const auxQtdInput = document.getElementById('finalizar_auxiliar_qtd');
+        if (!auxSelect || !auxSelect.value) {
+            return alert('⚠️ Por favor, selecione o colaborador Auxiliar de Recolha.');
+        }
+        const [aId, aNome] = auxSelect.value.split('|');
+        const aQtd = parseInt(auxQtdInput?.value) || totalQtd;
+        if (aQtd <= 0) {
+            return alert('⚠️ A quantidade do Auxiliar de Recolha deve ser maior que zero.');
+        }
+        auxOpId = aId;
+        auxiliarPayload = {
+            operador_id: aId,
+            operador_nome: aNome,
+            quantidade_produzida: aQtd
+        };
+    }
 
     if (!isMultiplos) {
         // MODO ÚNICO
@@ -5756,6 +5855,10 @@ window.submitFinalizarProducao = async function(itemId, setor, totalQtd, destino
 
         const [opId, opNome] = select.value.split('|');
 
+        if (isAuxiliar && auxOpId && String(auxOpId) === String(opId)) {
+            return alert('⚠️ O colaborador responsável e o auxiliar de recolha não podem ser a mesma pessoa.');
+        }
+
         if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Finalizando...'; }
 
         try {
@@ -5764,12 +5867,13 @@ window.submitFinalizarProducao = async function(itemId, setor, totalQtd, destino
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     item_id: itemId,
-                    operador_id: opId || currentUser.id,
+                    operador_id: opId || (currentUser ? currentUser.id : null),
                     operador_nome: opNome,
                     setor: setor,
                     acao: 'FIM',
                     quantidade_produzida: totalQtd,
-                    destino_final: destinoFinal
+                    destino_final: destinoFinal,
+                    auxiliar: auxiliarPayload
                 })
             });
 
@@ -5818,6 +5922,11 @@ window.submitFinalizarProducao = async function(itemId, setor, totalQtd, destino
             if (usedIds.has(opId)) {
                 return alert(`⚠️ O colaborador "${opNome}" foi adicionado mais de uma vez. Combine as quantidades em uma única linha.`);
             }
+
+            if (isAuxiliar && auxOpId && String(auxOpId) === String(opId)) {
+                return alert(`⚠️ O colaborador "${opNome}" foi selecionado como auxiliar de recolha e não pode estar também na lista de impressores.`);
+            }
+
             usedIds.add(opId);
 
             data.push({
@@ -5843,7 +5952,8 @@ window.submitFinalizarProducao = async function(itemId, setor, totalQtd, destino
                     setor: setor,
                     acao: 'FIM',
                     multiplos_operadores: data,
-                    destino_final: destinoFinal
+                    destino_final: destinoFinal,
+                    auxiliar: auxiliarPayload
                 })
             });
 
