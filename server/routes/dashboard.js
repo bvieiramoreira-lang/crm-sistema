@@ -163,26 +163,6 @@ router.get('/history', (req, res) => {
     const startDate = `${start} 00:00:00`;
     const endDate = `${end} 23:59:59`;
 
-    // Reconstruct simplified query
-    let query = `
-        SELECT 
-            u.nome as operador,
-            ep.setor,
-            COUNT(DISTINCT i.pedido_id) as pedidos_concluidos,
-            COUNT(ep.id) as itens_concluidos,
-            SUM(ep.quantidade_produzida) as total_pecas,
-            SUM((julianday(ep.timestamp) - julianday(prev_ev.timestamp)) * 24 * 60) as tempo_total_min
-        FROM eventos_producao ep
-        JOIN eventos_producao prev_ev ON 
-            ep.item_id = prev_ev.item_id AND 
-            prev_ev.acao = 'INICIO' AND
-            prev_ev.id = (SELECT MAX(id) FROM eventos_producao WHERE item_id = ep.item_id AND acao = 'INICIO' AND id < ep.id)
-        JOIN itens_pedido i ON ep.item_id = i.id
-        JOIN usuarios u ON ep.operador_id = u.id
-        WHERE ep.timestamp BETWEEN ? AND ?
-        AND ep.acao = 'FIM'
-    `;
-
     const params = [startDate, endDate];
     let whereClause = "";
 
@@ -191,8 +171,12 @@ router.get('/history', (req, res) => {
         params.push(sector);
     }
     if (user && user !== 'all') {
-        whereClause += " AND u.nome = ?"; // u is from join
-        params.push(user);
+        whereClause += ` AND (
+            TRIM(COALESCE(ep.operador_nome, u.nome)) = TRIM(?) COLLATE NOCASE 
+            OR TRIM(ep.operador_nome) = TRIM(?) COLLATE NOCASE 
+            OR TRIM(u.nome) = TRIM(?) COLLATE NOCASE
+        )`;
+        params.push(user, user, user);
     }
 
     // QUERY 1: Production Events (Timer Based)
@@ -203,12 +187,13 @@ router.get('/history', (req, res) => {
             COUNT(DISTINCT i.pedido_id) as pedidos_concluidos,
             COUNT(ep.id) as itens_concluidos,
             SUM(COALESCE(ep.quantidade_produzida, i.quantidade)) as total_pecas,
-            SUM((julianday(ep.timestamp) - julianday(prev_ev.timestamp)) * 24 * 60) as tempo_total_min
+            SUM(CASE WHEN prev_ev.timestamp IS NOT NULL THEN (julianday(ep.timestamp) - julianday(prev_ev.timestamp)) * 24 * 60 ELSE 0 END) as tempo_total_min
         FROM eventos_producao ep
-        JOIN eventos_producao prev_ev ON 
+        LEFT JOIN eventos_producao prev_ev ON 
             ep.item_id = prev_ev.item_id AND 
+            prev_ev.setor = ep.setor AND
             prev_ev.acao = 'INICIO' AND
-            prev_ev.id = (SELECT MAX(id) FROM eventos_producao WHERE item_id = ep.item_id AND acao = 'INICIO' AND id < ep.id)
+            prev_ev.id = (SELECT MAX(id) FROM eventos_producao WHERE item_id = ep.item_id AND setor = ep.setor AND acao = 'INICIO' AND id < ep.id)
         JOIN itens_pedido i ON ep.item_id = i.id
         LEFT JOIN usuarios u ON ep.operador_id = u.id
         WHERE datetime(ep.timestamp, 'localtime') BETWEEN ? AND ?
@@ -218,9 +203,6 @@ router.get('/history', (req, res) => {
     `;
 
     // QUERY 2: Non-Timer Sectors (Timestamp Based)
-    // We need to Union different sectors. 
-    // Let's do a UNION ALL of subqueries for each sector.
-
     const sectorsConfig = [
         { name: 'ARTE_FINAL', dateCol: 'data_arte_aprovacao', respCol: 'responsavel_arte' },
         { name: 'SEPARACAO', dateCol: 'data_separacao', respCol: 'responsavel_separacao' },
@@ -253,8 +235,11 @@ router.get('/history', (req, res) => {
         unionParams.push(startDate, endDate);
 
         if (user && user !== 'all') {
-            part += ` AND ${sc.respCol} = ?`;
-            unionParams.push(user);
+            part += ` AND (
+                TRIM(${sc.respCol}) = TRIM(?) COLLATE NOCASE 
+                OR ${sc.respCol} LIKE '%' || TRIM(?) || '%'
+            )`;
+            unionParams.push(user, user);
         }
 
         part += ` GROUP BY ${sc.respCol}`;
@@ -287,24 +272,61 @@ router.get('/history', (req, res) => {
             // Consolidate rows by operador and setor
             const consolidated = {};
             allRows.forEach(r => {
-                const op = r.operador || 'Desconhecido';
+                const rawOp = (r.operador || 'Desconhecido').trim();
                 const set = r.setor || 'Desconhecido';
-                const key = `${op}_${set}`;
-                if (!consolidated[key]) {
-                    consolidated[key] = {
-                        operador: op,
-                        setor: set,
-                        pedidos_concluidos: r.pedidos_concluidos || 0,
-                        itens_concluidos: r.itens_concluidos || 0,
-                        total_pecas: r.total_pecas || 0,
-                        tempo_total_min: r.tempo_total_min || 0
-                    };
-                } else {
-                    consolidated[key].pedidos_concluidos = Math.max(consolidated[key].pedidos_concluidos, r.pedidos_concluidos || 0);
-                    consolidated[key].itens_concluidos = Math.max(consolidated[key].itens_concluidos, r.itens_concluidos || 0);
-                    consolidated[key].total_pecas = Math.max(consolidated[key].total_pecas, r.total_pecas || 0);
-                    consolidated[key].tempo_total_min = Math.max(consolidated[key].tempo_total_min, r.tempo_total_min || 0);
+
+                let opList = [];
+                if (typeof rawOp === 'string' && rawOp.startsWith('[')) {
+                    try {
+                        const parsed = JSON.parse(rawOp);
+                        if (Array.isArray(parsed)) {
+                            parsed.forEach(p => {
+                                const pName = typeof p === 'string' ? p : (p.nome || p.operador_nome);
+                                if (pName) {
+                                    opList.push({
+                                        operador: pName.trim(),
+                                        total_pecas: (p.quantidade != null ? p.quantidade : r.total_pecas),
+                                        itens_concluidos: r.itens_concluidos,
+                                        pedidos_concluidos: r.pedidos_concluidos,
+                                        tempo_total_min: r.tempo_total_min
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) {}
                 }
+                if (opList.length === 0) {
+                    opList.push({
+                        operador: rawOp,
+                        total_pecas: r.total_pecas || 0,
+                        itens_concluidos: r.itens_concluidos || 0,
+                        pedidos_concluidos: r.pedidos_concluidos || 0,
+                        tempo_total_min: r.tempo_total_min || 0
+                    });
+                }
+
+                if (user && user !== 'all') {
+                    opList = opList.filter(o => o.operador.toLowerCase() === user.trim().toLowerCase());
+                }
+
+                opList.forEach(item => {
+                    const key = `${item.operador.toUpperCase()}_${set}`;
+                    if (!consolidated[key]) {
+                        consolidated[key] = {
+                            operador: item.operador,
+                            setor: set,
+                            pedidos_concluidos: item.pedidos_concluidos || 0,
+                            itens_concluidos: item.itens_concluidos || 0,
+                            total_pecas: item.total_pecas || 0,
+                            tempo_total_min: item.tempo_total_min || 0
+                        };
+                    } else {
+                        consolidated[key].pedidos_concluidos = Math.max(consolidated[key].pedidos_concluidos, item.pedidos_concluidos || 0);
+                        consolidated[key].itens_concluidos = Math.max(consolidated[key].itens_concluidos, item.itens_concluidos || 0);
+                        consolidated[key].total_pecas = Math.max(consolidated[key].total_pecas, item.total_pecas || 0);
+                        consolidated[key].tempo_total_min = Math.max(consolidated[key].tempo_total_min, item.tempo_total_min || 0);
+                    }
+                });
             });
 
             const consolidatedRows = Object.values(consolidated);

@@ -56,6 +56,7 @@ function renderManualsView(manuais) {
                             <option value="Impressão Laser">Impressão: Laser</option>
                             <option value="Impressão Digital">Impressão: Digital</option>
                             <option value="Estamparia">Impressão: Estamparia</option>
+                            <option value="Persogelo">Impressão: Persogelo</option>
                             <option value="Embale">Embale</option>
                             <option value="Logística">Logística</option>
                         </select>

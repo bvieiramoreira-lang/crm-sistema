@@ -104,7 +104,8 @@ function openUserModal(user = null) {
         { value: 'TAMPOGRAFIA', label: 'Tampografia' },
         { value: 'IMPRESSAO_LASER', label: 'Impressão Laser' },
         { value: 'IMPRESSAO_DIGITAL', label: 'Impressão Digital' },
-        { value: 'ESTAMPARIA', label: 'Estamparia' }
+        { value: 'ESTAMPARIA', label: 'Estamparia' },
+        { value: 'PERSOGELO', label: 'Persogelo' }
     ];
 
     // Telas / Permissões Especiais
@@ -161,6 +162,7 @@ function openUserModal(user = null) {
                         <option value="IMPRESSAO_LASER" ${user && user.setor_impressao === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
                         <option value="IMPRESSAO_DIGITAL" ${user && user.setor_impressao === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
                         <option value="ESTAMPARIA" ${user && user.setor_impressao === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
+                        <option value="PERSOGELO" ${user && user.setor_impressao === 'PERSOGELO' ? 'selected' : ''}>Persogelo</option>
                     </select>
                 </div>
 

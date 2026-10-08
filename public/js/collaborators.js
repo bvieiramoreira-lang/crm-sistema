@@ -97,6 +97,7 @@ function openCollaboratorModal(collab = null) {
         { value: "IMPRESSAO_LASER", label: "Impressão Laser" },
         { value: "IMPRESSAO_DIGITAL", label: "Impressão Digital" },
         { value: "ESTAMPARIA", label: "Estamparia" },
+        { value: "PERSOGELO", label: "Persogelo" },
         { value: "EMBALE", label: "Embale" },
         { value: "LOGISTICA", label: "Logística" },
         { value: "ESCRITORIO", label: "Escritório" }

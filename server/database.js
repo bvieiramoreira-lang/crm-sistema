@@ -234,6 +234,7 @@ db.serialize(() => {
     criarUsuarioSeNaoExistir('Impressão Laser', 'laser', 'laser123', 'impressao', 'IMPRESSAO_LASER');
     criarUsuarioSeNaoExistir('Impressão Digital', 'digital', 'digital123', 'impressao', 'IMPRESSAO_DIGITAL');
     criarUsuarioSeNaoExistir('Estamparia', 'estamparia', 'estamparia123', 'impressao', 'ESTAMPARIA');
+    criarUsuarioSeNaoExistir('Persogelo', 'persogelo', 'persogelo123', 'impressao', 'PERSOGELO');
     criarUsuarioSeNaoExistir('Embale', 'embale', 'embale123', 'embale');
     criarUsuarioSeNaoExistir('Desembale', 'desembale', 'desembale123', 'desembale');
     criarUsuarioSeNaoExistir('Logística', 'logistica', 'logistica123', 'logistica');

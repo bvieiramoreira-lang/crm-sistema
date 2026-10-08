@@ -13,7 +13,7 @@ function hasProfile(profileName) {
     
     // Se estiver checando 'impressao', e o usuário tiver algum subsetor de impressão nos secundários
     if (profileName.toLowerCase() === 'impressao') {
-        const printSectors = ['silk_cilindrica', 'silk_plano', 'tampografia', 'impressao_laser', 'impressao_digital', 'estamparia'];
+        const printSectors = ['silk_cilindrica', 'silk_plano', 'tampografia', 'impressao_laser', 'impressao_digital', 'estamparia', 'persogelo'];
         if (sec.some(s => printSectors.includes(s))) return true;
     }
     
@@ -409,7 +409,8 @@ function setupNavigation() {
                     { label: 'Tampografia', icon: 'ph-pen-nib', sector: 'TAMPOGRAFIA', action: () => loadProductionQueue('TAMPOGRAFIA') },
                     { label: 'Impressão Laser', icon: 'ph-lightning', sector: 'IMPRESSAO_LASER', action: () => loadProductionQueue('IMPRESSAO_LASER') },
                     { label: 'Impressão Digital', icon: 'ph-printer', sector: 'IMPRESSAO_DIGITAL', action: () => loadProductionQueue('IMPRESSAO_DIGITAL') },
-                    { label: 'Estamparia', icon: 'ph-t-shirt', sector: 'ESTAMPARIA', action: () => loadProductionQueue('ESTAMPARIA') }
+                    { label: 'Estamparia', icon: 'ph-t-shirt', sector: 'ESTAMPARIA', action: () => loadProductionQueue('ESTAMPARIA') },
+                    { label: 'Persogelo', icon: 'ph-snowflake', sector: 'PERSOGELO', action: () => loadProductionQueue('PERSOGELO') }
                 ],
                 // For 'impressao' profile (non-admin), logic handles single item below
             },
@@ -448,7 +449,7 @@ function setupNavigation() {
 
         // Special Case: 'impressao' profile sees 'Produção (Setor)' or filtered subsectors instead of full submenu
         if (hasProfile('impressao') && !hasProfile('admin') && sectionName === 'PRODUÇÃO') {
-            const printSectors = ['SILK_CILINDRICA', 'SILK_PLANO', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'];
+            const printSectors = ['SILK_CILINDRICA', 'SILK_PLANO', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'PERSOGELO'];
             const userPrintSectors = [];
             if (currentUser.setor_impressao) {
                 userPrintSectors.push(currentUser.setor_impressao.toUpperCase());
@@ -471,7 +472,8 @@ function setupNavigation() {
                             'TAMPOGRAFIA': 'Tampografia',
                             'IMPRESSAO_LASER': 'Impressão Laser',
                             'IMPRESSAO_DIGITAL': 'Impressão Digital',
-                            'ESTAMPARIA': 'Estamparia'
+                            'ESTAMPARIA': 'Estamparia',
+                            'PERSOGELO': 'Persogelo'
                         };
                         return names[s] || s;
                     };
@@ -2352,6 +2354,7 @@ function openTransferSectorModal(itemId) {
         { key: 'IMPRESSAO_LASER', label: 'Impressão Laser' },
         { key: 'IMPRESSAO_DIGITAL', label: 'Impressão Digital' },
         { key: 'ESTAMPARIA', label: 'Estamparia' },
+        { key: 'PERSOGELO', label: 'Persogelo' },
         { key: 'TERCEIRIZADO', label: 'Terceirizado' }
     ];
 
@@ -3269,6 +3272,7 @@ async function openArteAction(pedidoId) {
                                     <option value="IMPRESSAO_LASER" ${item.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
                                     <option value="IMPRESSAO_DIGITAL" ${item.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
                                     <option value="ESTAMPARIA" ${item.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
+                                    <option value="PERSOGELO" ${item.setor_destino === 'PERSOGELO' ? 'selected' : ''}>Persogelo</option>
                                     <option value="TERCEIRIZADO" ${item.is_terceirizado || item.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''}>Terceirizado</option>
                                 </select>
                             </div>
@@ -5042,6 +5046,11 @@ function openRollbackModal(itemId, currentStatus, setorDestino) {
         validTargets = validTargets.filter(t => t.status !== 'AGUARDANDO_DESEMBALE' && t.status !== 'AGUARDANDO_PRODUCAO');
     }
 
+    // Se o item for do setor PERSOGELO, ele não passa por Separação nem Desembale
+    if (setorDestino === 'PERSOGELO') {
+        validTargets = validTargets.filter(t => t.status !== 'AGUARDANDO_SEPARACAO' && t.status !== 'AGUARDANDO_DESEMBALE');
+    }
+
     if (validTargets.length === 0) {
         return alert("Não há etapas anteriores para retornar (ou status desconhecido).");
     }
@@ -6316,6 +6325,7 @@ function renderComponentRow(parentId, comp) {
                         <option value="IMPRESSAO_LASER" ${comp && comp.setor_destino === 'IMPRESSAO_LASER' ? 'selected' : ''}>Impressão Laser</option>
                         <option value="IMPRESSAO_DIGITAL" ${comp && comp.setor_destino === 'IMPRESSAO_DIGITAL' ? 'selected' : ''}>Impressão Digital</option>
                         <option value="ESTAMPARIA" ${comp && comp.setor_destino === 'ESTAMPARIA' ? 'selected' : ''}>Estamparia</option>
+                        <option value="PERSOGELO" ${comp && comp.setor_destino === 'PERSOGELO' ? 'selected' : ''}>Persogelo</option>
                         <option value="TERCEIRIZADO" ${comp && comp.setor_destino === 'TERCEIRIZADO' ? 'selected' : ''}>Terceirizado</option>
                     </select>
                 </div>

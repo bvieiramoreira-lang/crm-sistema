@@ -29,6 +29,7 @@ async function loadControleQueue() {
                         <option value="IMPRESSAO_LASER">Impressão Laser</option>
                         <option value="IMPRESSAO_DIGITAL">Impressão Digital</option>
                         <option value="ESTAMPARIA">Estamparia</option>
+                        <option value="PERSOGELO">Persogelo</option>
                         <option value="TERCEIRIZADO">Terceirizado</option>
                     </select>
                 </div>

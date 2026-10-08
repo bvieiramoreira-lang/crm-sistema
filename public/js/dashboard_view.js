@@ -278,6 +278,7 @@ function loadHistoryDashboard() {
                         <option value="SILK_CILINDRICA">Silk Cilíndrica</option>
                         <option value="TAMPOGRAFIA">Tampografia</option>
                         <option value="ESTAMPARIA">Estamparia</option>
+                        <option value="PERSOGELO">Persogelo</option>
                         <option value="EMBALE">Embale</option>
                         <option value="LOGISTICA">Logística</option>
                     </select>
@@ -317,24 +318,14 @@ async function loadCollaboratorsForFilter() {
         select.innerHTML = '<option value="all">Todos</option>';
 
         users.forEach(u => {
-            if (u.ativo) { // Optional: Filter only active? Or all for history? Better all for history.
-                const option = document.createElement('option');
-                option.value = u.id; // Or name? Backend expects 'user' param. 
-                // Wait, backend dashboard.js query uses 'u.nome' or 'u.id'?
-                // Let's check backend dashboard.js. 
-                // Query: "const { start, end, sector, user } = req.query;"
-                // It doesn't use 'user' in the SQL yet! 
-                // Verify backend logic in next step. For now assume ID or Name. 
-                // The query in dashboard.js step 860 schema was:
-                // ... GROUP BY u.nome, ep.setor
-                // It returns "operador".
-                // We likely need to filter by ID in the WHERE clause if user is selected.
-
-                // Let's rely on name for now as the report Groups by Name. 
-                // Actually, passing ID is safer.
-                option.value = u.nome;
-                option.innerText = u.nome;
-                select.appendChild(option);
+            if (u.ativo) {
+                const colabName = (u.nome || '').trim();
+                if (colabName) {
+                    const option = document.createElement('option');
+                    option.value = colabName;
+                    option.innerText = colabName;
+                    select.appendChild(option);
+                }
             }
         });
     } catch (e) {
@@ -346,14 +337,14 @@ async function runHistoryReport() {
     const start = document.getElementById('histStart').value;
     const end = document.getElementById('histEnd').value;
     const sector = document.getElementById('histSector').value;
-    const user = document.getElementById('histUser').value;
+    const user = (document.getElementById('histUser').value || '').trim();
 
     const div = document.getElementById('reportResults');
     div.innerHTML = '<div style="text-align:center;"><i class="ph-spinner ph-spin"></i> Processando...</div>';
 
     try {
         const timestamp = new Date().getTime();
-        const res = await fetch(`/api/dashboard/history?start=${start}&end=${end}&sector=${sector}&user=${user}&_t=${timestamp}`);
+        const res = await fetch(`/api/dashboard/history?start=${start}&end=${end}&sector=${sector}&user=${encodeURIComponent(user)}&_t=${timestamp}`);
         const data = await res.json();
 
         if (data.length === 0) {

@@ -85,7 +85,7 @@ router.get('/itens/:contexto', (req, res) => {
     else if (contexto === 'AGUARDANDO_DESEMBALE') contextSequence = 2;
     else if (contexto === 'AGUARDANDO_EMBALE') contextSequence = 4;
     else if (contexto === 'AGUARDANDO_ENVIO') contextSequence = 5;
-    else if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(contexto)) {
+    else if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'PERSOGELO'].includes(contexto)) {
         contextSequence = 3; // Produção
     }
 
@@ -124,7 +124,7 @@ router.get('/itens/:contexto', (req, res) => {
     `;
 
     let kitFilter = "AND i.is_kit_component = 0";
-    if (contexto === 'AGUARDANDO_DESEMBALE' || ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(contexto)) {
+    if (contexto === 'AGUARDANDO_DESEMBALE' || ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'PERSOGELO'].includes(contexto)) {
         kitFilter = "AND i.is_kit = 0";
     }
 
@@ -143,7 +143,7 @@ router.get('/itens/:contexto', (req, res) => {
         let extraCondition = '';
 
         // Se for setor de produção específico, filtrar pelo setor_destino
-        if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER'].includes(contexto)) {
+        if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'PERSOGELO'].includes(contexto)) {
             extraCondition = `AND i.setor_destino = '${contexto}'`;
         } else if (contexto === 'IMPRESSAO_DIGITAL') {
             extraCondition = `AND i.setor_destino = 'IMPRESSAO_DIGITAL'`;
@@ -569,18 +569,19 @@ router.put('/item/:id/arte', (req, res) => {
         }
 
         const respSQL = responsavel ? ', responsavel_arte = ?' : '';
+        const targetStatus = (setor_destino === 'PERSOGELO') ? 'AGUARDANDO_PRODUCAO' : 'AGUARDANDO_SEPARACAO';
         const query = `UPDATE itens_pedido SET 
             arte_status = 'APROVADO', 
             setor_destino = ?, 
             cor_impressao = ?, 
             observacao_arte = ?, 
-            status_atual = 'AGUARDANDO_SEPARACAO', 
+            status_atual = ?, 
             is_terceirizado = CASE WHEN ? = 'TERCEIRIZADO' THEN 1 ELSE 0 END,
             data_arte_aprovacao = DATETIME('now', 'localtime') 
             ${respSQL} 
             WHERE id = ?`;
 
-        const params = [setor_destino, effectiveCor, observacao_arte || null, setor_destino];
+        const params = [setor_destino, effectiveCor, observacao_arte || null, targetStatus, setor_destino];
         if (responsavel) params.push(responsavel);
         params.push(itemId);
 
@@ -814,12 +815,13 @@ router.put('/pedido/:pedidoId/aprovar', (req, res) => {
             }
 
             const respSQL = item.responsavel ? ', responsavel_arte = ?' : '';
+            const targetStatus = (item.setor_destino === 'PERSOGELO') ? 'AGUARDANDO_PRODUCAO' : 'AGUARDANDO_SEPARACAO';
             const query = `UPDATE itens_pedido SET 
                 arte_status = 'APROVADO', 
                 setor_destino = ?, 
                 cor_impressao = ?, 
                 observacao_arte = ?, 
-                status_atual = 'AGUARDANDO_SEPARACAO', 
+                status_atual = ?, 
                 is_terceirizado = CASE WHEN ? = 'TERCEIRIZADO' THEN 1 ELSE 0 END,
                 data_arte_aprovacao = DATETIME('now', 'localtime') 
                 ${respSQL} 
@@ -827,7 +829,7 @@ router.put('/pedido/:pedidoId/aprovar', (req, res) => {
 
             const corVal = isKit ? 'KIT' : effectiveCor;
             const setorVal = isKit ? 'KIT' : item.setor_destino;
-            const params = [setorVal, corVal, item.observacao_arte || null, setorVal];
+            const params = [setorVal, corVal, item.observacao_arte || null, targetStatus, setorVal];
             if (item.responsavel) params.push(item.responsavel);
             params.push(item.id, pedidoId);
 
@@ -1021,7 +1023,7 @@ router.post('/evento', (req, res) => {
         // operadoresInfo é um array: [{operador_id, operador_nome, quantidade_produzida}]
         
         let responsavelCol = null;
-        if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(setor)) {
+        if (['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'PERSOGELO'].includes(setor)) {
             responsavelCol = 'responsavel_impressao';
         } else if (setor === 'AGUARDANDO_SEPARACAO' || setor === 'SEPARACAO') {
             responsavelCol = 'responsavel_separacao';
@@ -1055,7 +1057,7 @@ router.post('/evento', (req, res) => {
             }
 
             let newStatus = null;
-            const isProductionSector = ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA'].includes(setor);
+            const isProductionSector = ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'PERSOGELO'].includes(setor);
 
             if (isProductionSector) {
                 if (acao === 'INICIO') {
@@ -1710,7 +1712,7 @@ router.put('/item/:id/transfer-sector', (req, res) => {
     const itemId = req.params.id;
     const { novo_setor, cor_impressao, motivo, operador_id, operador_nome } = req.body;
 
-    const validSectors = ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'TERCEIRIZADO'];
+    const validSectors = ['SILK_PLANO', 'SILK_CILINDRICA', 'TAMPOGRAFIA', 'IMPRESSAO_LASER', 'IMPRESSAO_DIGITAL', 'ESTAMPARIA', 'PERSOGELO', 'TERCEIRIZADO'];
     if (!novo_setor || !validSectors.includes(novo_setor)) {
         return res.status(400).json({ error: 'Setor de destino inválido.' });
     }
@@ -1726,8 +1728,14 @@ router.put('/item/:id/transfer-sector', (req, res) => {
 
         const isTerceirizado = novo_setor === 'TERCEIRIZADO' ? 1 : (item.is_terceirizado || 0);
 
-        // Se o item estava EM_PRODUCAO, retorna para AGUARDANDO_PRODUCAO no novo setor
-        const novoStatus = item.status_atual === 'EM_PRODUCAO' ? 'AGUARDANDO_PRODUCAO' : item.status_atual;
+        // Se o item estava EM_PRODUCAO, retorna para AGUARDANDO_PRODUCAO no novo setor.
+        // Se transferido para PERSOGELO a partir de Separação ou Desembale, avança direto para AGUARDANDO_PRODUCAO.
+        let novoStatus = item.status_atual;
+        if (item.status_atual === 'EM_PRODUCAO') {
+            novoStatus = 'AGUARDANDO_PRODUCAO';
+        } else if (novo_setor === 'PERSOGELO' && ['AGUARDANDO_SEPARACAO', 'AGUARDANDO_DESEMBALE'].includes(item.status_atual)) {
+            novoStatus = 'AGUARDANDO_PRODUCAO';
+        }
 
         // Atualizar cor_impressao se enviada e não vazia, caso contrário mantém a atual
         const novaCor = (cor_impressao !== undefined && cor_impressao !== null && String(cor_impressao).trim() !== '')
