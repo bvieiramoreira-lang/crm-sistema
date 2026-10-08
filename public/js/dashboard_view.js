@@ -294,6 +294,9 @@ function loadHistoryDashboard() {
                 <button class="btn" onclick="runHistoryReport()">
                     <i class="ph-magnifying-glass"></i> Gerar Relatório
                 </button>
+                <button class="btn" onclick="printHistoryReport()" style="background: #0284c7; color: white;">
+                    <i class="ph-printer"></i> Imprimir Relatório
+                </button>
             </div>
 
             <div id="reportResults" style="margin-top: 2rem;">
@@ -354,7 +357,17 @@ async function runHistoryReport() {
         }
 
         // Render Cards (Colaborador / Setor)
-        let html = `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">`;
+        let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; background:#f8fafc; padding:0.75rem 1rem; border-radius:8px; border:1px solid #e2e8f0; flex-wrap:wrap; gap:0.75rem;">
+                <span style="font-size:0.9rem; color:#475569;">
+                    <strong style="color:#0f172a;">${data.length}</strong> registro(s) encontrado(s) para o período.
+                </span>
+                <button class="btn" onclick="printHistoryReport()" style="background:#0284c7; color:#fff; padding:0.4rem 0.9rem; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem;">
+                    <i class="ph-printer"></i> Imprimir Este Relatório
+                </button>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+        `;
 
         // Helper to format sector name
         const formatSectorName = (s) => {
@@ -626,3 +639,443 @@ function renderProductionChart(historyData) {
         });
     }
 }
+
+// === IMPRESSÃO DE RELATÓRIOS (INDIVIDUAL E EM GRUPO) ===
+async function printHistoryReport() {
+    const start = document.getElementById('histStart')?.value || '';
+    const end = document.getElementById('histEnd')?.value || '';
+    const sector = document.getElementById('histSector')?.value || 'all';
+    const user = (document.getElementById('histUser')?.value || '').trim();
+
+    if (!start || !end) {
+        return alert('⚠️ Por favor, selecione as datas de início e fim do período.');
+    }
+
+    const btn = (typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : null;
+    const originalText = btn ? btn.innerHTML : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-spinner ph-spin"></i> Preparando...';
+    }
+
+    try {
+        const timestamp = new Date().getTime();
+        const [resHistory, resOrders] = await Promise.all([
+            fetch(`/api/dashboard/history?start=${start}&end=${end}&sector=${sector}&user=${encodeURIComponent(user)}&_t=${timestamp}`),
+            fetch(`/api/dashboard/history/orders?start=${start}&end=${end}`)
+        ]);
+
+        if (!resHistory.ok) throw new Error('Falha ao obter histórico de produção.');
+        const data = await resHistory.json();
+        const orders = resOrders.ok ? await resOrders.json() : [];
+
+        if (!data || data.length === 0) {
+            alert('⚠️ Nenhum dado encontrado para os filtros selecionados para emissão do relatório.');
+            return;
+        }
+
+        const isIndividual = (user && user !== 'all' && user !== '');
+        const formatBR = (d) => {
+            if (!d) return '--';
+            const parts = d.split('-');
+            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : d;
+        };
+
+        const formatSectorName = (s) => {
+            if (!s) return 'Geral';
+            if (s === 'AUXILIAR_RECOLHA') return 'Auxiliar de Recolha';
+            return s.toLowerCase().split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        };
+
+        const formatNumber = (n) => (parseInt(n) || 0).toLocaleString('pt-BR');
+
+        // Totais Gerais
+        let totalPecas = 0;
+        let totalItens = 0;
+        let totalPedidos = 0;
+        let totalMinutos = 0;
+
+        data.forEach(r => {
+            totalPecas += (parseInt(r.total_pecas) || 0);
+            totalItens += (parseInt(r.itens_concluidos) || 0);
+            totalPedidos += (parseInt(r.pedidos_concluidos) || 0);
+            totalMinutos += (parseFloat(r.tempo_total_h) * 60 || 0);
+        });
+
+        const totalHorasStr = (totalMinutos / 60).toFixed(1);
+        const mediaGeralItem = (totalItens > 0 && totalMinutos > 0) ? (totalMinutos / totalItens).toFixed(1) : '0';
+        const pecasPorHoraGeral = (totalMinutos > 0) ? Math.round(totalPecas / (totalMinutos / 60)) : '0';
+
+        const dataEmissao = new Date().toLocaleString('pt-BR');
+        const setorFiltroNome = sector === 'all' ? 'Todos os Setores' : formatSectorName(sector);
+        const colabFiltroNome = isIndividual ? user : 'Todos os Colaboradores';
+
+        let contentHtml = '';
+
+        if (isIndividual) {
+            // === RELATÓRIO INDIVIDUAL ===
+            let setoresRows = '';
+            data.forEach(r => {
+                setoresRows += `
+                    <tr>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${formatSectorName(r.setor)}</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${formatNumber(r.pedidos_concluidos)}</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${formatNumber(r.itens_concluidos)}</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #1e293b;">${formatNumber(r.total_pecas)}</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${r.tempo_total_h || '0'}h</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${r.tempo_medio_item_min || '0'} min</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 600;">${r.pecas_por_hora || '0'}</td>
+                    </tr>
+                `;
+            });
+
+            contentHtml = `
+                <div class="summary-cards" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px;">
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Total de Peças</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatNumber(totalPecas)}</div>
+                        <div style="font-size: 10px; color: #64748b;">produzidas / recolhidas</div>
+                    </div>
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Itens Concluídos</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatNumber(totalItens)}</div>
+                        <div style="font-size: 10px; color: #64748b;">etapas finalizadas</div>
+                    </div>
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Pedidos Atendidos</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatNumber(totalPedidos)}</div>
+                        <div style="font-size: 10px; color: #64748b;">ordens distintas</div>
+                    </div>
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Tempo de Produção</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${totalHorasStr}h</div>
+                        <div style="font-size: 10px; color: #64748b;">média ${mediaGeralItem} min/item</div>
+                    </div>
+                </div>
+
+                <h4 style="margin: 0 0 10px 0; font-size: 13px; text-transform: uppercase; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+                    Produção do Colaborador por Setor / Função
+                </h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 24px;">
+                    <thead>
+                        <tr style="background: #f1f5f9; text-align: left; border-bottom: 2px solid #cbd5e1;">
+                            <th style="padding: 8px 10px;">Setor / Função</th>
+                            <th style="padding: 8px 10px; text-align: center;">Pedidos</th>
+                            <th style="padding: 8px 10px; text-align: center;">Itens</th>
+                            <th style="padding: 8px 10px; text-align: right;">Peças</th>
+                            <th style="padding: 8px 10px; text-align: center;">Horas (h)</th>
+                            <th style="padding: 8px 10px; text-align: center;">Média/Item</th>
+                            <th style="padding: 8px 10px; text-align: center;">Peças/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${setoresRows}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #e2e8f0; font-weight: 800; border-top: 2px solid #94a3b8;">
+                            <td style="padding: 8px 10px;">TOTAL CONSOLIDADO</td>
+                            <td style="padding: 8px 10px; text-align: center;">${formatNumber(totalPedidos)}</td>
+                            <td style="padding: 8px 10px; text-align: center;">${formatNumber(totalItens)}</td>
+                            <td style="padding: 8px 10px; text-align: right; color: #0f172a;">${formatNumber(totalPecas)}</td>
+                            <td style="padding: 8px 10px; text-align: center;">${totalHorasStr}h</td>
+                            <td style="padding: 8px 10px; text-align: center;">${mediaGeralItem} min</td>
+                            <td style="padding: 8px 10px; text-align: center;">${pecasPorHoraGeral}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <div class="avoid-break" style="margin-top: 55px; display: flex; justify-content: space-around; text-align: center;">
+                    <div style="width: 250px; border-top: 1px solid #475569; padding-top: 6px; font-size: 11px;">
+                        <strong>${user}</strong><br>
+                        <span style="color: #64748b;">Assinatura do Colaborador</span>
+                    </div>
+                    <div style="width: 250px; border-top: 1px solid #475569; padding-top: 6px; font-size: 11px;">
+                        <strong>Coordenação / Supervisão</strong><br>
+                        <span style="color: #64748b;">Visto do Responsável</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            // === RELATÓRIO EM GRUPO / GERAL ===
+            let tableRows = '';
+            data.forEach((r, idx) => {
+                const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+                tableRows += `
+                    <tr style="background: ${bg};">
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #0f172a;">${r.operador}</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; color: #334155;">${formatSectorName(r.setor)}</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${formatNumber(r.pedidos_concluidos)}</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${formatNumber(r.itens_concluidos)}</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #0f172a;">${formatNumber(r.total_pecas)}</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${r.tempo_total_h || '0'}h</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${r.tempo_medio_item_min || '0'} min</td>
+                        <td style="padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 600;">${r.pecas_por_hora || '0'}</td>
+                    </tr>
+                `;
+            });
+
+            // Resumo de Pedidos Finalizados
+            let ordersSection = '';
+            if (orders && orders.length > 0) {
+                let orderRows = '';
+                const maxOrders = Math.min(orders.length, 50);
+                for (let i = 0; i < maxOrders; i++) {
+                    const o = orders[i];
+                    const dataEnt = o.prazo_entrega ? formatBR(o.prazo_entrega.slice(0, 10)) : '--';
+                    orderRows += `
+                        <tr>
+                            <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700;">#${o.numero_pedido}</td>
+                            <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0;">${o.cliente}</td>
+                            <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${dataEnt}</td>
+                            <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${o.tipo_envio || '--'}</td>
+                            <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 600; color: #16a34a;">${o.status_geral}</td>
+                        </tr>
+                    `;
+                }
+                ordersSection = `
+                    <div class="avoid-break" style="margin-top: 26px;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 13px; text-transform: uppercase; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+                            Pedidos Finalizados no Período (${maxOrders}${orders.length > maxOrders ? ` de ${orders.length}` : ''} listados)
+                        </h4>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                            <thead>
+                                <tr style="background: #f1f5f9; text-align: left; border-bottom: 1px solid #cbd5e1;">
+                                    <th style="padding: 6px 10px;">Pedido</th>
+                                    <th style="padding: 6px 10px;">Cliente</th>
+                                    <th style="padding: 6px 10px; text-align: center;">Prazo Entrega</th>
+                                    <th style="padding: 6px 10px; text-align: center;">Envio</th>
+                                    <th style="padding: 6px 10px; text-align: center;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>${orderRows}</tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            contentHtml = `
+                <div class="summary-cards" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px;">
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Total Geral de Peças</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatNumber(totalPecas)}</div>
+                        <div style="font-size: 10px; color: #64748b;">peças no período</div>
+                    </div>
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Itens Concluídos</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatNumber(totalItens)}</div>
+                        <div style="font-size: 10px; color: #64748b;">etapas finalizadas</div>
+                    </div>
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Ordens Atendidas</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${formatNumber(totalPedidos)}</div>
+                        <div style="font-size: 10px; color: #64748b;">pedidos envolvidos</div>
+                    </div>
+                    <div class="card-metric" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Colaboradores Ativos</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">${data.length}</div>
+                        <div style="font-size: 10px; color: #64748b;">com registros no filtro</div>
+                    </div>
+                </div>
+
+                <h4 style="margin: 0 0 10px 0; font-size: 13px; text-transform: uppercase; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+                    Desempenho Consolidado da Equipe por Setor
+                </h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="background: #f1f5f9; text-align: left; border-bottom: 2px solid #cbd5e1;">
+                            <th style="padding: 8px 10px;">Colaborador</th>
+                            <th style="padding: 8px 10px;">Setor / Função</th>
+                            <th style="padding: 8px 10px; text-align: center;">Pedidos</th>
+                            <th style="padding: 8px 10px; text-align: center;">Itens</th>
+                            <th style="padding: 8px 10px; text-align: right;">Peças</th>
+                            <th style="padding: 8px 10px; text-align: center;">Horas (h)</th>
+                            <th style="padding: 8px 10px; text-align: center;">Média/Item</th>
+                            <th style="padding: 8px 10px; text-align: center;">Peças/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #e2e8f0; font-weight: 800; border-top: 2px solid #94a3b8;">
+                            <td colspan="2" style="padding: 8px 10px;">TOTAL GERAL CONSOLIDADO</td>
+                            <td style="padding: 8px 10px; text-align: center;">${formatNumber(totalPedidos)}</td>
+                            <td style="padding: 8px 10px; text-align: center;">${formatNumber(totalItens)}</td>
+                            <td style="padding: 8px 10px; text-align: right; color: #0f172a;">${formatNumber(totalPecas)}</td>
+                            <td style="padding: 8px 10px; text-align: center;">${totalHorasStr}h</td>
+                            <td style="padding: 8px 10px; text-align: center;">${mediaGeralItem} min</td>
+                            <td style="padding: 8px 10px; text-align: center;">${pecasPorHoraGeral}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                ${ordersSection}
+
+                <div class="avoid-break" style="margin-top: 45px; text-align: right;">
+                    <div style="display: inline-block; width: 260px; border-top: 1px solid #475569; padding-top: 6px; font-size: 11px; text-align: center;">
+                        <strong>Coordenação de Produção</strong><br>
+                        <span style="color: #64748b;">Relatório Gerencial Oficial</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        const fullHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>${isIndividual ? `Relatório - ${user}` : 'Relatório de Produção'} - PERSYS</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #1e293b;
+            background: #ffffff;
+            margin: 0;
+            padding: 16px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .report-header {
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .brand-title {
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            color: #0f172a;
+            margin: 0;
+        }
+        .brand-sub {
+            font-size: 11px;
+            color: #64748b;
+            margin: 2px 0 0 0;
+        }
+        .report-tag {
+            background: #f1f5f9;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #334155;
+            font-weight: 600;
+            display: inline-block;
+            border: 1px solid #cbd5e1;
+        }
+        .no-print-bar {
+            position: sticky;
+            top: 0;
+            background: #0f172a;
+            color: white;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        .btn-action {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-action:hover { background: #0369a1; }
+        .btn-close {
+            background: transparent;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 8px;
+        }
+        .btn-close:hover { background: #1e293b; color: white; }
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+            .avoid-break { page-break-inside: avoid; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print no-print-bar">
+        <div>
+            <strong>Visualização de Impressão</strong> &mdash; Relatório formatado pronto para impressão ou exportação em PDF.
+        </div>
+        <div>
+            <button class="btn-action" onclick="window.print()">🖨️ Imprimir Agora</button>
+            <button class="btn-close" onclick="window.close()">✕ Fechar</button>
+        </div>
+    </div>
+
+    <div class="report-header">
+        <div>
+            <h1 class="brand-title">PERSYS CRM</h1>
+            <p class="brand-sub">Sistema de Gestão e Controle de Produção</p>
+            <h2 style="font-size: 15px; font-weight: 800; color: #1e293b; margin: 10px 0 4px 0;">
+                ${isIndividual ? `RELATÓRIO INDIVIDUAL DE PRODUTIVIDADE &mdash; ${user}` : 'RELATÓRIO CONSOLIDADO DE PRODUÇÃO POR SETOR E EQUIPE'}
+            </h2>
+        </div>
+        <div style="text-align: right; font-size: 11px; color: #475569;">
+            <div><strong>Emissão:</strong> ${dataEmissao}</div>
+            <div style="margin-top: 4px;">
+                <span class="report-tag">Período: ${formatBR(start)} a ${formatBR(end)}</span>
+            </div>
+            <div style="margin-top: 4px;">
+                <span class="report-tag">Setor: ${setorFiltroNome}</span>
+                ${!isIndividual ? `<span class="report-tag" style="margin-left:4px;">Colaborador: ${colabFiltroNome}</span>` : ''}
+            </div>
+        </div>
+    </div>
+
+    ${contentHtml}
+
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                window.print();
+            }, 300);
+        });
+    </script>
+</body>
+</html>`;
+
+        const printWin = window.open('', '_blank');
+        if (!printWin) {
+            alert('⚠️ O navegador bloqueou a abertura da janela de impressão. Por favor, permita pop-ups para este site.');
+            return;
+        }
+
+        printWin.document.open();
+        printWin.document.write(fullHtml);
+        printWin.document.close();
+
+    } catch (e) {
+        console.error('Erro ao gerar relatório impresso:', e);
+        alert('Erro ao gerar relatório impresso: ' + e.message);
+    } finally {
+        if (btn && originalText) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
